@@ -3,6 +3,7 @@ import { Box, HStack, Text, Button, Icon, VStack, Pressable, IconButton, ScrollV
 import { AntDesign } from '@expo/vector-icons';
 import CustomTextInput from '../components/CustomTextInput';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager } from 'react-native';
+import SplitDetailScreen from './SplitDetailScreen';
 
 export interface Exercise {
   id: string;
@@ -13,8 +14,8 @@ export interface Split {
   id: string;
   name: string;
   days: string[];
-  exercises: Exercise[];
   color?: string;
+  exercises: { id: string; name: string; bodyPart: string }[];
 }
 
 const COLORS = [
@@ -87,6 +88,8 @@ const WorkoutScreen = () => {
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [selectedSplitDetail, setSelectedSplitDetail] = useState<Split | null>(null);
 
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
@@ -172,7 +175,7 @@ const WorkoutScreen = () => {
   const handleAddSplit = () => {
     const newSplit: Split = {
       id: Date.now().toString(),
-      name: 'Empty',
+      name: '',
       days: [],
       exercises: [],
       color: undefined
@@ -186,31 +189,24 @@ const WorkoutScreen = () => {
 
   // Function to handle input focus for the keyboard
   const handleFocusScroll = (inputY: number, inputHeight: number) => {
-    console.log('DEBUG - FOCUS: View position:', { y: inputY, height: inputHeight });
-    console.log('DEBUG - FOCUS: Current scroll position:', scrollY);
+    console.log('Input position:', { y: inputY, height: inputHeight });
     
-    // Target y-position where we want to position the input
-    const targetY = 400;
+    const screenHeight = Dimensions.get('window').height;
+    const keyboardHeight = screenHeight * 0.4;
+    const visibleHeight = screenHeight - keyboardHeight;
+    const inputBottom = inputY + inputHeight;
+    const keyboardTop = screenHeight - keyboardHeight;
     
-    // Calculate new scroll position needed to put the input at y=400
-    // Add current scroll to the input's position to get its absolute position
-    // Then subtract target position to get where we need to scroll to
-    const newScrollPosition = scrollY + (inputY - targetY);
-    
-    console.log('DEBUG - FOCUS: Scroll calculation:', { 
-      currentY: inputY, 
-      currentScroll: scrollY,
-      targetY: targetY, 
-      newScrollPosition: newScrollPosition
-    });
-    
-    // Scroll the view to position the input at y=400
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ 
-        y: Math.max(0, newScrollPosition), // Ensure we don't scroll to negative position
-        animated: true 
-      });
-      console.log('DEBUG - FOCUS: Scrolled to:', newScrollPosition);
+    if (inputBottom > keyboardTop - 20) {
+      const targetInputBottomPosition = keyboardTop - 20;
+      const targetInputTopPosition = targetInputBottomPosition - inputHeight;
+      const scrollAmount = inputY - targetInputTopPosition;
+      
+      console.log('Scrolling to:', scrollAmount);
+      
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: scrollAmount, animated: true });
+      }
     }
   };
 
@@ -218,6 +214,29 @@ const WorkoutScreen = () => {
   const getFirstLetter = (text: string) => {
     return text.charAt(0).toUpperCase();
   };
+
+  const handleSplitPress = (split: Split) => {
+    if (!isEditing) {
+      setSelectedSplitDetail(split);
+    }
+  };
+
+  if (selectedSplitDetail) {
+    return (
+      <SplitDetailScreen 
+        split={selectedSplitDetail}
+        onBack={() => setSelectedSplitDetail(null)}
+        onUpdateSplit={(updatedSplit) => {
+          // Update the split in the splits array
+          const updatedSplits = splits.map(s => 
+            s.id === updatedSplit.id ? updatedSplit : s
+          );
+          setSplits(updatedSplits);
+          setSelectedSplitDetail(updatedSplit);
+        }}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
@@ -304,13 +323,13 @@ const WorkoutScreen = () => {
               <VStack space={3} pb={4}>
                 {splits.length === 0 ? (
                   <Text color="gray.400" fontSize="sm" textAlign="center">
-                    Empty
+                    Tell us about your workout split!
                   </Text>
                 ) : (
                   splits.map((split) => (
                     <Pressable
                       key={split.id}
-                      onPress={() => handleSplitSelect(split)}
+                      onPress={() => handleSplitPress(split)}
                       bg={split.color || "#1E2028"}
                       p={4}
                       borderRadius="md"
@@ -328,6 +347,8 @@ const WorkoutScreen = () => {
                                 color="white"
                                 fontSize="lg"
                                 onFocusScroll={handleFocusScroll}
+                                placeholder="Enter split name"
+                                placeholderTextColor="rgba(255, 255, 255, 0.4)"
                               />
                             </Box>
                             <Text color="white" fontSize="sm">
@@ -390,6 +411,43 @@ const WorkoutScreen = () => {
                       </Text>
                     </HStack>
                   </Pressable>
+                )}
+              </VStack>
+            </Box>
+
+            {/* New Exercises Section */}
+            <Box bg="#2A2E38" borderRadius="lg" p={4}>
+              <HStack justifyContent="space-between" alignItems="center" mb={3}>
+                <Text color="white" fontSize="xl" fontWeight="bold">
+                  My Exercises
+                </Text>
+                <Button
+                  variant="ghost"
+                  onPress={() => {/* Add exercise handler here */}}
+                  _text={{ color: "#6B8EF2" }}
+                >
+                  Add
+                </Button>
+              </HStack>
+              
+              <VStack space={3} pb={4}>
+                {exercises.length === 0 ? (
+                  <Text color="gray.400" fontSize="sm" textAlign="center">
+                    No Exercises added yet.
+                  </Text>
+                ) : (
+                  exercises.map((exercise) => (
+                    <Box
+                      key={exercise.id}
+                      bg="#1E2028"
+                      p={4}
+                      borderRadius="md"
+                    >
+                      <Text color="white" fontSize="lg">
+                        {exercise.name}
+                      </Text>
+                    </Box>
+                  ))
                 )}
               </VStack>
             </Box>

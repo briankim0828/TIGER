@@ -12,7 +12,7 @@ type StackParamList = {
 
 const AppHeader = () => {
   return (
-    <Box bg="#1E2028" py={3} px={4} borderBottomWidth={0} alignItems="center" justifyContent="center">
+    <Box bg="#1E2028" pt={1} px={4} pb={3} borderBottomWidth={0} alignItems="center" justifyContent="center">
       <Text color="white" fontSize="24" fontWeight="bold">
         PR.
       </Text>
