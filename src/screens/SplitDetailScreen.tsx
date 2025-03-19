@@ -17,8 +17,8 @@ const SplitDetailScreen = ({ split, onBack, onUpdateSplit }: SplitDetailScreenPr
   const [showExerciseSelection, setShowExerciseSelection] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
 
-  const handleAddExercise = (exercise: Exercise) => {
-    const updatedExercises = [...exercises, exercise];
+  const handleAddExercise = (newExercises: Exercise[]) => {
+    const updatedExercises = [...exercises, ...newExercises];
     setExercises(updatedExercises);
     
     // Update the parent component if callback provided

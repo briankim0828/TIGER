@@ -22,7 +22,7 @@ export interface Exercise {
 
 interface ExerciseSelectionViewProps {
   onClose: () => void;
-  onAddExercise: (exercise: Exercise) => void;
+  onAddExercise: (exercises: Exercise[]) => void;
 }
 
 const BODY_PARTS = [
@@ -108,31 +108,41 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionViewProps) => {
   const [selectedBodyPart, setSelectedBodyPart] = useState<string | null>(null);
-  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
 
   const handleBodyPartSelect = (bodyPart: string) => {
     setSelectedBodyPart(bodyPart);
-    setSelectedExercise(null);
   };
 
   const handleExerciseSelect = (exercise: Exercise) => {
-    setSelectedExercise(exercise);
+    setSelectedExercises(prev => {
+      // If exercise is already selected, remove it
+      if (prev.some(e => e.id === exercise.id)) {
+        return prev.filter(e => e.id !== exercise.id);
+      }
+      // Otherwise add it to the end of the array
+      return [...prev, exercise];
+    });
   };
 
-  const handleAddExercise = () => {
-    if (selectedExercise) {
-      onAddExercise(selectedExercise);
+  const handleAddExercises = () => {
+    if (selectedExercises.length > 0) {
+      onAddExercise(selectedExercises);
       onClose();
       // Reset selections
       setSelectedBodyPart(null);
-      setSelectedExercise(null);
+      setSelectedExercises([]);
     }
+  };
+
+  const isExerciseSelected = (exerciseId: string) => {
+    return selectedExercises.some(e => e.id === exerciseId);
   };
 
   return (
     <Box 
       bg="#232530" 
-      height="90%" // Adjust this value to change the height of the component
+      height="90%"
       borderRadius="2xl"
       shadow={9}
     >
@@ -141,7 +151,7 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
         <HStack alignItems="center" space={2}>
           <Icon as={MaterialIcons} name="fitness-center" color="#6B8EF2" size="sm" />
           <Text color="white" fontSize="lg" fontWeight="bold">
-            Select Exercise
+            Select Exercises
           </Text>
         </HStack>
       </Box>
@@ -174,6 +184,33 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
 
           {/* Right Side VStack - 70% */}
           <VStack w="70%" h="full" bg="#232530">
+            {/* Selected Exercises Preview */}
+            {selectedExercises.length > 0 && (
+              <Box bg="#1A1C24" p={3} borderBottomWidth={1} borderColor="gray.700">
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <HStack space={2}>
+                    {selectedExercises.map((exercise, index) => (
+                      <Pressable
+                        key={exercise.id}
+                        onPress={() => handleExerciseSelect(exercise)}
+                        bg="rgba(107, 142, 242, 0.15)"
+                        px={3}
+                        py={1.5}
+                        borderRadius="full"
+                        flexDirection="row"
+                        alignItems="center"
+                      >
+                        <Text color="white" fontSize="sm" mr={2}>
+                          {exercise.name}
+                        </Text>
+                        <Icon as={AntDesign} name="close" color="white" size="xs" />
+                      </Pressable>
+                    ))}
+                  </HStack>
+                </ScrollView>
+              </Box>
+            )}
+
             {/* Exercises List */}
             <Box flex={1}>
               <ScrollView p={3} flex={1} showsVerticalScrollIndicator={false}>
@@ -185,13 +222,13 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
                       py={3}
                       px={4}
                       mb={2}
-                      bg={selectedExercise?.id === exercise.id ? 'rgba(107, 142, 242, 0.15)' : 'rgba(255, 255, 255, 0.03)'}
+                      bg={isExerciseSelected(exercise.id) ? 'rgba(107, 142, 242, 0.15)' : 'transparent'}
                       borderRadius="lg"
                       _pressed={{ opacity: 0.7 }}
                     >
                       <HStack justifyContent="space-between" alignItems="center">
                         <Text color="white" fontSize="md">{exercise.name}</Text>
-                        {selectedExercise?.id === exercise.id && (
+                        {isExerciseSelected(exercise.id) && (
                           <Center w={6} h={6} bg="#6B8EF2" borderRadius="full">
                             <Icon as={AntDesign} name="check" color="white" size="xs" />
                           </Center>
@@ -211,7 +248,7 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
             </Box>
             
             {/* Buttons */}
-            <Box bg="#232530" p={3} >
+            <Box bg="#232530" p={3}>
               <Divider bg="gray.700" mb={3} />
               <HStack justifyContent="space-between">
                 <Button 
@@ -227,13 +264,14 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
                 <Button 
                   bg="#6B8EF2"
                   _pressed={{ bg: "#5A7CD0" }}
-                  isDisabled={!selectedExercise} 
-                  opacity={selectedExercise ? 1 : 0.5}
-                  onPress={handleAddExercise} 
+                  isDisabled={selectedExercises.length === 0} 
+                  opacity={selectedExercises.length > 0 ? 1 : 0.5}
+                  onPress={handleAddExercises} 
                   flex={1}
                   leftIcon={<Icon as={AntDesign} name="plus" color="white" size="sm" />}
+                  _text={{ fontSize: "sm" }}
                 >
-                  Add
+                  {`Add (${selectedExercises.length})`}
                 </Button>
               </HStack>
             </Box>

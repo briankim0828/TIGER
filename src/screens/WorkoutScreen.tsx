@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Box, HStack, Text, Button, Icon, VStack, Pressable, IconButton, ScrollView } from 'native-base';
-import { AntDesign } from '@expo/vector-icons';
+import { Box, HStack, Text, Button, Icon, VStack, Pressable, IconButton, ScrollView, Collapse, Divider } from 'native-base';
+import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
 import CustomTextInput from '../components/CustomTextInput';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager } from 'react-native';
 import SplitDetailScreen from './SplitDetailScreen';
@@ -8,6 +8,8 @@ import SplitDetailScreen from './SplitDetailScreen';
 export interface Exercise {
   id: string;
   name: string;
+  bodyPart: string;
+  splitIds: string[];
 }
 
 export interface Split {
@@ -19,9 +21,9 @@ export interface Split {
 }
 
 const COLORS = [
-  '#2b0b6b',
   '#1254a1',
-  '#00C2C7', 
+  '#00C2C7',
+  '#1d7322',
   '#b0b02a', 
   '#db7e2c', 
   '#D72638' 
@@ -90,6 +92,7 @@ const WorkoutScreen = () => {
   const [scrollY, setScrollY] = useState(0);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [selectedSplitDetail, setSelectedSplitDetail] = useState<Split | null>(null);
+  const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
 
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
@@ -111,6 +114,30 @@ const WorkoutScreen = () => {
       keyboardWillHide.remove();
     };
   }, []);
+
+  // Update the useEffect to include split information
+  useEffect(() => {
+    // Collect all unique exercises from all splits
+    const allExercises = splits.reduce((acc, split) => {
+      split.exercises.forEach(exercise => {
+        const existingExercise = acc.find(e => e.id === exercise.id);
+        if (existingExercise) {
+          // If exercise exists, add this split's ID if not already present
+          if (!existingExercise.splitIds.includes(split.id)) {
+            existingExercise.splitIds.push(split.id);
+          }
+        } else {
+          // If exercise doesn't exist, add it with this split's ID
+          acc.push({
+            ...exercise,
+            splitIds: [split.id]
+          });
+        }
+      });
+      return acc;
+    }, [] as Exercise[]);
+    setExercises(allExercises);
+  }, [splits]);
 
   const handleDaySelect = (day: string) => {
     // If selecting the same day, deselect everything
@@ -173,6 +200,8 @@ const WorkoutScreen = () => {
   };
 
   const handleAddSplit = () => {
+    if (splits.length >= 7) return;
+    
     const newSplit: Split = {
       id: Date.now().toString(),
       name: '',
@@ -192,20 +221,22 @@ const WorkoutScreen = () => {
     console.log('Input position:', { y: inputY, height: inputHeight });
     
     const screenHeight = Dimensions.get('window').height;
-    const keyboardHeight = screenHeight * 0.4;
+    const keyboardHeight = screenHeight * 0.4; // Approximate keyboard height
     const visibleHeight = screenHeight - keyboardHeight;
     const inputBottom = inputY + inputHeight;
     const keyboardTop = screenHeight - keyboardHeight;
     
-    if (inputBottom > keyboardTop - 20) {
-      const targetInputBottomPosition = keyboardTop - 20;
-      const targetInputTopPosition = targetInputBottomPosition - inputHeight;
-      const scrollAmount = inputY - targetInputTopPosition;
+    // Calculate how much of the input is below the keyboard
+    const inputBelowKeyboard = inputBottom - keyboardTop;
+    
+    if (inputBelowKeyboard > 0) {
+      // Add some padding (20) to ensure the input is fully visible
+      const targetScrollPosition = scrollY + inputBelowKeyboard + 20;
       
-      console.log('Scrolling to:', scrollAmount);
+      console.log('Scrolling to:', targetScrollPosition);
       
       if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: scrollAmount, animated: true });
+        scrollViewRef.current.scrollTo({ y: targetScrollPosition, animated: true });
       }
     }
   };
@@ -216,9 +247,26 @@ const WorkoutScreen = () => {
   };
 
   const handleSplitPress = (split: Split) => {
+    // If we're in the process of assigning a split to a weekday (selectedDay exists)
+    if (selectedDay) {
+      handleSplitSelect(split);
+      return;
+    }
+    
+    // Otherwise, navigate to split detail
     if (!isEditing) {
       setSelectedSplitDetail(split);
     }
+  };
+
+  const toggleExerciseExpansion = (exerciseId: string) => {
+    setExpandedExercises(prev => {
+      if (prev.includes(exerciseId)) {
+        return prev.filter(id => id !== exerciseId);
+      } else {
+        return [...prev, exerciseId];
+      }
+    });
   };
 
   if (selectedSplitDetail) {
@@ -307,7 +355,7 @@ const WorkoutScreen = () => {
             </HStack>
 
             <Box bg="#2A2E38" borderRadius="lg" p={4}>
-              <HStack justifyContent="space-between" alignItems="center" mb={3}>
+              <HStack justifyContent="space-between" alignItems="center" mb={4}>
                 <Text color="white" fontSize="xl" fontWeight="bold">
                   My Splits
                 </Text>
@@ -401,13 +449,15 @@ const WorkoutScreen = () => {
                     p={2}
                     borderRadius="md"
                     borderWidth={1}
-                    borderColor="#6B8EF2"
+                    borderColor={splits.length >= 7 ? "gray.600" : "#6B8EF2"}
                     borderStyle="dashed"
+                    opacity={splits.length >= 7 ? 0.5 : 1}
+                    disabled={splits.length >= 7}
                   >
                     <HStack justifyContent="center" alignItems="center" space={2}>
-                      <Icon as={AntDesign} name="plus" color="#6B8EF2" size="sm" />
-                      <Text color="#6B8EF2" fontSize="sm" fontWeight="bold">
-                        Add Split
+                      <Icon as={AntDesign} name="plus" color={splits.length >= 7 ? "gray.400" : "#6B8EF2"} size="sm" />
+                      <Text color={splits.length >= 7 ? "gray.400" : "#6B8EF2"} fontSize="sm" fontWeight="bold">
+                        {splits.length >= 7 ? "Maximum splits reached" : "Add Split"}
                       </Text>
                     </HStack>
                   </Pressable>
@@ -415,19 +465,12 @@ const WorkoutScreen = () => {
               </VStack>
             </Box>
 
-            {/* New Exercises Section */}
+            {/* My Exercises Section */}
             <Box bg="#2A2E38" borderRadius="lg" p={4}>
-              <HStack justifyContent="space-between" alignItems="center" mb={3}>
+              <HStack justifyContent="space-between" alignItems="center" mb={4}>
                 <Text color="white" fontSize="xl" fontWeight="bold">
                   My Exercises
                 </Text>
-                <Button
-                  variant="ghost"
-                  onPress={() => {/* Add exercise handler here */}}
-                  _text={{ color: "#6B8EF2" }}
-                >
-                  Add
-                </Button>
               </HStack>
               
               <VStack space={3} pb={4}>
@@ -436,16 +479,91 @@ const WorkoutScreen = () => {
                     No Exercises added yet.
                   </Text>
                 ) : (
-                  exercises.map((exercise) => (
-                    <Box
-                      key={exercise.id}
-                      bg="#1E2028"
-                      p={4}
-                      borderRadius="md"
-                    >
-                      <Text color="white" fontSize="lg">
-                        {exercise.name}
+                  // Group exercises by body part
+                  Object.entries(
+                    exercises.reduce((acc, exercise) => {
+                      if (!acc[exercise.bodyPart]) {
+                        acc[exercise.bodyPart] = [];
+                      }
+                      acc[exercise.bodyPart].push(exercise);
+                      return acc;
+                    }, {} as Record<string, Exercise[]>)
+                  ).map(([bodyPart, bodyPartExercises]) => (
+                    <Box key={bodyPart}>
+                      <Text color="gray.400" fontSize="sm" mb={2}>
+                        {bodyPart}
                       </Text>
+                      <VStack space={2}>
+                        {bodyPartExercises.map((exercise) => (
+                          <Box
+                            key={exercise.id}
+                            bg="#1E2028"
+                            p={3}
+                            borderRadius="md"
+                            position="relative"
+                          >
+                            <HStack justifyContent="space-between" alignItems="center">
+                              <HStack space={2} alignItems="center" flex={1}>
+                                <Pressable
+                                  onPress={() => {
+                                    // Toggle the weekday popup for this exercise
+                                    toggleExerciseExpansion(exercise.id);
+                                  }}
+                                >
+                                  <Icon 
+                                    as={AntDesign} 
+                                    name={expandedExercises.includes(exercise.id) ? "down" : "right"} 
+                                    color="gray.400" 
+                                    size="sm"
+                                  />
+                                </Pressable>
+                                <Text color="white" fontSize="md">
+                                  {exercise.name}
+                                </Text>
+                              </HStack>
+                              <HStack space={1}>
+                                {exercise.splitIds.map(splitId => {
+                                  const split = splits.find(s => s.id === splitId);
+                                  return (
+                                    <Box
+                                      key={splitId}
+                                      w="2"
+                                      h="6"
+                                      bg={split?.color || "#2A2E38"}
+                                      borderRadius="full"
+                                    />
+                                  );
+                                })}
+                              </HStack>
+                            </HStack>
+                            
+                            {/* Weekday Popup */}
+                            <Collapse isOpen={expandedExercises.includes(exercise.id)}>
+                              <Box mt={2} pt={2} borderTopWidth={1} borderColor="gray.700">
+                                <HStack space={2} flexWrap="wrap" justifyContent="space-between">
+                                  {WEEKDAYS.map(day => {
+                                    const isAssigned = exercise.splitIds.some(splitId => {
+                                      const split = splits.find(s => s.id === splitId);
+                                      return split?.days.includes(day);
+                                    });
+                                    return (
+                                      <Text
+                                        key={day}
+                                        color={isAssigned ? "white" : "gray.400"}
+                                        fontSize="sm"
+                                        flex={1}
+                                        textAlign="center"
+                                      >
+                                        {day}
+                                      </Text>
+                                    );
+                                  })}
+                                </HStack>
+                              </Box>
+                            </Collapse>
+                          </Box>
+                        ))}
+                      </VStack>
                     </Box>
                   ))
                 )}
