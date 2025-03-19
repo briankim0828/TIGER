@@ -1,33 +1,59 @@
-import React, { useState, useRef } from 'react';
-import { Box, HStack, Text, Icon, IconButton, VStack, Pressable, ScrollView } from 'native-base';
-import { AntDesign } from '@expo/vector-icons';
+import React, { useState, useRef, useEffect } from 'react';
+import { Box, HStack, Text, Icon, IconButton, VStack, Pressable, ScrollView, Button, Divider } from 'native-base';
+import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import { Split } from './WorkoutScreen';
 import ExerciseSelectionView, { Exercise } from '../components/ExerciseSelectionView';
 import { ScrollView as RNScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface SplitDetailScreenProps {
   split: Split;
-  onBack: () => void;
-  onUpdateSplit?: (updatedSplit: Split) => void;
+  onClose: () => void;
+  onUpdate: (updatedSplit: Split) => void;
 }
 
-const SplitDetailScreen = ({ split, onBack, onUpdateSplit }: SplitDetailScreenProps) => {
+const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, onUpdate }) => {
   const splitColor = split.color || '#2A2E38';
   const [exercises, setExercises] = useState<Exercise[]>(split.exercises);
   const [showExerciseSelection, setShowExerciseSelection] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
+
+  // Load exercises from AsyncStorage when component mounts
+  useEffect(() => {
+    const loadExercises = async () => {
+      try {
+        const savedExercises = await AsyncStorage.getItem(`split_exercises_${split.id}`);
+        if (savedExercises) {
+          setExercises(JSON.parse(savedExercises));
+        }
+      } catch (error) {
+        console.error('Error loading exercises:', error);
+      }
+    };
+    loadExercises();
+  }, [split.id]);
+
+  // Save exercises to AsyncStorage whenever they change
+  useEffect(() => {
+    const saveExercises = async () => {
+      try {
+        await AsyncStorage.setItem(`split_exercises_${split.id}`, JSON.stringify(exercises));
+      } catch (error) {
+        console.error('Error saving exercises:', error);
+      }
+    };
+    saveExercises();
+  }, [exercises, split.id]);
 
   const handleAddExercise = (newExercises: Exercise[]) => {
     const updatedExercises = [...exercises, ...newExercises];
     setExercises(updatedExercises);
     
     // Update the parent component if callback provided
-    if (onUpdateSplit) {
-      onUpdateSplit({
-        ...split,
-        exercises: updatedExercises
-      });
-    }
+    onUpdate({
+      ...split,
+      exercises: updatedExercises
+    });
   };
 
   const handleRemoveExercise = (index: number) => {
@@ -35,12 +61,22 @@ const SplitDetailScreen = ({ split, onBack, onUpdateSplit }: SplitDetailScreenPr
     setExercises(updatedExercises);
     
     // Update the parent component if callback provided
-    if (onUpdateSplit) {
-      onUpdateSplit({
-        ...split,
-        exercises: updatedExercises
-      });
-    }
+    onUpdate({
+      ...split,
+      exercises: updatedExercises
+    });
+  };
+
+  const handleUpdateExercise = (index: number, field: 'sets' | 'reps', value: number) => {
+    const newExercises = [...exercises];
+    newExercises[index] = { ...newExercises[index], [field]: value };
+    setExercises(newExercises);
+    
+    // Update the parent component if callback provided
+    onUpdate({
+      ...split,
+      exercises: newExercises
+    });
   };
 
   const addExerciseButton = (
@@ -74,21 +110,22 @@ const SplitDetailScreen = ({ split, onBack, onUpdateSplit }: SplitDetailScreenPr
 
   return (
     <Box flex={1} bg="#1E2028">
-      {/* Header */}
-      <Box bg="transparent" px={2} py={3}>
-        <HStack alignItems="center">
-          <IconButton
-            icon={<Icon as={AntDesign} name="arrowleft" color="white" size="md" />}
-            onPress={onBack}
-            variant="ghost"
-            _pressed={{ bg: 'transparent' }}
-          />
-          <Text color="white" fontSize="xl" fontWeight="bold" mr={3}>
-            {split.name}
-          </Text>
-          <Box w={6} h={6} bg={splitColor} borderRadius="lg" />
-        </HStack>
-      </Box>
+      <HStack alignItems="center" p={4} borderBottomWidth={1} borderBottomColor="gray.800">
+        <IconButton
+          icon={<Icon as={AntDesign} name="arrowleft" size="lg" color="white" />}
+          onPress={onClose}
+          variant="ghost"
+          _pressed={{ 
+            bg: 'transparent',
+            _icon: {
+              color: '#6B8EF2'
+            }
+          }}
+        />
+        <Text color="white" fontSize="xl" fontWeight="bold" flex={1}>
+          {split.name}
+        </Text>
+      </HStack>
 
       {/* Content */}
       <Box px={4} flex={1}>
@@ -105,30 +142,33 @@ const SplitDetailScreen = ({ split, onBack, onUpdateSplit }: SplitDetailScreenPr
                   <Box 
                     key={`${exercise.id}-${index}`} 
                     bg="#2A2E38" 
-                    p={4} 
+                    py={3}
+                    px={4}
                     borderRadius="md"
+                    position="relative"
                   >
-                    <HStack justifyContent="space-between" alignItems="center">
-                      <HStack space={3} alignItems="center">
-                        <Box 
-                          w={8} 
-                          h={8} 
-                          bg={splitColor} 
-                          borderRadius="md" 
-                          justifyContent="center" 
-                          alignItems="center"
-                        >
-                          <Text color="white" fontWeight="bold">{index + 1}</Text>
-                        </Box>
-                        <VStack>
-                          <Text color="white" fontWeight="bold">
-                            {exercise.name}
-                          </Text>
-                          <Text color="gray.400" fontSize="xs">
-                            {exercise.bodyPart}
-                          </Text>
-                        </VStack>
-                      </HStack>
+                    <Box
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      bottom={0}
+                      w="7"
+                      bg={splitColor}
+                      borderLeftRadius="md"
+                      justifyContent="center"
+                      alignItems="center"
+                    >
+                      <Text color="white" fontWeight="bold">{index + 1}</Text>
+                    </Box>
+                    <HStack justifyContent="space-between" alignItems="center" pl={7}>
+                      <VStack>
+                        <Text color="white" fontWeight="bold">
+                          {exercise.name}
+                        </Text>
+                        <Text color="gray.400" fontSize="xs">
+                          {exercise.bodyPart}
+                        </Text>
+                      </VStack>
                       <IconButton
                         icon={<Icon as={AntDesign} name="delete" color="#FF6B6B" />}
                         onPress={() => handleRemoveExercise(index)}
