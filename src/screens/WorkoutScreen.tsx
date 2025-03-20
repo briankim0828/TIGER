@@ -444,11 +444,12 @@ const WorkoutScreen = () => {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
+        console.log('Saving updated splits:', data.length);
         await AsyncStorage.setItem('splits', JSON.stringify(data));
       } catch (error) {
         console.error('Error saving splits:', error);
       }
-    }, 1000);
+    }, 500); // Reduced to 500ms for faster updates
   }, []);
 
   // Load splits from AsyncStorage
@@ -457,16 +458,21 @@ const WorkoutScreen = () => {
       if (!isInitialLoadRef.current) return;
       
       try {
-        const [defaultState, savedSplits] = await Promise.all([
-          AsyncStorage.getItem('default_workout_state'),
-          AsyncStorage.getItem('splits')
-        ]);
-
+        // First check for saved splits (most recent data)
+        const savedSplits = await AsyncStorage.getItem('splits');
+        
         let loadedSplits: Split[] = [];
-        if (defaultState) {
-          loadedSplits = JSON.parse(defaultState);
-        } else if (savedSplits) {
+        if (savedSplits) {
+          // Use the most recent data if available
           loadedSplits = JSON.parse(savedSplits);
+          console.log('Loaded saved splits:', loadedSplits.length);
+        } else {
+          // Fall back to default state only if no saved data exists
+          const defaultState = await AsyncStorage.getItem('default_workout_state');
+          if (defaultState) {
+            loadedSplits = JSON.parse(defaultState);
+            console.log('Loaded default splits:', loadedSplits.length);
+          }
         }
 
         setSplits(loadedSplits);
