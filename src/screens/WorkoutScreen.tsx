@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo, forwardRef } 
 import { Box, HStack, Text, Button, Icon, VStack, Pressable, IconButton, ScrollView, Collapse, Divider } from 'native-base';
 import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
 import CustomTextInput from '../components/CustomTextInput';
-import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, 
+  TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
 import SplitDetailScreen from './SplitDetailScreen';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlashList } from '@shopify/flash-list';

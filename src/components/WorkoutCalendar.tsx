@@ -2,10 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Box, VStack, HStack, Text, Pressable, Center } from 'native-base';
 import { FlatList, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { MonthData, WorkoutDay } from '../types';
+import { Split } from '../screens/WorkoutScreen';
 
 interface WorkoutCalendarProps {
   data: MonthData;
-  onDayPress: (date: string) => void;
+  onDayPress?: (date: string) => void;
+  splits: Split[];
 }
 
 interface MonthSection {
@@ -20,7 +22,7 @@ interface ScrollMetrics {
   headerHeight: number;
 }
 
-const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress }) => {
+const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, splits }) => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState({ month: data.month, year: data.year });
   
@@ -71,6 +73,12 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress }) =
     return data.workouts.find(w => w.date === dateStr);
   };
 
+  const getSplitForDate = (day: number, month: number, year: number): Split | undefined => {
+    const date = new Date(year, month, day);
+    const dayOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
+    return splits.find(split => split.days.includes(dayOfWeek));
+  };
+
   const isToday = (day: number, month: number, year: number): boolean => {
     const today = new Date();
     return (
@@ -82,9 +90,18 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress }) =
 
   const handleDayPress = (day: number, month: number, year: number) => {
     const dateStr = formatDate(day, month, year);
-    console.log('Handle day press selected');
+    const split = getSplitForDate(day, month, year);
+    
+    console.log('Selected day:', {
+      date: dateStr,
+      split: split ? `${split.name} day, ${split.exercises.length} exercises` : 'No split assigned',
+      dayOfWeek: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(year, month, day).getDay()]
+    });
+
     setSelectedDate(dateStr);
-    onDayPress(dateStr);
+    if (onDayPress) {
+      onDayPress(dateStr);
+    }
   };
 
   // const onScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -181,6 +198,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress }) =
               }
 
               const workout = getWorkoutForDate(day, section.month, section.year);
+              const split = getSplitForDate(day, section.month, section.year);
               const dateStr = formatDate(day, section.month, section.year);
               const isSelected = dateStr === selectedDate;
               const todayHighlight = isToday(day, section.month, section.year);
@@ -205,9 +223,20 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress }) =
                     justifyContent="center"
                     bg={todayHighlight ? "#6B8EF2" : "#2A2E38"}
                     borderRadius="lg"
-                    borderWidth={isSelected ? 3 : 0}
+                    // change borderwidth for the blue date selection outline
+                    borderWidth={isSelected ? 2 : 0}
                     borderColor="#4169E1"
+                    position="relative"
                   >
+                    <Box
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      right={0}
+                      h="1.5"
+                      bg={split?.color || "#3A3E48"}
+                      borderTopRadius="lg"
+                    />
                     <Text
                       fontSize="sm"
                       color={isFutureDay ? "gray.500" : (todayHighlight ? "white" : "gray.100")}

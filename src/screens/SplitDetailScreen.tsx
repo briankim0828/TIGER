@@ -16,6 +16,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
   const splitColor = split.color || '#2A2E38';
   const [exercises, setExercises] = useState<Exercise[]>(split.exercises);
   const [showExerciseSelection, setShowExerciseSelection] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
 
   // Load exercises from AsyncStorage when component mounts
@@ -24,59 +25,52 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
       try {
         const savedExercises = await AsyncStorage.getItem(`split_exercises_${split.id}`);
         if (savedExercises) {
-          setExercises(JSON.parse(savedExercises));
+          const parsedExercises = JSON.parse(savedExercises);
+          setExercises(parsedExercises);
+          // Update parent component with loaded exercises
+          onUpdate({
+            ...split,
+            exercises: parsedExercises
+          });
         }
       } catch (error) {
         console.error('Error loading exercises:', error);
       }
     };
     loadExercises();
-  }, [split.id]);
+  }, [split.id, onUpdate, split]);
 
   // Save exercises to AsyncStorage whenever they change
   useEffect(() => {
     const saveExercises = async () => {
       try {
         await AsyncStorage.setItem(`split_exercises_${split.id}`, JSON.stringify(exercises));
+        // Update parent component with current exercises
+        onUpdate({
+          ...split,
+          exercises
+        });
       } catch (error) {
         console.error('Error saving exercises:', error);
       }
     };
     saveExercises();
-  }, [exercises, split.id]);
+  }, [exercises, split.id, onUpdate, split]);
 
   const handleAddExercise = (newExercises: Exercise[]) => {
     const updatedExercises = [...exercises, ...newExercises];
     setExercises(updatedExercises);
-    
-    // Update the parent component if callback provided
-    onUpdate({
-      ...split,
-      exercises: updatedExercises
-    });
   };
 
   const handleRemoveExercise = (index: number) => {
     const updatedExercises = exercises.filter((_, i) => i !== index);
     setExercises(updatedExercises);
-    
-    // Update the parent component if callback provided
-    onUpdate({
-      ...split,
-      exercises: updatedExercises
-    });
   };
 
   const handleUpdateExercise = (index: number, field: 'sets' | 'reps', value: number) => {
     const newExercises = [...exercises];
     newExercises[index] = { ...newExercises[index], [field]: value };
     setExercises(newExercises);
-    
-    // Update the parent component if callback provided
-    onUpdate({
-      ...split,
-      exercises: newExercises
-    });
   };
 
   const addExerciseButton = (
@@ -110,7 +104,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
 
   return (
     <Box flex={1} bg="#1E2028">
-      <HStack alignItems="center" p={4} borderBottomWidth={1} borderBottomColor="gray.800">
+      <HStack alignItems="center" p={4}>
         <IconButton
           icon={<Icon as={AntDesign} name="arrowleft" size="lg" color="white" />}
           onPress={onClose}
@@ -125,6 +119,13 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
         <Text color="white" fontSize="xl" fontWeight="bold" flex={1}>
           {split.name}
         </Text>
+        <Button
+          variant="ghost"
+          onPress={() => setIsEditing(!isEditing)}
+          _text={{ color: "#6B8EF2" }}
+        >
+          {isEditing ? "Done" : "Edit"}
+        </Button>
       </HStack>
 
       {/* Content */}
@@ -142,7 +143,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                   <Box 
                     key={`${exercise.id}-${index}`} 
                     bg="#2A2E38" 
-                    py={3}
+                    py={2}
                     px={4}
                     borderRadius="md"
                     position="relative"
@@ -152,7 +153,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                       top={0}
                       left={0}
                       bottom={0}
-                      w="7"
+                      w="6"
                       bg={splitColor}
                       borderLeftRadius="md"
                       justifyContent="center"
@@ -160,7 +161,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                     >
                       <Text color="white" fontWeight="bold">{index + 1}</Text>
                     </Box>
-                    <HStack justifyContent="space-between" alignItems="center" pl={7}>
+                    <HStack justifyContent="space-between" alignItems="center" pl={5}>
                       <VStack>
                         <Text color="white" fontWeight="bold">
                           {exercise.name}
@@ -169,17 +170,19 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                           {exercise.bodyPart}
                         </Text>
                       </VStack>
-                      <IconButton
-                        icon={<Icon as={AntDesign} name="delete" color="#FF6B6B" />}
-                        onPress={() => handleRemoveExercise(index)}
-                        variant="ghost"
-                        size="sm"
-                      />
+                      {isEditing && (
+                        <IconButton
+                          icon={<Icon as={AntDesign} name="delete" color="#FF6B6B" />}
+                          onPress={() => handleRemoveExercise(index)}
+                          variant="ghost"
+                          size="sm"
+                        />
+                      )}
                     </HStack>
                   </Box>
                 ))}
                 
-                {addExerciseButton}
+                {isEditing && addExerciseButton}
               </VStack>
             </ScrollView>
           ) : (
@@ -188,34 +191,36 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                 <Text color="gray.400" fontSize="lg">
                   Add exercises to {split.name} day
                 </Text>
-                <Box w="100%">
-                  <Pressable
-                    w="100%"
-                    borderStyle="dashed"
-                    borderWidth={1}
-                    borderColor="#6B8EF2"
-                    bg="transparent"
-                    borderRadius="lg"
-                    py={4}
-                    _pressed={{ opacity: 0.7 }}
-                    onPress={() => setShowExerciseSelection(true)}
-                  >
-                    <HStack space={2} justifyContent="center" alignItems="center">
-                      <Icon 
-                        as={AntDesign} 
-                        name="plus" 
-                        color="#6B8EF2" 
-                        size="sm" 
-                      />
-                      <Text 
-                        color="#6B8EF2" 
-                        fontSize="md"
-                      >
-                        Add Exercise
-                      </Text>
-                    </HStack>
-                  </Pressable>
-                </Box>
+                {isEditing && (
+                  <Box w="100%">
+                    <Pressable
+                      w="100%"
+                      borderStyle="dashed"
+                      borderWidth={1}
+                      borderColor="#6B8EF2"
+                      bg="transparent"
+                      borderRadius="lg"
+                      py={4}
+                      _pressed={{ opacity: 0.7 }}
+                      onPress={() => setShowExerciseSelection(true)}
+                    >
+                      <HStack space={2} justifyContent="center" alignItems="center">
+                        <Icon 
+                          as={AntDesign} 
+                          name="plus" 
+                          color="#6B8EF2" 
+                          size="sm" 
+                        />
+                        <Text 
+                          color="#6B8EF2" 
+                          fontSize="md"
+                        >
+                          Add Exercise
+                        </Text>
+                      </HStack>
+                    </Pressable>
+                  </Box>
+                )}
               </VStack>
             </Box>
           )
