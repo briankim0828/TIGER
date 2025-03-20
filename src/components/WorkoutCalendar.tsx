@@ -181,7 +181,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
             top={0}
             left={0}
             right={0}
-            h="1.5"
+            h="1"
             bg={colorStrip}
             borderTopRadius="lg"
           />

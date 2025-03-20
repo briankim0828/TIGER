@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Box, Text } from 'native-base';
 import WorkoutCalendar from '../components/WorkoutCalendar';
 import { MonthData, WorkoutDay } from '../types';
@@ -20,10 +20,26 @@ const ProgressScreen: React.FC = () => {
     workouts: []
   });
   const [splits, setSplits] = useState<Split[]>([]);
+  
+  // Add refs for caching
+  const isInitialLoadRef = useRef(true);
+  const processedDataRef = useRef<{
+    splits: Split[];
+    monthData: MonthData;
+  }>({
+    splits: [],
+    monthData: {
+      month: currentMonth,
+      year: currentYear,
+      workouts: []
+    }
+  });
 
   // Initial load - should only happen once when app starts
   useEffect(() => {
     const initialLoad = async () => {
+      if (!isInitialLoadRef.current) return;
+      
       setLoading(true);
       try {
         // Load splits data first
@@ -33,9 +49,11 @@ const ProgressScreen: React.FC = () => {
           const parsedSplits = JSON.parse(splitsData);
           console.log('Initial load - splits:', parsedSplits.length);
           setSplits(parsedSplits);
+          processedDataRef.current.splits = parsedSplits;
         } else {
           console.log('No splits data found on initial load');
           setSplits([]);
+          processedDataRef.current.splits = [];
         }
 
         // Load workouts data
@@ -44,13 +62,16 @@ const ProgressScreen: React.FC = () => {
           const parsedData = JSON.parse(workoutsData);
           console.log('Initial load - workouts:', parsedData);
           setMonthData(parsedData);
+          processedDataRef.current.monthData = parsedData;
         } else {
           // Only use defaults on initial load
-          setMonthData({
+          const defaultData = {
             month: currentMonth,
             year: currentYear,
             workouts: []
-          });
+          };
+          setMonthData(defaultData);
+          processedDataRef.current.monthData = defaultData;
         }
 
         // Increment the calendar key to force a complete re-render
@@ -60,6 +81,7 @@ const ProgressScreen: React.FC = () => {
       } finally {
         setLoading(false);
         setIsInitialLoad(false);
+        isInitialLoadRef.current = false;
       }
     };
     
@@ -69,7 +91,7 @@ const ProgressScreen: React.FC = () => {
   // When returning to this screen, only update with newest data, don't reset to defaults
   useFocusEffect(
     React.useCallback(() => {
-      if (!isInitialLoad) {
+      if (!isInitialLoadRef.current) {
         const refreshData = async () => {
           console.log('Screen focused, refreshing data...');
           try {
@@ -77,17 +99,25 @@ const ProgressScreen: React.FC = () => {
             const splitsData = await AsyncStorage.getItem('splits');
             if (splitsData) {
               const parsedSplits = JSON.parse(splitsData);
-              console.log('Refresh - splits:', parsedSplits.length);
-              setSplits(parsedSplits);
+              // Only update if data has changed
+              if (JSON.stringify(parsedSplits) !== JSON.stringify(processedDataRef.current.splits)) {
+                console.log('Refresh - splits:', parsedSplits.length);
+                setSplits(parsedSplits);
+                processedDataRef.current.splits = parsedSplits;
+              }
             }
 
             // Get latest workout data
             const workoutsData = await AsyncStorage.getItem('workout_data');
             if (workoutsData) {
               const parsedData = JSON.parse(workoutsData);
-              console.log('Refresh - workout data:', parsedData);
-              setMonthData(parsedData);
-              setCalendarKey(prev => prev + 1);
+              // Only update if data has changed
+              if (JSON.stringify(parsedData) !== JSON.stringify(processedDataRef.current.monthData)) {
+                console.log('Refresh - workout data:', parsedData);
+                setMonthData(parsedData);
+                processedDataRef.current.monthData = parsedData;
+                setCalendarKey(prev => prev + 1);
+              }
             }
           } catch (error) {
             console.error('Error refreshing data:', error);
@@ -96,7 +126,7 @@ const ProgressScreen: React.FC = () => {
         
         refreshData();
       }
-    }, [isInitialLoad])
+    }, [isInitialLoadRef])
   );
 
   return (
