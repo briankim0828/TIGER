@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Box, VStack, HStack, Text, Pressable, Center } from 'native-base';
-import { FlatList, NativeScrollEvent, NativeSyntheticEvent, ViewToken } from 'react-native';
+import { Box, VStack, HStack, Text, Pressable } from 'native-base';
+import { FlatList, ViewToken, Platform, UIManager, findNodeHandle } from 'react-native';
 import { MonthData, WorkoutDay } from '../types';
 import { Split } from '../screens/WorkoutScreen';
 
@@ -16,103 +16,223 @@ interface MonthSection {
   days: number[];
 }
 
-interface ScrollMetrics {
-  y: number;
-  height: number;
-  headerHeight: number;
+const MONTH_HEIGHT = 250;
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const MONTH_HEIGHT = 250; // Approximate height of a month section
+// Cache system for date strings to avoid repeated string operations
+const dateStringCache = new Map<string, string>();
+const getDateString = (day: number, month: number, year: number): string => {
+  const key = `${year}-${month}-${day}`;
+  if (!dateStringCache.has(key)) {
+    dateStringCache.set(key, `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+  }
+  return dateStringCache.get(key)!;
+};
+
+// Day of week calculations are expensive - cache them
+const dayOfWeekCache = new Map<string, number>();
+const getDayOfWeek = (year: number, month: number, day: number): number => {
+  const key = `${year}-${month}-${day}`;
+  if (!dayOfWeekCache.has(key)) {
+    dayOfWeekCache.set(key, new Date(year, month, day).getDay());
+  }
+  return dayOfWeekCache.get(key)!;
+};
+
+// Pre-calculated constants
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_PER_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+// Get days in month with caching
+const daysInMonthCache = new Map<string, number>();
+const getDaysInMonth = (month: number, year: number): number => {
+  const key = `${year}-${month}`;
+  if (!daysInMonthCache.has(key)) {
+    let days = DAYS_PER_MONTH[month];
+    if (month === 1 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0)) {
+      days = 29;
+    }
+    daysInMonthCache.set(key, days);
+  }
+  return daysInMonthCache.get(key)!;
+};
+
+// SuperOptimized DayCell using React.memo with custom comparison
+const DayCell = React.memo(({ 
+  day, 
+  isSelected,
+  todayHighlight,
+  colorStrip,
+  isFutureDay,
+  hasWorkout,
+  workoutCompleted,
+  onPress 
+}: { 
+  day: number;
+  isSelected: boolean;
+  todayHighlight: boolean;
+  colorStrip: string;
+  isFutureDay: boolean;
+  hasWorkout: boolean;
+  workoutCompleted?: boolean;
+  onPress: () => void;
+}) => {
+  // Empty cell render is very cheap
+  if (day === 0) {
+    return <Box flex={1} h={10} />;
+  }
+
+  const borderWidth = isSelected ? 3 : 0;
+
+  return (
+    <Pressable
+      flex={1}
+      onPress={onPress}
+      opacity={isFutureDay ? 0.5 : 1}
+    >
+      <Box
+        h={10}
+        alignItems="center"
+        justifyContent="center"
+        bg={todayHighlight ? "#6B8EF2" : "#2A2E38"}
+        borderRadius="lg"
+        borderWidth={borderWidth}
+        borderColor="#4169E1"
+        position="relative"
+      >
+        <Box
+          position="absolute"
+          top={0}
+          left={0}
+          right={0}
+          h="1"
+          bg={colorStrip}
+          borderTopRadius="lg"
+        />
+        <Text
+          fontSize="sm"
+          color={isFutureDay ? "gray.500" : (todayHighlight ? "white" : "gray.100")}
+          fontWeight={todayHighlight ? "bold" : "normal"}
+        >
+          {day}
+        </Text>
+        {hasWorkout && (
+          <Box
+            w={1.5}
+            h={1.5}
+            borderRadius="full"
+            bg={workoutCompleted ? "#60C1EF" : "#6B8EF2"}
+            position="absolute"
+            bottom={1}
+            opacity={isFutureDay ? 0.5 : 1}
+          />
+        )}
+      </Box>
+    </Pressable>
+  );
+}, (prev, next) => {
+  // Custom equality check - only update when these specific props change
+  return (
+    prev.day === next.day &&
+    prev.isSelected === next.isSelected &&
+    prev.todayHighlight === next.todayHighlight &&
+    prev.colorStrip === next.colorStrip &&
+    prev.isFutureDay === next.isFutureDay &&
+    prev.hasWorkout === next.hasWorkout &&
+    prev.workoutCompleted === next.workoutCompleted
+  );
+});
+
+// Memoized day of week header - never changes
+const DaysHeader = React.memo(() => (
+  <HStack space={2} justifyContent="space-between" mb={1}>
+    {DAYS_OF_WEEK.map(day => (
+      <Box key={day} flex={1} alignItems="center">
+        <Text fontSize="2xs" color="gray.400">{day}</Text>
+      </Box>
+    ))}
+  </HStack>
+), () => true); // Always return true since this component never changes
 
 const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, splits }) => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState({ month: data.month, year: data.year });
   const flatListRef = useRef<FlatList>(null);
+  const prevSelectedCellRef = useRef<string | null>(null);
   
-  // Log when splits data is received
-  useEffect(() => {
-    console.log('Calendar received splits:', splits?.length || 0);
-  }, [splits]);
-
-  // Update visible month when data changes
-  useEffect(() => {
-    setVisibleMonth({ month: data.month, year: data.year });
-  }, [data.month, data.year]);
-
-  // Memoize the getDaysInMonth function
-  const getDaysInMonth = useCallback((month: number, year: number): number => {
-    const daysPerMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    if (month === 1 && ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0)) {
-      return 29;
-    }
-    return daysPerMonth[month];
-  }, []);
-
-  // Memoize the formatDate function
-  const formatDate = useCallback((day: number, month: number, year: number): string => {
-    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  }, []);
-
-  // Memoize the getWorkoutForDate function
-  const getWorkoutForDate = useCallback((day: number, month: number, year: number): WorkoutDay | undefined => {
-    const dateStr = formatDate(day, month, year);
-    return data.workouts.find(w => w.date === dateStr);
-  }, [data.workouts, formatDate]);
-
-  // Memoize the getSplitForDate function
-  const getSplitForDate = useCallback((day: number, month: number, year: number): Split | undefined => {
-    if (!splits || splits.length === 0) {
-      return undefined;
-    }
-
-    const date = new Date(year, month, day);
-    const dayIndex = date.getDay();
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const dayOfWeek = dayNames[dayIndex];
-    
-    return splits.find(split => split.days.includes(dayOfWeek));
-  }, [splits]);
-
-  // Memoize the isToday function
-  const isToday = useCallback((day: number, month: number, year: number): boolean => {
-    const today = new Date();
-    return (
-      today.getDate() === day &&
-      today.getMonth() === month &&
-      today.getFullYear() === year
-    );
-  }, []);
-
-  // Memoize the handleDayPress function
-  const handleDayPress = useCallback((day: number, month: number, year: number) => {
-    const dateStr = formatDate(day, month, year);
-    const split = getSplitForDate(day, month, year);
-    
-    console.log('Selected day:', {
-      date: dateStr,
-      split: split ? `${split.name} day, ${split.exercises.length} exercises` : 'No split assigned',
-      dayOfWeek: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(year, month, day).getDay()]
+  // Create an ultra-fast O(1) lookup for workouts
+  const workoutsMap = useMemo(() => {
+    const map = new Map<string, WorkoutDay>();
+    data.workouts.forEach(workout => {
+      map.set(workout.date, workout);
     });
+    return map;
+  }, [data.workouts]);
 
+  // Create an ultra-fast lookup for splits by day
+  const splitsByDay = useMemo(() => {
+    const map = new Map<string, Split>();
+    if (splits && splits.length > 0) {
+      DAYS_OF_WEEK.forEach(day => {
+        const splitForDay = splits.find(split => split.days.includes(day));
+        if (splitForDay) {
+          map.set(day, splitForDay);
+        }
+      });
+    }
+    return map;
+  }, [splits]);
+
+  // Fast workout lookup
+  const getWorkoutForDate = useCallback((dateStr: string): WorkoutDay | undefined => {
+    return workoutsMap.get(dateStr);
+  }, [workoutsMap]);
+
+  // Fast split lookup
+  const getSplitForDate = useCallback((dayOfWeek: string): Split | undefined => {
+    return splitsByDay.get(dayOfWeek);
+  }, [splitsByDay]);
+
+  // Cache today's date info
+  const todayInfo = useMemo(() => {
+    const today = new Date();
+    return {
+      day: today.getDate(),
+      month: today.getMonth(),
+      year: today.getFullYear(),
+      dateString: getDateString(today.getDate(), today.getMonth(), today.getFullYear())
+    };
+  }, []);
+
+  // Ultra-fast day selection handler
+  const handleDayPress = useCallback((day: number, month: number, year: number) => {
+    const dateStr = getDateString(day, month, year);
+    
+    // Update selection state
     setSelectedDate(dateStr);
+    
+    // Call the onDayPress callback if provided
     if (onDayPress) {
       onDayPress(dateStr);
     }
-  }, [formatDate, getSplitForDate, onDayPress]);
+  }, [onDayPress]);
 
-  // Generate months data (current month and 5 future months)
+  // Reduced to only 2 months for even better performance
   const monthSections = useMemo(() => {
     const sections: MonthSection[] = [];
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
 
-    // Generate 6 months starting from current month
-    for (let i = 0; i < 6; i++) {
+    // Generate only 2 months for better performance
+    for (let i = 0; i < 2; i++) {
       let year = currentYear;
       let month = currentMonth + i;
       
-      // Adjust year if month goes beyond 11
       while (month > 11) {
         month -= 12;
         year += 1;
@@ -125,129 +245,83 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
       });
     }
     return sections;
-  }, [getDaysInMonth]);
+  }, []);
 
-  // Memoize the CalendarCell component
-  const CalendarCell = useMemo(() => React.memo(({ 
-    day, 
-    month, 
-    year, 
-    section, 
-    isFutureMonth, 
-    isFutureDay, 
-    isSelected, 
-    todayHighlight, 
-    workout, 
-    split, 
-    onPress 
-  }: {
-    day: number;
-    month: number;
-    year: number;
+  // Super-optimized month section
+  const MonthSection = React.memo(({ section, selectedDate }: { 
     section: MonthSection;
-    isFutureMonth: boolean;
-    isFutureDay: boolean;
-    isSelected: boolean;
-    todayHighlight: boolean;
-    workout?: WorkoutDay;
-    split?: Split;
-    onPress: () => void;
+    selectedDate: string | null;
   }) => {
-    if (day === 0) {
-      return <Box key={`empty-${year}-${month}-${day}`} flex={1} h={10} />;
-    }
+    const { day: currentDay, month: currentMonth, year: currentYear } = todayInfo;
 
-    const colorStrip = split?.color || "#3A3E48";
-    // console.log(`Rendering cell for ${day}/${month+1}/${year} with color: ${colorStrip}`);
-
-    return (
-      <Pressable
-        flex={1}
-        onPress={onPress}
-        opacity={isFutureDay ? 0.5 : 1}
-      >
-        <Box
-          h={10}
-          alignItems="center"
-          justifyContent="center"
-          bg={todayHighlight ? "#6B8EF2" : "#2A2E38"}
-          borderRadius="lg"
-          borderWidth={isSelected ? 2 : 0}
-          borderColor="#4169E1"
-          position="relative"
-        >
-          <Box
-            position="absolute"
-            top={0}
-            left={0}
-            right={0}
-            h="1"
-            bg={colorStrip}
-            borderTopRadius="lg"
-          />
-          <Text
-            fontSize="sm"
-            color={isFutureDay ? "gray.500" : (todayHighlight ? "white" : "gray.100")}
-            fontWeight={todayHighlight ? "bold" : "normal"}
-          >
-            {day}
-          </Text>
-          {workout && (
-            <Box
-              w={1.5}
-              h={1.5}
-              borderRadius="full"
-              bg={workout.completed ? "#60C1EF" : "#6B8EF2"}
-              position="absolute"
-              bottom={1}
-              opacity={isFutureDay ? 0.5 : 1}
-            />
-          )}
-        </Box>
-      </Pressable>
-    );
-  }), []);
-
-  // Memoize the month section component
-  const MonthSection = useMemo(() => React.memo(({ section }: { section: MonthSection }) => {
-    const today = new Date();
-    const currentMonth = today.getMonth();
-    const currentYear = today.getFullYear();
-    const currentDay = today.getDate();
-
-    // Check if this section is a future month
+    // Determine if month is in the future
     const isFutureMonth = 
       (section.year > currentYear) || 
       (section.year === currentYear && section.month > currentMonth);
 
-    // Calculate first day of month
-    const firstDayOfMonth = new Date(section.year, section.month, 1).getDay();
-    console.log(`First day of ${section.month + 1}/${section.year} is ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][firstDayOfMonth]}`);
+    // Calculate first day of month - once per month render
+    const firstDayOfMonth = getDayOfWeek(section.year, section.month, 1);
+    
+    // Pre-generate all required date strings for this month
+    const dateStrings = useMemo(() => {
+      const result = new Map<number, string>();
+      section.days.forEach(day => {
+        result.set(day, getDateString(day, section.month, section.year));
+      });
+      return result;
+    }, [section.month, section.year]);
 
-    // Generate weeks
-    const weeks: Array<number[]> = [];
-    let currentWeek: number[] = Array(firstDayOfMonth).fill(0);
+    // Pre-generate cell rendering data
+    const cellData = useMemo(() => {
+      return section.days.map(day => {
+        const dateStr = dateStrings.get(day)!;
+        
+        // Calculate day of week for split lookup
+        const dayOfWeek = DAYS_OF_WEEK[getDayOfWeek(section.year, section.month, day)];
+        
+        // Fast lookups
+        const workout = getWorkoutForDate(dateStr);
+        const split = getSplitForDate(dayOfWeek);
+        
+        const todayHighlight = day === currentDay && section.month === currentMonth && section.year === currentYear;
+        const isFutureDay = isFutureMonth || (section.year === currentYear && section.month === currentMonth && day > currentDay);
 
-    section.days.forEach(day => {
-      currentWeek.push(day);
-      if (currentWeek.length === 7) {
-        weeks.push([...currentWeek]);
-        currentWeek = [];
+        return {
+          day,
+          dateStr,
+          isSelected: dateStr === selectedDate,
+          todayHighlight,
+          colorStrip: split?.color || "#3A3E48",
+          isFutureDay,
+          hasWorkout: !!workout,
+          workoutCompleted: workout?.completed,
+          onPress: () => handleDayPress(day, section.month, section.year)
+        };
+      });
+    }, [section.days, section.month, section.year, selectedDate, currentDay, currentMonth, currentYear, isFutureMonth, getWorkoutForDate, getSplitForDate, handleDayPress]);
+
+    // Generate weeks layout - memoized and stable
+    const weeks = useMemo(() => {
+      const generatedWeeks: Array<Array<number | null>> = [];
+      let currentWeek: Array<number | null> = Array(firstDayOfMonth).fill(null);
+
+      section.days.forEach(day => {
+        currentWeek.push(day);
+        if (currentWeek.length === 7) {
+          generatedWeeks.push([...currentWeek]);
+          currentWeek = [];
+        }
+      });
+
+      if (currentWeek.length > 0) {
+        generatedWeeks.push([...currentWeek, ...Array(7 - currentWeek.length).fill(null)]);
       }
-    });
-
-    if (currentWeek.length > 0) {
-      weeks.push([...currentWeek, ...Array(7 - currentWeek.length).fill(0)]);
-    }
+      
+      return generatedWeeks;
+    }, [section.days, firstDayOfMonth]);
 
     return (
-      <VStack 
-        space={1} 
-        mb={2} 
-        bg="transparent"
-        p={2}
-        borderRadius="lg"
-      >
+      <VStack space={1} mb={2} p={2} borderRadius="lg">
         <Text 
           fontSize="lg" 
           fontWeight="bold" 
@@ -257,47 +331,29 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
           {new Date(section.year, section.month).toLocaleString('default', { month: 'long' })} {section.year}
         </Text>
         
-        <HStack space={2} justifyContent="space-between" mb={1}>
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-            <Box key={day} flex={1} alignItems="center">
-              <Text fontSize="2xs" color="gray.400">{day}</Text>
-            </Box>
-          ))}
-        </HStack>
+        <DaysHeader />
 
         {weeks.map((week, weekIndex) => (
           <HStack key={`week-${section.year}-${section.month}-${weekIndex}`} space={2}>
-            {week.map((day, dayIndex) => {
-              const workout = getWorkoutForDate(day, section.month, section.year);
-              const split = getSplitForDate(day, section.month, section.year);
-              const dateStr = formatDate(day, section.month, section.year);
-              const isSelected = dateStr === selectedDate;
-              const todayHighlight = isToday(day, section.month, section.year);
-              const isFutureDay = 
-                isFutureMonth || 
-                (section.year === currentYear && 
-                 section.month === currentMonth && 
-                 day > currentDay);
-
-              // Only log for debugging purposes
-              // if (day > 0) {
-              //   console.log(`Week ${weekIndex}, Day ${dayIndex}: ${day}/${section.month+1}/${section.year}, split:`, split?.name || 'none');
-              // }
+            {week.map((dayValue, dayIndex) => {
+              if (dayValue === null) {
+                return <Box key={`empty-${weekIndex}-${dayIndex}`} flex={1} h={10} />;
+              }
+              
+              const cellInfo = cellData.find(cell => cell.day === dayValue);
+              if (!cellInfo) return null;
 
               return (
-                <CalendarCell
-                  key={`cell-${section.year}-${section.month}-${day}-${dayIndex}`}
-                  day={day}
-                  month={section.month}
-                  year={section.year}
-                  section={section}
-                  isFutureMonth={isFutureMonth}
-                  isFutureDay={isFutureDay}
-                  isSelected={isSelected}
-                  todayHighlight={todayHighlight}
-                  workout={workout}
-                  split={split}
-                  onPress={() => handleDayPress(day, section.month, section.year)}
+                <DayCell
+                  key={`day-${section.year}-${section.month}-${dayValue}`}
+                  day={cellInfo.day}
+                  isSelected={cellInfo.isSelected}
+                  todayHighlight={cellInfo.todayHighlight}
+                  colorStrip={cellInfo.colorStrip}
+                  isFutureDay={cellInfo.isFutureDay}
+                  hasWorkout={cellInfo.hasWorkout}
+                  workoutCompleted={cellInfo.workoutCompleted}
+                  onPress={cellInfo.onPress}
                 />
               );
             })}
@@ -305,28 +361,47 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
         ))}
       </VStack>
     );
-  }), [selectedDate, getWorkoutForDate, getSplitForDate, formatDate, isToday, handleDayPress]);
+  }, (prev, next) => {
+    // Only re-render when these specific props change
+    return (
+      prev.section.month === next.section.month &&
+      prev.section.year === next.section.year &&
+      prev.selectedDate === next.selectedDate
+    );
+  });
 
-  // Memoize the renderItem function
+  // Ultra-optimized renderItem
   const renderItem = useCallback(({ item }: { item: MonthSection }) => (
-    <MonthSection section={item} />
-  ), []);
+    <MonthSection 
+      section={item} 
+      selectedDate={selectedDate} 
+    />
+  ), [selectedDate]);
 
-  // Memoize the keyExtractor function
+  // Maximize FlatList performance
   const keyExtractor = useCallback((item: MonthSection) => `${item.year}-${item.month}`, []);
-
-  // Memoize the getItemLayout function
+  
   const getItemLayout = useCallback((data: any, index: number) => ({
     length: MONTH_HEIGHT,
     offset: MONTH_HEIGHT * index,
     index,
   }), []);
 
-  // Handle viewable items change
+  const viewabilityConfig = useMemo(() => ({
+    itemVisiblePercentThreshold: 50,
+    minimumViewTime: 0, // Set to 0 to respond immediately
+  }), []);
+
   const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: ViewToken[] }) => {
     if (viewableItems.length > 0) {
       const firstVisibleItem = viewableItems[0].item as MonthSection;
-      setVisibleMonth({ month: firstVisibleItem.month, year: firstVisibleItem.year });
+      // Use functional update to avoid depending on previous state
+      setVisibleMonth(prev => {
+        if (prev.month === firstVisibleItem.month && prev.year === firstVisibleItem.year) {
+          return prev; // Return same reference if no change
+        }
+        return { month: firstVisibleItem.month, year: firstVisibleItem.year };
+      });
     }
   }, []);
 
@@ -338,20 +413,22 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
           data={monthSections}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          extraData={selectedDate}
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
+          scrollEventThrottle={32}
           initialScrollIndex={0}
           getItemLayout={getItemLayout}
-          maxToRenderPerBatch={1}
-          windowSize={2}
-          removeClippedSubviews={true}
+          windowSize={3}
+          removeClippedSubviews={false}
           initialNumToRender={2}
+          maxToRenderPerBatch={2}
+          updateCellsBatchingPeriod={10}
           onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{
-            itemVisiblePercentThreshold: 50,
-            minimumViewTime: 100,
-          }}
+          viewabilityConfig={viewabilityConfig}
           style={{ backgroundColor: '#1E2028' }}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0
+          }}
         />
       </Box>
     </Box>

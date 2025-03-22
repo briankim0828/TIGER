@@ -163,10 +163,11 @@ const ExerciseItem = React.memo(({
             {WEEKDAYS.map(day => (
               <Text
                 key={day}
-                color={dayAssignments[day] ? "white" : "gray.400"}
+                color={dayAssignments[day] ? "#6B8EF2" : "gray.400"}
                 fontSize="sm"
                 flex={1}
                 textAlign="center"
+                fontWeight={dayAssignments[day] ? "bold" : "normal"}
               >
                 {day}
               </Text>
@@ -686,7 +687,7 @@ const WorkoutScreen = () => {
           >
             <VStack space={3} p={4}>
               <HStack justifyContent="space-between" alignItems="center">
-        <Text color="white" fontSize="2xl" fontWeight="bold">
+                <Text color="white" fontSize="2xl" fontWeight="bold">
                   My Program
                 </Text>
                 <Pressable
@@ -806,7 +807,7 @@ const WorkoutScreen = () => {
                               >
                                 <Box
                                   bg={color}
-                                  h="8"
+                                  h="6"
                                   borderRadius="md"
                                   borderWidth={split.color === color ? 2 : 0}
                                   borderColor="white"
