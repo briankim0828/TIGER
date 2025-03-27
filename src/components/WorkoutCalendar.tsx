@@ -212,14 +212,19 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
   const handleDayPress = useCallback((day: number, month: number, year: number) => {
     const dateStr = getDateString(day, month, year);
     
-    // Update selection state
-    setSelectedDate(dateStr);
+    // If pressing the same date again, clear the selection
+    if (dateStr === selectedDate) {
+      setSelectedDate(null);
+    } else {
+      // Update selection state
+      setSelectedDate(dateStr);
+    }
     
     // Call the onDayPress callback if provided
     if (onDayPress) {
       onDayPress(dateStr);
     }
-  }, [onDayPress]);
+  }, [onDayPress, selectedDate]);
 
   // Reduced to only 2 months for even better performance
   const monthSections = useMemo(() => {

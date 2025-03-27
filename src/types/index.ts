@@ -10,16 +10,4 @@ export interface Set {
   weight: number;
   reps: number;
   completed: boolean;
-}
-
-export interface WorkoutDay {
-  date: string;
-  exercises: Exercise[];
-  completed: boolean;
-}
-
-export interface MonthData {
-  month: number;
-  year: number;
-  workouts: WorkoutDay[];
 } 
