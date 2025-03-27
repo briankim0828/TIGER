@@ -305,15 +305,15 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
       const generatedWeeks: Array<Array<number | null>> = [];
       let currentWeek: Array<number | null> = Array(firstDayOfMonth).fill(null);
 
-      section.days.forEach(day => {
-        currentWeek.push(day);
-        if (currentWeek.length === 7) {
+    section.days.forEach(day => {
+      currentWeek.push(day);
+      if (currentWeek.length === 7) {
           generatedWeeks.push([...currentWeek]);
-          currentWeek = [];
-        }
-      });
+        currentWeek = [];
+      }
+    });
 
-      if (currentWeek.length > 0) {
+    if (currentWeek.length > 0) {
         generatedWeeks.push([...currentWeek, ...Array(7 - currentWeek.length).fill(null)]);
       }
       

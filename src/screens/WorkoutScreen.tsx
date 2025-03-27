@@ -5,8 +5,8 @@ import CustomTextInput from '../components/CustomTextInput';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, 
   TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
 import SplitDetailScreen from './SplitDetailScreen';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FlashList } from '@shopify/flash-list';
+import { storageService } from '../services/storage';
 
 export interface Exercise {
   id: string;
@@ -430,7 +430,7 @@ const WorkoutScreen = () => {
   // Save current state as default
   const saveCurrentStateAsDefault = useCallback(async () => {
     try {
-      await AsyncStorage.setItem('default_workout_state', JSON.stringify(splits));
+      await storageService.saveDefaultWorkoutState(splits);
       console.log('Current state saved as default');
     } catch (error) {
       console.error('Error saving default state:', error);
@@ -446,42 +446,43 @@ const WorkoutScreen = () => {
     saveTimeoutRef.current = setTimeout(async () => {
       try {
         console.log('Saving updated splits:', data.length);
-        await AsyncStorage.setItem('splits', JSON.stringify(data));
+        await storageService.saveSplits(data);
       } catch (error) {
         console.error('Error saving splits:', error);
       }
     }, 500); // Reduced to 500ms for faster updates
   }, []);
 
-  // Load splits from AsyncStorage
+  // Load splits from storage
   useEffect(() => {
     const loadSplits = async () => {
       if (!isInitialLoadRef.current) return;
       
       try {
         // First check for saved splits (most recent data)
-        const savedSplits = await AsyncStorage.getItem('splits');
+        const loadedSplits = await storageService.getSplits();
         
-        let loadedSplits: Split[] = [];
-        if (savedSplits) {
-          // Use the most recent data if available
-          loadedSplits = JSON.parse(savedSplits);
+        if (loadedSplits.length > 0) {
           console.log('Loaded saved splits:', loadedSplits.length);
+          setSplits(loadedSplits);
+          
+          // Process data immediately after loading
+          const processedData = processSplitsData(loadedSplits);
+          processedDataRef.current = processedData;
+          setExercises(processedData.exercises);
         } else {
           // Fall back to default state only if no saved data exists
-          const defaultState = await AsyncStorage.getItem('default_workout_state');
-          if (defaultState) {
-            loadedSplits = JSON.parse(defaultState);
-            console.log('Loaded default splits:', loadedSplits.length);
+          const defaultSplits = await storageService.getDefaultWorkoutState();
+          if (defaultSplits.length > 0) {
+            console.log('Loaded default splits:', defaultSplits.length);
+            setSplits(defaultSplits);
+            
+            // Process data immediately after loading
+            const processedData = processSplitsData(defaultSplits);
+            processedDataRef.current = processedData;
+            setExercises(processedData.exercises);
           }
         }
-
-        setSplits(loadedSplits);
-        
-        // Process data immediately after loading
-        const processedData = processSplitsData(loadedSplits);
-        processedDataRef.current = processedData;
-        setExercises(processedData.exercises);
         
         isInitialLoadRef.current = false;
       } catch (error) {
@@ -500,7 +501,7 @@ const WorkoutScreen = () => {
     }
   }, [splits, processSplitsData]);
 
-  // Save splits to AsyncStorage whenever they change
+  // Save splits to storage whenever they change
   useEffect(() => {
     if (!isInitialLoadRef.current) {
       debouncedSave(splits);
@@ -780,7 +781,7 @@ const WorkoutScreen = () => {
                                 {split.exercises.length} exercises
                               </Text>
                               <IconButton
-                                icon={<Icon as={AntDesign} name="delete" color="#FF6B6B" />}
+                                icon={<Icon as={AntDesign} name="close" color="gray.400" size="md" />}
                                 onPress={() => handleDeleteSplit(split.id)}
                                 variant="ghost"
                                 size="sm"
