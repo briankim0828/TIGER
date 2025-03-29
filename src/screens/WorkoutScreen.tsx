@@ -7,6 +7,14 @@ import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, D
 import SplitDetailScreen from './SplitDetailScreen';
 import { FlashList } from '@shopify/flash-list';
 import { storageService } from '../services/storage';
+import Animated, { 
+  useAnimatedStyle, 
+  withSpring,
+  withTiming,
+  useSharedValue,
+  withSequence,
+  withDelay
+} from 'react-native-reanimated';
 
 export interface Exercise {
   id: string;
@@ -270,15 +278,54 @@ const WeekdayItem = React.memo(({
   day, 
   splits, 
   isSelected, 
-  onPress 
+  onPress,
+  isEditing
 }: { 
   day: string; 
   splits: Split[]; 
   isSelected: boolean; 
-  onPress: () => void; 
+  onPress: () => void;
+  isEditing: boolean;
 }) => {
   const daySplits = splits.filter(split => split.days.includes(day));
   const color = daySplits.length > 0 ? daySplits[0].color || "#3A3E48" : "#3A3E48";
+  
+  // Get the day's position in the week (0 for Monday, 6 for Sunday)
+  const dayIndex = WEEKDAYS.indexOf(day);
+  
+  // Animation values for the arrow
+  const arrowOpacity = useSharedValue(0);
+  const arrowTranslateY = useSharedValue(-20); // Start from below
+
+  // Animate arrow when editing state changes
+  useEffect(() => {
+    if (isEditing) {
+      // When appearing, cascade from Monday (index 0) to Sunday (index 6)
+      const delay = dayIndex * 50; // 50ms delay between each day
+      arrowOpacity.value = withSequence(
+        withDelay(delay + 100, withTiming(1, { duration: 200 }))
+      );
+      arrowTranslateY.value = withSequence(
+        withDelay(delay + 100, withTiming(0, { duration: 200 }))
+      );
+    } else if (!isSelected) { // Only hide arrows if not editing AND not selected
+      // When disappearing, cascade from Sunday (index 6) to Monday (index 0)
+      const delay = (6 - dayIndex) * 50; // Reverse delay for disappearing
+      arrowOpacity.value = withSequence(
+        withDelay(delay, withTiming(0, { duration: 150 }))
+      );
+      arrowTranslateY.value = withSequence(
+        withDelay(delay, withTiming(-20, { duration: 150 }))
+      );
+    }
+  }, [isEditing, dayIndex, isSelected]);
+
+  const arrowAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: arrowOpacity.value,
+      transform: [{ translateY: arrowTranslateY.value }],
+    };
+  });
 
   return (
     <Pressable 
@@ -286,8 +333,8 @@ const WeekdayItem = React.memo(({
       flex={1}
       mx={0.5}
     >
-      <VStack space={2} alignItems="center">
-        <Text color="gray.400" fontSize="xs" fontWeight="bold">
+      <VStack space={1} alignItems="center">
+        <Text color={isSelected ? "#6B8EF2" : "gray.400"} fontSize="xs" fontWeight="bold">
           {day}
         </Text>
         <Box
@@ -298,10 +345,20 @@ const WeekdayItem = React.memo(({
           h="16"
           justifyContent="center"
           alignItems="center"
-          borderWidth={isSelected ? 2 : 0}
-          borderColor="#6B8EF2"
           position="relative"
+          overflow="hidden"
         >
+          <Box
+            position="absolute"
+            top={0}
+            left={0}
+            right={0}
+            bottom={0}
+            borderRadius="lg"
+            borderWidth={isSelected ? 2 : 0}
+            borderColor="#6B8EF2"
+            zIndex={2}
+          />
           <Box
             position="absolute"
             top={0}
@@ -310,6 +367,7 @@ const WeekdayItem = React.memo(({
             h="2"
             bg={color}
             borderTopRadius="lg"
+            zIndex={1}
           />
           {daySplits.length > 0 ? (
             <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
@@ -324,7 +382,144 @@ const WeekdayItem = React.memo(({
             />
           )}
         </Box>
+        <Animated.View style={arrowAnimatedStyle}>
+          <Icon 
+            as={AntDesign} 
+            name="up" 
+            color={isSelected ? "#6B8EF2" : "gray.400"} 
+            size="xs"
+          />
+        </Animated.View>
       </VStack>
+    </Pressable>
+  );
+});
+
+// Add this before the WorkoutScreen component:
+const SplitItem = React.memo(({ 
+  split, 
+  isEditingSplits, 
+  selectedDay, 
+  onPress, 
+  onNameEdit, 
+  onColorSelect, 
+  onDelete,
+  onFocusScroll
+}: { 
+  split: Split;
+  isEditingSplits: boolean;
+  selectedDay: string | null;
+  onPress: () => void;
+  onNameEdit: (text: string) => void;
+  onColorSelect: (color: string) => void;
+  onDelete: () => void;
+  onFocusScroll: (y: number, height: number) => void;
+}) => {
+  // Animation value for border color
+  const borderColor = useSharedValue("#3A3E48");
+
+  // Update border color when selection changes
+  useEffect(() => {
+    borderColor.value = withTiming(
+      selectedDay !== null ? "#6B8EF2" : "#3A3E48",
+      { duration: 200 }
+    );
+  }, [selectedDay]);
+
+  const borderAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      borderColor: borderColor.value,
+    };
+  });
+
+  return (
+    <Pressable
+      onPress={onPress}
+      bg="transparent"
+      p={4}
+      pl={6}
+      borderRadius="md"
+      position="relative"
+    >
+      <Animated.View 
+        style={[{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: 12,
+          borderWidth: 1,
+          zIndex: 2
+        }, borderAnimatedStyle]} 
+        pointerEvents="none" 
+      />
+      <Box
+        position="absolute"
+        top={0}
+        left={0}
+        bottom={0}
+        w="3"
+        bg={split.color || "#3A3E48"}
+        borderTopLeftRadius={12}
+        borderBottomLeftRadius={12}
+        zIndex={1}
+        pointerEvents="none"
+      />
+      <HStack justifyContent="space-between" alignItems="center">
+        {isEditingSplits ? (
+          <HStack flex={1} space={2} alignItems="center">
+            <Box flex={1}>
+              <FocusAwareInput
+                value={split.name}
+                onChangeText={onNameEdit}
+                color="white"
+                fontSize="lg"
+                onFocusScroll={onFocusScroll}
+                placeholder="Enter split name"
+                placeholderTextColor="rgba(255, 255, 255, 0.4)"
+              />
+            </Box>
+            <Text color="white" fontSize="sm">
+              {split.exercises.length} exercises
+            </Text>
+            <IconButton
+              icon={<Icon as={AntDesign} name="close" color="gray.400" size="md" />}
+              onPress={onDelete}
+              variant="ghost"
+              size="sm"
+            />
+          </HStack>
+        ) : (
+          <>
+            <Text color="white" fontSize="lg" fontWeight="bold">
+              {split.name}
+            </Text>
+            <Text color="white" fontSize="sm">
+              {split.exercises.length} exercises
+            </Text>
+          </>
+        )}
+      </HStack>
+      {isEditingSplits && (
+        <HStack space={2} mt={2} justifyContent="space-between">
+          {COLORS.map((color) => (
+            <Pressable
+              key={color}
+              onPress={() => onColorSelect(color)}
+              flex={1}
+            >
+              <Box
+                bg={color}
+                h="6"
+                borderRadius="md"
+                borderWidth={split.color === color ? 2 : 0}
+                borderColor="white"
+              />
+            </Pressable>
+          ))}
+        </HStack>
+      )}
     </Pressable>
   );
 });
@@ -332,7 +527,8 @@ const WeekdayItem = React.memo(({
 const WorkoutScreen = () => {
   const scrollViewRef = useRef<RNScrollView>(null);
   const [splits, setSplits] = useState<Split[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditingSplits, setIsEditingSplits] = useState(false);
+  const [isEditingProgram, setIsEditingProgram] = useState(false);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -342,6 +538,8 @@ const WorkoutScreen = () => {
   const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isInitialLoadRef = useRef(true);
+  const isKeyboardVisibleRef = useRef(false);
+  const isAnimatingRef = useRef(false);
 
   // Cache for processed data
   const processedDataRef = useRef<{
@@ -352,6 +550,130 @@ const WorkoutScreen = () => {
     exercises: [],
     exercisesByBodyPart: {},
     bodyPartSections: []
+  });
+
+  // Animation values for edit buttons
+  const programEditOpacity = useSharedValue(1);
+  const splitsEditOpacity = useSharedValue(1);
+  const editTextOpacity = useSharedValue(1);
+  const doneTextOpacity = useSharedValue(0);
+  const splitsEditTextOpacity = useSharedValue(1);
+  const splitsDoneTextOpacity = useSharedValue(0);
+
+  // Initialize animation values on mount
+  useEffect(() => {
+    // Set initial values without animation
+    programEditOpacity.value = 1;
+    splitsEditOpacity.value = 1;
+    editTextOpacity.value = 1;
+    doneTextOpacity.value = 0;
+    splitsEditTextOpacity.value = 1;
+    splitsDoneTextOpacity.value = 0;
+  }, []);
+
+  // Animation effect for program editing state
+  useEffect(() => {
+    if (isEditingProgram) {
+      // When entering program edit mode
+      editTextOpacity.value = withTiming(0, { duration: 100 });
+      doneTextOpacity.value = withTiming(1, { duration: 100 });
+      splitsEditOpacity.value = withTiming(0, { duration: 200 });
+    } else {
+      // When exiting program edit mode
+      editTextOpacity.value = withTiming(1, { duration: 100 });
+      doneTextOpacity.value = withTiming(0, { duration: 100 });
+      
+      // Only show splits edit button if not in splits edit mode
+      if (!isEditingSplits) {
+        splitsEditOpacity.value = withTiming(1, { duration: 200 });
+      }
+    }
+    
+    // Cleanup function to reset values when component unmounts
+    return () => {
+      // Reset to default values without animation
+      editTextOpacity.value = 1;
+      doneTextOpacity.value = 0;
+    };
+  }, [isEditingProgram]);
+  
+  // Animation effect for splits editing state
+  useEffect(() => {
+    if (isEditingSplits) {
+      // When entering splits edit mode
+      splitsEditTextOpacity.value = withTiming(0, { duration: 100 });
+      splitsDoneTextOpacity.value = withTiming(1, { duration: 100 });
+      programEditOpacity.value = withTiming(0, { duration: 200 });
+    } else {
+      // When exiting splits edit mode
+      splitsEditTextOpacity.value = withTiming(1, { duration: 100 });
+      splitsDoneTextOpacity.value = withTiming(0, { duration: 100 });
+      
+      // Only show program edit button if not in program edit mode
+      if (!isEditingProgram) {
+        programEditOpacity.value = withTiming(1, { duration: 200 });
+      }
+    }
+    
+    // Cleanup function to reset values when component unmounts
+    return () => {
+      // Reset to default values without animation
+      splitsEditTextOpacity.value = 1;
+      splitsDoneTextOpacity.value = 0;
+    };
+  }, [isEditingSplits]);
+
+  const programEditAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: programEditOpacity.value,
+    };
+  });
+
+  const splitsEditAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: splitsEditOpacity.value,
+    };
+  });
+
+  const editTextAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: editTextOpacity.value,
+    };
+  });
+
+  const doneTextAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: doneTextOpacity.value,
+    };
+  });
+
+  const splitsEditTextAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: splitsEditTextOpacity.value,
+    };
+  });
+
+  const splitsDoneTextAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: splitsDoneTextOpacity.value,
+    };
+  });
+
+  // Add animation value for border color
+  const borderColor = useSharedValue("#3A3E48");
+
+  // Update border color when selection changes
+  useEffect(() => {
+    borderColor.value = withTiming(
+      selectedDay !== null ? "#6B8EF2" : "#3A3E48",
+      { duration: 200 }
+    );
+  }, [selectedDay]);
+
+  const borderAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      borderColor: borderColor.value,
+    };
   });
 
   // Optimize data processing
@@ -394,33 +716,36 @@ const WorkoutScreen = () => {
 
   // Memoize callbacks
   const handleDaySelect = useCallback((day: string) => {
+    if (!isEditingProgram) return;
+    
     if (selectedDay === day) {
       setSelectedDay(null);
       setSelectedSplit(null);
       return;
     }
     setSelectedDay(day);
-  }, [selectedDay]);
+  }, [selectedDay, isEditingProgram]);
 
   const handleSplitSelect = useCallback((split: Split) => {
     if (!selectedDay) return;
     
     setSplits(prevSplits => {
-      const updatedSplits = prevSplits.map(s => {
-        if (s.id === split.id) {
-          let updatedDays = [...s.days];
-          if (updatedDays.includes(selectedDay)) {
-            updatedDays = updatedDays.filter(d => d !== selectedDay);
-          } else {
-            updatedDays.push(selectedDay);
-          }
-          return { ...s, days: updatedDays };
-        } else {
-          const filteredDays = s.days.filter(d => d !== selectedDay);
-          return { ...s, days: filteredDays };
+      // First, remove the selected day from all splits
+      const updatedSplits = prevSplits.map(s => ({
+        ...s,
+        days: s.days.filter(d => d !== selectedDay)
+      }));
+      
+      // Then, add the selected day to the chosen split
+      return updatedSplits.map(s => {
+      if (s.id === split.id) {
+          return {
+            ...s,
+            days: [...s.days, selectedDay]
+          };
         }
+        return s;
       });
-      return updatedSplits;
     });
     
     setSelectedDay(null);
@@ -520,19 +845,22 @@ const WorkoutScreen = () => {
   // Memoize the handleSplitPress function
   const handleSplitPress = useCallback((split: Split) => {
     if (selectedDay) {
+      if (!isEditingProgram) return;
       handleSplitSelect(split);
       return;
     }
     
-    if (!isEditing) {
+    if (!isEditingProgram && !isEditingSplits) {
       setSelectedSplitDetail(split);
     }
-  }, [selectedDay, isEditing, handleSplitSelect]);
+  }, [selectedDay, isEditingProgram, isEditingSplits, handleSplitSelect]);
 
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
+        // Set flag to prevent animations during keyboard events
+        isKeyboardVisibleRef.current = true;
         setKeyboardHeight(e.endCoordinates.height);
       }
     );
@@ -541,6 +869,10 @@ const WorkoutScreen = () => {
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
         setKeyboardHeight(0);
+        // Small delay to ensure any related re-renders happen before we allow animations again
+        setTimeout(() => {
+          isKeyboardVisibleRef.current = false;
+        }, 100);
       }
     );
 
@@ -662,6 +994,23 @@ const WorkoutScreen = () => {
     />
   ), [splits, expandedExercises, toggleExerciseExpansion]);
 
+  // Render function for the splits.map section
+  const renderSplitItem = useCallback((split: Split) => {
+    return (
+      <SplitItem
+        key={split.id}
+        split={split}
+        isEditingSplits={isEditingSplits}
+        selectedDay={selectedDay}
+        onPress={() => handleSplitPress(split)}
+        onNameEdit={(text: string) => handleSplitNameEdit(split.id, text)}
+        onColorSelect={(color: string) => handleColorSelect(split.id, color)}
+        onDelete={() => handleDeleteSplit(split.id)}
+        onFocusScroll={handleFocusScroll}
+      />
+    );
+  }, [isEditingSplits, selectedDay, handleSplitPress, handleSplitNameEdit, handleColorSelect, handleDeleteSplit, handleFocusScroll]);
+
   if (selectedSplitDetail && splitDetailScreenProps) {
     return <MemoizedSplitDetailScreen {...splitDetailScreenProps} />;
   }
@@ -688,139 +1037,132 @@ const WorkoutScreen = () => {
           >
             <VStack space={3} p={4}>
               <HStack justifyContent="space-between" alignItems="center">
-                <Text color="white" fontSize="2xl" fontWeight="bold">
+        <Text color="white" fontSize="2xl" fontWeight="bold">
                   My Program
                 </Text>
-                <Pressable
-                  onPress={saveCurrentStateAsDefault}
-                  bg="#2A2E38"
-                  px={3}
-                  py={1.5}
-                  borderRadius="md"
-                  _pressed={{ opacity: 0.7 }}
-                >
-                  <Text color="#6B8EF2" fontSize="sm" fontWeight="bold">
-                    Save
-        </Text>
-                </Pressable>
+                <Animated.View style={programEditAnimatedStyle}>
+                  <Pressable
+                    onPress={() => {
+                      if (isEditingProgram) {
+                        // Exiting edit mode
+                        setSelectedDay(null);
+                        setSelectedSplit(null);
+                        setIsEditingProgram(false);
+                      } else {
+                        // Entering edit mode, exit other mode first if active
+                        if (isEditingSplits) {
+                          setIsEditingSplits(false);
+                        }
+                        // Set this mode after clearing the other
+                        setIsEditingProgram(true);
+                      }
+                    }}
+                  >
+                    <Box position="relative" w="20">
+                      <Animated.Text style={[{
+                        color: '#6B8EF2',
+                        fontSize: 14,
+                        fontWeight: 'bold',
+                        position: 'absolute',
+                        right: 0,
+                      }, editTextAnimatedStyle]}>
+                        Edit
+                      </Animated.Text>
+                      <Animated.Text style={[{
+                        color: '#6B8EF2',
+                        fontSize: 14,
+                        fontWeight: 'bold',
+                        position: 'absolute',
+                        right: 0,
+                      }, doneTextAnimatedStyle]}>
+                        Done
+                      </Animated.Text>
+                    </Box>
+                  </Pressable>
+                </Animated.View>
               </HStack>
 
         <HStack justifyContent="space-between" mx={-2} px={1}>
-          {WEEKDAYS.map((day) => (
-            <WeekdayItem
+                {WEEKDAYS.map((day) => (
+                  <WeekdayItem
                       key={day}
-              day={day}
-              splits={splits}
-              isSelected={selectedDay === day}
+                    day={day}
+                    splits={splits}
+                    isSelected={selectedDay === day}
                       onPress={() => handleDaySelect(day)}
-            />
-          ))}
+                    isEditing={isEditingProgram}
+                  />
+                ))}
         </HStack>
 
-              <Box bg="#2A2E38" borderRadius="lg" p={4}>
-                <HStack justifyContent="space-between" alignItems="center" mb={4}>
+              <VStack space={4}>
+                <HStack justifyContent="space-between" alignItems="center">
                   <Text color="white" fontSize="xl" fontWeight="bold">
                     My Splits
                 </Text>
-                <Button
-                  variant="ghost"
-                    onPress={() => setIsEditing(!isEditing)}
-                  _text={{ color: "#6B8EF2" }}
-                >
-                  {isEditing ? "Done" : "Edit"}
-                </Button>
+                  <Animated.View style={splitsEditAnimatedStyle}>
+                    <Pressable
+                      onPress={() => {
+                        if (isEditingSplits) {
+                          // Just exit this mode
+                          setIsEditingSplits(false);
+                        } else {
+                          // Entering edit mode, exit other mode first if active
+                          if (isEditingProgram) {
+                            setSelectedDay(null);
+                            setSelectedSplit(null);
+                            setIsEditingProgram(false);
+                          }
+                          // Set this mode after clearing the other
+                          setIsEditingSplits(true);
+                        }
+                      }}
+                    >
+                      <Box position="relative" w="20">
+                        <Animated.Text style={[{
+                          color: '#6B8EF2',
+                          fontSize: 14,
+                          fontWeight: 'bold',
+                          position: 'absolute',
+                          right: 0,
+                        }, splitsEditTextAnimatedStyle]}>
+                          Edit
+                        </Animated.Text>
+                        <Animated.Text style={[{
+                          color: '#6B8EF2',
+                          fontSize: 14,
+                          fontWeight: 'bold',
+                          position: 'absolute',
+                          right: 0,
+                        }, splitsDoneTextAnimatedStyle]}>
+                          Done
+                        </Animated.Text>
+                      </Box>
+                    </Pressable>
+                  </Animated.View>
               </HStack>
 
-                <VStack space={3} pb={4}>
+                <VStack space={3}>
                   {splits.length === 0 ? (
                     <Text color="gray.400" fontSize="sm" textAlign="center">
                       Tell us about your workout split!
                     </Text>
                   ) : (
                     splits.map((split) => (
-                      <Pressable
+                      <SplitItem
                         key={split.id}
+                        split={split}
+                        isEditingSplits={isEditingSplits}
+                        selectedDay={selectedDay}
                         onPress={() => handleSplitPress(split)}
-                        bg="#1E2028"
-                        p={4}
-                        pl={6}
-                        borderRadius="md"
-                        borderWidth={selectedDay !== null ? 2 : 0}
-                        borderColor="#6B8EF2"
-                        opacity={selectedDay !== null ? 1 : 0.7}
-                        _pressed={{
-                          borderWidth: 1,
-                          borderColor: '#6B8EF2'
-                        }}
-                        position="relative"
-                      >
-                        <Box
-                          position="absolute"
-                          top={0}
-                          left={0}
-                          bottom={0}
-                          w="3"
-                          bg={split.color || "#3A3E48"}
-                          borderLeftRadius="md"
-                        />
-                        <HStack justifyContent="space-between" alignItems="center">
-                          {isEditing ? (
-                            <HStack flex={1} space={2} alignItems="center">
-                              <Box flex={1}>
-                                <FocusAwareInput
-                                  value={split.name}
-                                  onChangeText={(text: string) => handleSplitNameEdit(split.id, text)}
-                                  color="white"
-                                  fontSize="lg"
-                                  onFocusScroll={handleFocusScroll}
-                                  placeholder="Enter split name"
-                                  placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                                />
-                              </Box>
-                              <Text color="white" fontSize="sm">
-                                {split.exercises.length} exercises
-                              </Text>
-                              <IconButton
-                                icon={<Icon as={AntDesign} name="close" color="gray.400" size="md" />}
-                                onPress={() => handleDeleteSplit(split.id)}
-                                variant="ghost"
-                                size="sm"
-                              />
-                            </HStack>
-                          ) : (
-                            <>
-                              <Text color="white" fontSize="lg" fontWeight="bold">
-                                {split.name}
-                              </Text>
-                              <Text color="white" fontSize="sm">
-                                {split.exercises.length} exercises
-                              </Text>
-                            </>
-                          )}
-                        </HStack>
-                        {isEditing && (
-                          <HStack space={2} mt={2} justifyContent="space-between">
-                            {COLORS.map((color) => (
-                              <Pressable
-                                key={color}
-                                onPress={() => handleColorSelect(split.id, color)}
-                                flex={1}
-                              >
-                                <Box
-                                  bg={color}
-                                  h="6"
-                                  borderRadius="md"
-                                  borderWidth={split.color === color ? 2 : 0}
-                                  borderColor="white"
-                                />
-                              </Pressable>
-                            ))}
-                          </HStack>
-                        )}
-                      </Pressable>
+                        onNameEdit={(text: string) => handleSplitNameEdit(split.id, text)}
+                        onColorSelect={(color: string) => handleColorSelect(split.id, color)}
+                        onDelete={() => handleDeleteSplit(split.id)}
+                        onFocusScroll={handleFocusScroll}
+                      />
                     ))
                   )}
-                  {isEditing && (
+                  {isEditingSplits && (
                     <Pressable
                       onPress={handleAddSplit}
                       bg="#1E2028"
@@ -841,11 +1183,9 @@ const WorkoutScreen = () => {
                     </Pressable>
                   )}
                 </VStack>
-              </Box>
 
-              {/* My Exercises Section */}
-              <Box bg="#2A2E38" borderRadius="lg" p={4}>
-                <HStack justifyContent="space-between" alignItems="center" mb={4}>
+                <VStack space={4}>
+                  <HStack justifyContent="space-between" alignItems="center">
                   <Text color="white" fontSize="xl" fontWeight="bold">
                     My Exercises
                   </Text>
@@ -856,13 +1196,14 @@ const WorkoutScreen = () => {
                       No Exercises added yet.
                   </Text>
                 ) : (
-                  <OptimizedExerciseList
-                    data={bodyPartSections.length > 0 ? bodyPartSections : []}
-                    renderItem={renderBodyPartSection}
-                    extraData={[splits, expandedExercises]}
-                  />
+                    <OptimizedExerciseList
+                      data={bodyPartSections.length > 0 ? bodyPartSections : []}
+                      renderItem={renderBodyPartSection}
+                      extraData={[splits, expandedExercises]}
+                    />
                 )}
-            </Box>
+              </VStack>
+              </VStack>
       </VStack>
           </ScrollView>
     </Box>
