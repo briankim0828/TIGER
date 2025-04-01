@@ -242,7 +242,7 @@ const OptimizedExerciseList = React.memo(({
   // If no data, render nothing
   if (!data || data.length === 0) return null;
   
-  console.log('DEBUG: OptimizedExerciseList rendering, editMode:', editMode);
+  // console.log('DEBUG: OptimizedExerciseList rendering, editMode:', editMode);
   
   return (
     <View style={{ 

@@ -15,13 +15,16 @@ const ProgressScreen: React.FC = () => {
   const [calendarKey, setCalendarKey] = useState(0);
   const [splits, setSplits] = useState<Split[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [workouts, setWorkouts] = useState<{ date: string; completed: boolean }[]>([]);
   
   // Add refs for caching
   const isInitialLoadRef = useRef(true);
   const processedDataRef = useRef<{
     splits: Split[];
+    workouts: { date: string; completed: boolean }[];
   }>({
-    splits: []
+    splits: [],
+    workouts: []
   });
 
   // Get today's date string in the same format as the calendar
@@ -44,6 +47,7 @@ const ProgressScreen: React.FC = () => {
       try {
         // Load splits data first
         const splitsData = await AsyncStorage.getItem('splits');
+        const workoutsData = await AsyncStorage.getItem('workouts');
         
         if (splitsData) {
           const parsedSplits = JSON.parse(splitsData);
@@ -54,6 +58,17 @@ const ProgressScreen: React.FC = () => {
           console.log('No splits data found on initial load');
           setSplits([]);
           processedDataRef.current.splits = [];
+        }
+
+        if (workoutsData) {
+          const parsedWorkouts = JSON.parse(workoutsData);
+          console.log('Initial load - workouts:', parsedWorkouts.length);
+          setWorkouts(parsedWorkouts);
+          processedDataRef.current.workouts = parsedWorkouts;
+        } else {
+          console.log('No workouts data found on initial load');
+          setWorkouts([]);
+          processedDataRef.current.workouts = [];
         }
 
         // Increment the calendar key to force a complete re-render
@@ -79,6 +94,8 @@ const ProgressScreen: React.FC = () => {
           try {
             // Get latest splits data
             const splitsData = await AsyncStorage.getItem('splits');
+            const workoutsData = await AsyncStorage.getItem('workouts');
+            
             if (splitsData) {
               const parsedSplits = JSON.parse(splitsData);
               // Only update if data has changed
@@ -86,6 +103,16 @@ const ProgressScreen: React.FC = () => {
                 console.log('Refresh - splits:', parsedSplits.length);
                 setSplits(parsedSplits);
                 processedDataRef.current.splits = parsedSplits;
+              }
+            }
+
+            if (workoutsData) {
+              const parsedWorkouts = JSON.parse(workoutsData);
+              // Only update if data has changed
+              if (JSON.stringify(parsedWorkouts) !== JSON.stringify(processedDataRef.current.workouts)) {
+                console.log('Refresh - workouts:', parsedWorkouts.length);
+                setWorkouts(parsedWorkouts);
+                processedDataRef.current.workouts = parsedWorkouts;
               }
             }
           } catch (error) {
@@ -121,7 +148,9 @@ const ProgressScreen: React.FC = () => {
         <Box flex={1}>
           <WorkoutCalendar 
             key={`calendar-${calendarKey}`}
-            data={{ month: currentMonth, year: currentYear, workouts: [] }} 
+            month={currentMonth}
+            year={currentYear}
+            workouts={workouts}
             splits={splits}
             onDayPress={handleDayPress}
           />

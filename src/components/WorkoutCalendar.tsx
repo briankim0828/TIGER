@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Box, VStack, HStack, Text, Pressable } from 'native-base';
 import { FlatList, ViewToken, Platform, UIManager, findNodeHandle } from 'react-native';
-import { MonthData, WorkoutDay } from '../types';
 import { Split } from '../screens/WorkoutScreen';
 
 interface WorkoutCalendarProps {
-  data: MonthData;
+  month: number;
+  year: number;
+  workouts: { date: string; completed: boolean }[];
   onDayPress?: (date: string) => void;
   splits: Split[];
 }
@@ -158,20 +159,20 @@ const DaysHeader = React.memo(() => (
   </HStack>
 ), () => true); // Always return true since this component never changes
 
-const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, splits }) => {
+const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ month, year, workouts, onDayPress, splits }) => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [visibleMonth, setVisibleMonth] = useState({ month: data.month, year: data.year });
+  const [visibleMonth, setVisibleMonth] = useState({ month, year });
   const flatListRef = useRef<FlatList>(null);
   const prevSelectedCellRef = useRef<string | null>(null);
   
   // Create an ultra-fast O(1) lookup for workouts
   const workoutsMap = useMemo(() => {
-    const map = new Map<string, WorkoutDay>();
-    data.workouts.forEach(workout => {
-      map.set(workout.date, workout);
+    const map = new Map<string, boolean>();
+    workouts.forEach(workout => {
+      map.set(workout.date, workout.completed);
     });
     return map;
-  }, [data.workouts]);
+  }, [workouts]);
 
   // Create an ultra-fast lookup for splits by day
   const splitsByDay = useMemo(() => {
@@ -188,7 +189,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
   }, [splits]);
 
   // Fast workout lookup
-  const getWorkoutForDate = useCallback((dateStr: string): WorkoutDay | undefined => {
+  const getWorkoutForDate = useCallback((dateStr: string): boolean | undefined => {
     return workoutsMap.get(dateStr);
   }, [workoutsMap]);
 
@@ -299,7 +300,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ data, onDayPress, spl
           colorStrip: split?.color || "#3A3E48",
           isFutureDay,
           hasWorkout: !!workout,
-          workoutCompleted: workout?.completed,
+          workoutCompleted: workout,
           onPress: () => handleDayPress(day, section.month, section.year)
         };
       });

@@ -1,18 +1,44 @@
-import React from 'react';
-import { NativeBaseProvider, Box, Text, StatusBar } from 'native-base';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import HomeScreen from './src/screens/HomeScreen';
+import React, { useState } from 'react';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { NativeBaseProvider, Box, StatusBar, Text } from 'native-base';
+import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DataProvider } from './src/contexts/DataContext';
+import WorkoutScreen from './src/screens/WorkoutScreen';
+import ProgressScreen from './src/screens/ProgressScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import SplitDetailScreen from './src/screens/SplitDetailScreen';
+import ExerciseSelectionView from './src/components/ExerciseSelectionView';
+import BottomNavbar from './src/components/BottomNavbar';
+import { Split, Exercise } from './src/types';
 
-// Define the StackParamList type for our navigation
-type StackParamList = {
-  Home: undefined;
+type RootStackParamList = {
+  Workout: undefined;
+  Progress: undefined;
+  Profile: undefined;
+  SplitDetail: { split: Split; onClose: () => void; onUpdate: (split: Split) => void };
+  ExerciseSelection: { onClose: () => void; onAddExercise: (exercises: Exercise[]) => void };
 };
 
-const AppHeader = () => {
+type TabType = 'workout' | 'progress' | 'profile';
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+// Global header component
+const GlobalHeader = () => {
+  const insets = useSafeAreaInsets();
   return (
-    <Box bg="#1E2028" pt={1} px={4} pb={3} borderBottomWidth={0} alignItems="center" justifyContent="center">
+    <Box 
+      bg="#1E2028" 
+      pt={0.2}
+      px={4} 
+      pb={2} 
+      borderBottomWidth={0} 
+      alignItems="center" 
+      justifyContent="center"
+    >
       <Text color="white" fontSize="24" fontWeight="bold">
         PR.
       </Text>
@@ -20,22 +46,62 @@ const AppHeader = () => {
   );
 };
 
-// Create the Stack Navigator
-const Stack = createNativeStackNavigator<StackParamList>();
+// Navigation wrapper component to use navigation hook
+const NavigationWrapper = () => {
+  const [selectedTab, setSelectedTab] = useState<TabType>('workout');
+  const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
 
-// Main Navigation component
-const Navigation = () => {
+  // Add debugging logs
+  React.useEffect(() => {
+    console.log('Current selected tab:', selectedTab);
+  }, [selectedTab]);
+
+  const handleTabChange = (tab: TabType) => {
+    console.log('Tab changed to:', tab);
+    setSelectedTab(tab);
+    // Navigate to the corresponding screen
+    switch (tab) {
+      case 'workout':
+        console.log('Navigating to Workout screen');
+        navigation.navigate('Workout');
+        break;
+      case 'progress':
+        console.log('Navigating to Progress screen');
+        navigation.navigate('Progress');
+        break;
+      case 'profile':
+        console.log('Navigating to Profile screen');
+        navigation.navigate('Profile');
+        break;
+    }
+  };
+
   return (
-    <Stack.Navigator
-      initialRouteName="Home"
-      screenOptions={{
-        headerShown: true,
-        header: () => <AppHeader />,
-        contentStyle: { backgroundColor: "#1E2028" },
-      }}
-    >
-      <Stack.Screen name="Home" component={HomeScreen} />
-    </Stack.Navigator>
+    <Box flex={1} bg="#1E2028">
+      <GlobalHeader />
+      <Box flex={1}>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: "#1E2028" },
+          }}
+        >
+          <Stack.Screen name="Workout" component={WorkoutScreen} />
+          <Stack.Screen name="Progress" component={ProgressScreen} />
+          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Screen 
+            name="SplitDetail" 
+            component={SplitDetailScreen as React.ComponentType<any>} 
+          />
+          <Stack.Screen 
+            name="ExerciseSelection" 
+            component={ExerciseSelectionView as React.ComponentType<any>} 
+          />
+        </Stack.Navigator>
+      </Box>
+      <BottomNavbar selectedTab={selectedTab} onTabChange={handleTabChange} />
+    </Box>
   );
 };
 
@@ -43,12 +109,14 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NativeBaseProvider>
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#1E2028" }}>
-          <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
-          <NavigationContainer>
-            <Navigation />
-          </NavigationContainer>
-        </SafeAreaView>
+        <DataProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor: "#1E2028" }} edges={['top', 'left', 'right', 'bottom']}>
+            <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
+            <NavigationContainer>
+              <NavigationWrapper />
+            </NavigationContainer>
+          </SafeAreaView>
+        </DataProvider>
       </NativeBaseProvider>
     </SafeAreaProvider>
   );

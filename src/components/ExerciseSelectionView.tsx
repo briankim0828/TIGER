@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Center, 
@@ -12,88 +12,13 @@ import {
   Divider
 } from 'native-base';
 import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
-
-// Define exercise types
-export interface Exercise {
-  id: string;
-  name: string;
-  bodyPart: string;
-}
+import { Exercise, BODY_PARTS, DEFAULT_EXERCISES_BY_BODY_PART } from '../types';
+import { useData } from '../contexts/DataContext';
 
 interface ExerciseSelectionViewProps {
   onClose: () => void;
   onAddExercise: (exercises: Exercise[]) => void;
 }
-
-const BODY_PARTS = [
-  'Chest',
-  'Back',
-  'Legs',
-  'Arms',
-  'Shoulders',
-  'Core',
-  'Cardio'
-];
-
-// Simple exercise database
-const EXERCISES_BY_BODY_PART: Record<string, Exercise[]> = {
-  'Chest': [
-    { id: 'chest-1', name: 'Flat Bench Press', bodyPart: 'Chest' },
-    { id: 'chest-2', name: 'Incline Dumbbell Press', bodyPart: 'Chest' },
-    { id: 'chest-3', name: 'Decline Bench Press', bodyPart: 'Chest' },
-    { id: 'chest-4', name: 'Chest Flyes', bodyPart: 'Chest' },
-    { id: 'chest-5', name: 'Push-Ups', bodyPart: 'Chest' },
-    { id: 'chest-6', name: 'Cable Flyes', bodyPart: 'Chest' }
-  ],
-  'Back': [
-    { id: 'back-1', name: 'Barbell Row', bodyPart: 'Back' },
-    { id: 'back-2', name: 'Pull-Ups', bodyPart: 'Back' },
-    { id: 'back-3', name: 'Lat Pulldowns', bodyPart: 'Back' },
-    { id: 'back-4', name: 'Deadlift', bodyPart: 'Back' },
-    { id: 'back-5', name: 'Face Pulls', bodyPart: 'Back' },
-    { id: 'back-6', name: 'Cable Row', bodyPart: 'Back' }
-  ],
-  'Legs': [
-    { id: 'legs-1', name: 'Squats', bodyPart: 'Legs' },
-    { id: 'legs-2', name: 'Romanian Deadlift', bodyPart: 'Legs' },
-    { id: 'legs-3', name: 'Leg Press', bodyPart: 'Legs' },
-    { id: 'legs-4', name: 'Lunges', bodyPart: 'Legs' },
-    { id: 'legs-5', name: 'Calf Raises', bodyPart: 'Legs' },
-    { id: 'legs-6', name: 'Leg Extensions', bodyPart: 'Legs' }
-  ],
-  'Arms': [
-    { id: 'arms-1', name: 'Bicep Curls', bodyPart: 'Arms' },
-    { id: 'arms-2', name: 'Tricep Pushdowns', bodyPart: 'Arms' },
-    { id: 'arms-3', name: 'Hammer Curls', bodyPart: 'Arms' },
-    { id: 'arms-4', name: 'Skull Crushers', bodyPart: 'Arms' },
-    { id: 'arms-5', name: 'Preacher Curls', bodyPart: 'Arms' },
-    { id: 'arms-6', name: 'Tricep Extensions', bodyPart: 'Arms' }
-  ],
-  'Shoulders': [
-    { id: 'shoulders-1', name: 'Dumbbell Press', bodyPart: 'Shoulders' },
-    { id: 'shoulders-2', name: 'Lateral Raises', bodyPart: 'Shoulders' },
-    { id: 'shoulders-3', name: 'Front Raises', bodyPart: 'Shoulders' },
-    { id: 'shoulders-4', name: 'Barbell Press', bodyPart: 'Shoulders' },
-    { id: 'shoulders-5', name: 'Shrugs', bodyPart: 'Shoulders' },
-    { id: 'shoulders-6', name: 'Reverse Flyes', bodyPart: 'Shoulders' }
-  ],
-  'Core': [
-    { id: 'core-1', name: 'Crunches', bodyPart: 'Core' },
-    { id: 'core-2', name: 'Plank', bodyPart: 'Core' },
-    { id: 'core-3', name: 'Russian Twists', bodyPart: 'Core' },
-    { id: 'core-4', name: 'Leg Raises', bodyPart: 'Core' },
-    { id: 'core-5', name: 'Mountain Climbers', bodyPart: 'Core' },
-    { id: 'core-6', name: 'Bicycle Crunches', bodyPart: 'Core' }
-  ],
-  'Cardio': [
-    { id: 'cardio-1', name: 'Treadmill', bodyPart: 'Cardio' },
-    { id: 'cardio-2', name: 'Stairmaster', bodyPart: 'Cardio' },
-    { id: 'cardio-3', name: 'Elliptical', bodyPart: 'Cardio' },
-    { id: 'cardio-4', name: 'Stationary Bike', bodyPart: 'Cardio' },
-    { id: 'cardio-5', name: 'Rowing Machine', bodyPart: 'Cardio' },
-    { id: 'cardio-6', name: 'Arc Trainer', bodyPart: 'Cardio' }
-  ]
-};
 
 // Icon mapping for body parts
 const BODY_PART_ICONS: Record<string, any> = {
@@ -107,8 +32,38 @@ const BODY_PART_ICONS: Record<string, any> = {
 };
 
 const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionViewProps) => {
+  const { bodyPartSections, exercises: allExercises } = useData();
   const [selectedBodyPart, setSelectedBodyPart] = useState<string | null>(null);
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
+  const [exercisesByBodyPart, setExercisesByBodyPart] = useState<Record<string, Exercise[]>>({});
+
+  // Prepare exercises by body part for the selection view
+  useEffect(() => {
+    // Group exercises by body part
+    const groupedExercises: Record<string, Exercise[]> = {};
+    
+    // First, add exercises from the data store
+    if (allExercises.length > 0) {
+      allExercises.forEach(exercise => {
+        if (!groupedExercises[exercise.bodyPart]) {
+          groupedExercises[exercise.bodyPart] = [];
+        }
+        groupedExercises[exercise.bodyPart].push(exercise);
+      });
+    } 
+    // For any missing body parts, add default exercises
+    BODY_PARTS.forEach(bodyPart => {
+      if (!groupedExercises[bodyPart] || groupedExercises[bodyPart].length === 0) {
+        const defaultExercises = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(ex => ({
+          ...ex,
+          splitIds: [],
+        }));
+        groupedExercises[bodyPart] = defaultExercises;
+      }
+    });
+    
+    setExercisesByBodyPart(groupedExercises);
+  }, [allExercises]);
 
   const handleBodyPartSelect = (bodyPart: string) => {
     setSelectedBodyPart(bodyPart);
@@ -214,8 +169,8 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
             {/* Exercises List */}
             <Box flex={1}>
               <ScrollView p={3} flex={1} showsVerticalScrollIndicator={false}>
-                {selectedBodyPart ? (
-                  EXERCISES_BY_BODY_PART[selectedBodyPart].map((exercise) => (
+                {selectedBodyPart && exercisesByBodyPart[selectedBodyPart] ? (
+                  exercisesByBodyPart[selectedBodyPart].map((exercise) => (
                     <Pressable
                       key={exercise.id}
                       onPress={() => handleExerciseSelect(exercise)}
