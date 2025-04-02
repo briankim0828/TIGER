@@ -1,17 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box, HStack, Text, Icon, IconButton, VStack, Pressable, ScrollView, Button, Divider } from 'native-base';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
-import { Split, Exercise as WorkoutExercise } from './WorkoutScreen';
-import ExerciseSelectionView, { Exercise as SelectionExercise } from '../components/ExerciseSelectionView';
+import { Split, Exercise, Set } from '../types';
+import ExerciseSelectionView from '../components/ExerciseSelectionView';
 import { ScrollView as RNScrollView } from 'react-native';
 import { storageService } from '../services/storage';
 import CustomTextInput from '../components/CustomTextInput';
 
-// Extend the WorkoutExercise type to include sets and reps
-interface ExerciseWithDetails extends Omit<WorkoutExercise, 'splitIds'> {
-  splitIds: string[];
-  sets?: number;
-  reps?: number;
+// Extend the Exercise type to include sets and reps
+interface ExerciseWithDetails extends Omit<Exercise, 'sets'> {
+  sets: Set[];
 }
 
 interface SplitDetailScreenProps {
@@ -28,11 +26,10 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
   const scrollViewRef = useRef<RNScrollView>(null);
 
   // Convert SelectionExercise to WorkoutExercise
-  const convertToWorkoutExercise = (exercise: SelectionExercise): ExerciseWithDetails => ({
+  const convertToWorkoutExercise = (exercise: { id: string; name: string; bodyPart: string }): ExerciseWithDetails => ({
     ...exercise,
     splitIds: [split.id],
-    sets: 0,
-    reps: 0
+    sets: []
   });
 
   // Load exercises from storage when component mounts
@@ -45,8 +42,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
           const exercisesWithSplitIds = loadedExercises.map(exercise => ({
             ...exercise,
             splitIds: [split.id],
-            sets: (exercise as any).sets || 0,
-            reps: (exercise as any).reps || 0
+            sets: (exercise as any).sets || []
           }));
           setExercises(exercisesWithSplitIds);
           // Update parent component with loaded exercises
@@ -79,7 +75,7 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
     saveExercises();
   }, [exercises, split.id, onUpdate, split]);
 
-  const handleAddExercise = (newExercises: SelectionExercise[]) => {
+  const handleAddExercise = (newExercises: Exercise[]) => {
     const workoutExercises = newExercises.map(convertToWorkoutExercise);
     const updatedExercises = [...exercises, ...workoutExercises];
     setExercises(updatedExercises);

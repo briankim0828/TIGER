@@ -48,30 +48,27 @@ const GlobalHeader = () => {
 
 // Navigation wrapper component to use navigation hook
 const NavigationWrapper = () => {
-  const [selectedTab, setSelectedTab] = useState<TabType>('workout');
+  const [selectedTab, setSelectedTab] = useState<TabType>('workout'); // this is where the default tab is set
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
 
   // Add debugging logs
   React.useEffect(() => {
-    console.log('Current selected tab:', selectedTab);
+    console.log('Current tab:', selectedTab);
   }, [selectedTab]);
 
   const handleTabChange = (tab: TabType) => {
-    console.log('Tab changed to:', tab);
+    console.log('handleTabChange');
     setSelectedTab(tab);
     // Navigate to the corresponding screen
     switch (tab) {
       case 'workout':
-        console.log('Navigating to Workout screen');
         navigation.navigate('Workout');
         break;
       case 'progress':
-        console.log('Navigating to Progress screen');
         navigation.navigate('Progress');
         break;
       case 'profile':
-        console.log('Navigating to Profile screen');
         navigation.navigate('Profile');
         break;
     }

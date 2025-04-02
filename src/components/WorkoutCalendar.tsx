@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Box, VStack, HStack, Text, Pressable } from 'native-base';
 import { FlatList, ViewToken, Platform, UIManager, findNodeHandle } from 'react-native';
-import { Split } from '../screens/WorkoutScreen';
+import { Split, WeekDay, WEEKDAYS } from '../types';
 
 interface WorkoutCalendarProps {
   month: number;
@@ -176,15 +176,14 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ month, year, workouts
 
   // Create an ultra-fast lookup for splits by day
   const splitsByDay = useMemo(() => {
-    const map = new Map<string, Split>();
-    if (splits && splits.length > 0) {
-      DAYS_OF_WEEK.forEach(day => {
-        const splitForDay = splits.find(split => split.days.includes(day));
-        if (splitForDay) {
-          map.set(day, splitForDay);
+    const map = new Map<WeekDay, Split>();
+    splits.forEach(split => {
+      split.days.forEach(day => {
+        if (day in WEEKDAYS) {
+          map.set(day as WeekDay, split);
         }
       });
-    }
+    });
     return map;
   }, [splits]);
 
@@ -194,7 +193,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ month, year, workouts
   }, [workoutsMap]);
 
   // Fast split lookup
-  const getSplitForDate = useCallback((dayOfWeek: string): Split | undefined => {
+  const getSplitForDate = useCallback((dayOfWeek: WeekDay): Split | undefined => {
     return splitsByDay.get(dayOfWeek);
   }, [splitsByDay]);
 
@@ -287,7 +286,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({ month, year, workouts
         
         // Fast lookups
         const workout = getWorkoutForDate(dateStr);
-        const split = getSplitForDate(dayOfWeek);
+        const split = getSplitForDate(dayOfWeek as WeekDay);
         
         const todayHighlight = day === currentDay && section.month === currentMonth && section.year === currentYear;
         const isFutureDay = isFutureMonth || (section.year === currentYear && section.month === currentMonth && day > currentDay);

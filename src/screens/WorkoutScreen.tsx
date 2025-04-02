@@ -6,7 +6,7 @@ import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, D
   TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
 import SplitDetailScreen from './SplitDetailScreen';
 import { FlashList } from '@shopify/flash-list';
-import { storageService } from '../services/storage';
+import { dataService } from '../services/data';
 import Animated, { 
   useAnimatedStyle, 
   withTiming,
@@ -14,21 +14,8 @@ import Animated, {
   withSequence,
   withDelay
 } from 'react-native-reanimated';
-
-export interface Exercise {
-  id: string;
-  name: string;
-  bodyPart: string;
-  splitIds: string[];
-}
-
-export interface Split {
-  id: string;
-  name: string;
-  days: string[];
-  color?: string;
-  exercises: { id: string; name: string; bodyPart: string }[];
-}
+import { Exercise, Split, BODY_PARTS, WEEKDAYS, WeekDay } from '../types';
+import { useData } from '../contexts/DataContext';
 
 // Interface for body part section data
 export interface BodyPartSectionData {
@@ -46,60 +33,14 @@ const COLORS = [
   '#D72638' 
 ];
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const ColorBar = ({ color }: { color?: string }) => (
-  <Box w="full" h="2" bg={color || 'transparent'} borderTopRadius="lg" />
-);
-
-// Create a wrapper component for CustomTextInput
-const FocusAwareInput = ({ onFocusScroll, editMode, ...props }: any) => {
-  // Use a ref for the parent view instead
-  const viewRef = useRef<View>(null);
-  
-  const handleFocus = () => {
-    console.log('DEBUG: FocusAwareInput focused, input props:', props.placeholder);
-    
-    // Only proceed if we're in the correct edit mode (splits)
-    if (editMode !== 'splits') {
-      console.log('DEBUG: Ignoring input focus - not in splits edit mode');
-      return;
-    }
-    
-    // Use a delay to ensure the keyboard is shown and layout is updated
-    setTimeout(() => {
-      // Measure the parent view instead of the input directly
-      if (viewRef.current) {
-        try {
-          const handle = findNodeHandle(viewRef.current);
-          if (handle) {
-            UIManager.measureInWindow(handle, (x, y, width, height) => {
-              console.log('DEBUG: FocusAwareInput measured');
-              
-              // Pass the position to our scroll handler
-              onFocusScroll(y, height);
-            });
-          } else {
-            console.log('DEBUG: FocusAwareInput could not get node handle');
-          }
-        } catch (error) {
-          console.log('DEBUG: FocusAwareInput error measuring view');
-        }
-      } else {
-        console.log('DEBUG: FocusAwareInput viewRef is null');
-      }
-    }, 150); // Slightly longer delay to ensure keyboard is shown
-  };
-  
-  return (
-    <View ref={viewRef} collapsable={false}>
-      <CustomTextInput
-        {...props}
-        onFocus={handleFocus}
-      />
-    </View>
-  );
+// Helper function to get abbreviated day names
+const getAbbreviatedDay = (day: WeekDay): string => {
+  return day.slice(0, 3);
 };
+
+// const ColorBar = ({ color }: { color?: string }) => (
+//   <Box w="full" h="2" bg={color || 'transparent'} borderTopRadius="lg" />
+// );
 
 // Memoized exercise item component
 const ExerciseItem = React.memo(({ 
@@ -242,8 +183,6 @@ const OptimizedExerciseList = React.memo(({
   // If no data, render nothing
   if (!data || data.length === 0) return null;
   
-  // console.log('DEBUG: OptimizedExerciseList rendering, editMode:', editMode);
-  
   return (
     <View style={{ 
       flex: 1,
@@ -286,7 +225,7 @@ const WeekdayItem = React.memo(({
   onPress,
   isEditing
 }: { 
-  day: string; 
+  day: WeekDay; 
   splits: Split[]; 
   isSelected: boolean; 
   onPress: () => void;
@@ -340,7 +279,7 @@ const WeekdayItem = React.memo(({
     >
       <VStack space={1} alignItems="center">
         <Text color={isSelected ? "#6B8EF2" : "gray.400"} fontSize="xs" fontWeight="bold">
-          {day}
+          {getAbbreviatedDay(day)}
         </Text>
         <Box
           bg="#2A2E38"
@@ -424,6 +363,8 @@ const SplitItem = React.memo(({
 }) => {
   // Animation value for border color
   const borderColor = useSharedValue("#3A3E48");
+  const pressBorderColor = useSharedValue("#3A3E48");
+  const arrowOpacity = useSharedValue(1);
 
   // Update border color when selection changes
   useEffect(() => {
@@ -433,15 +374,50 @@ const SplitItem = React.memo(({
     );
   }, [selectedDay]);
 
+  // Update arrow opacity when edit mode changes
+  useEffect(() => {
+    if (editMode === 'program') {
+      arrowOpacity.value = withTiming(0, { duration: 200 });
+    } else {
+      arrowOpacity.value = withTiming(1, { duration: 200 });
+    }
+  }, [editMode]);
+
   const borderAnimatedStyle = useAnimatedStyle(() => {
     return {
       borderColor: borderColor.value,
     };
   });
 
+  const pressBorderAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      borderColor: pressBorderColor.value,
+    };
+  });
+
+  const arrowAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: arrowOpacity.value,
+    };
+  });
+
+  const handlePressIn = () => {
+    if (!isEditingSplits) {
+      pressBorderColor.value = withTiming("#6B8EF2", { duration: 150 });
+    }
+  };
+
+  const handlePressOut = () => {
+    if (!isEditingSplits) {
+      pressBorderColor.value = withTiming("#3A3E48", { duration: 150 });
+    }
+  };
+
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
       bg="transparent"
       p={4}
       pl={6}
@@ -461,6 +437,19 @@ const SplitItem = React.memo(({
         }, borderAnimatedStyle]} 
         pointerEvents="none" 
       />
+      <Animated.View 
+        style={[{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderRadius: 12,
+          borderWidth: 1,
+          zIndex: 3
+        }, pressBorderAnimatedStyle]} 
+        pointerEvents="none" 
+      />
       <Box
         position="absolute"
         top={0}
@@ -477,7 +466,7 @@ const SplitItem = React.memo(({
         {isEditingSplits ? (
           <HStack flex={1} space={2} alignItems="center">
             <Box flex={1}>
-              <FocusAwareInput
+              <CustomTextInput
                 value={split.name}
                 onChangeText={onNameEdit}
                 color="white"
@@ -485,7 +474,6 @@ const SplitItem = React.memo(({
                 onFocusScroll={onFocusScroll}
                 placeholder="Enter split name"
                 placeholderTextColor="rgba(255, 255, 255, 0.4)"
-                editMode={editMode}
               />
             </Box>
             <Text color="white" fontSize="sm">
@@ -503,9 +491,19 @@ const SplitItem = React.memo(({
             <Text color="white" fontSize="lg" fontWeight="bold">
               {split.name}
             </Text>
-            <Text color="white" fontSize="sm">
-              {split.exercises.length} exercises
-            </Text>
+            <HStack space={2} alignItems="center">
+              <Text color="white" fontSize="sm">
+                {split.exercises.length} exercises
+              </Text>
+              <Animated.View style={arrowAnimatedStyle}>
+                <Icon 
+                  as={AntDesign} 
+                  name="right" 
+                  color="gray.400" 
+                  size="sm"
+                />
+              </Animated.View>
+            </HStack>
           </>
         )}
       </HStack>
@@ -517,7 +515,6 @@ const SplitItem = React.memo(({
               onPress={() => {
                 // Only proceed if we're in the correct edit mode (splits)
                 if (editMode !== 'splits') {
-                  console.log('DEBUG: Ignoring color selection - not in splits edit mode');
                   return;
                 }
                 onColorSelect(color);
@@ -541,7 +538,7 @@ const SplitItem = React.memo(({
 
 const WorkoutScreen = () => {
   const scrollViewRef = useRef<RNScrollView>(null);
-  const [splits, setSplits] = useState<Split[]>([]);
+  const { splits, updateSplits } = useData();
   
   // Define an enum for edit mode states
   type EditMode = 'none' | 'program' | 'splits';
@@ -549,8 +546,6 @@ const WorkoutScreen = () => {
   
   // Debug hook to trace editMode changes
   const setEditModeWithDebug = (newMode: EditMode) => {
-    console.log('DEBUG: Edit mode changing from', editMode, 'to', newMode);
-    console.log('DEBUG: Edit mode change stack trace:', new Error().stack);
     setEditMode(newMode);
   };
   
@@ -558,7 +553,7 @@ const WorkoutScreen = () => {
   const isEditingProgram = editMode === 'program';
   const isEditingSplits = editMode === 'splits';
   
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
@@ -583,34 +578,26 @@ const WorkoutScreen = () => {
 
   // Define handler functions for toggling edit modes
   const toggleProgramEditMode = () => {
-    console.log('DEBUG: Program edit button pressed, current mode:', editMode);
-    
     // Toggle between program edit mode and no edit mode
     if (editMode === 'program') {
       // Exit program edit mode
-      console.log('DEBUG: Exiting program edit mode');
       setSelectedDay(null);
       setSelectedSplit(null);
       setEditModeWithDebug('none');
     } else if (editMode === 'none') {
       // Enter program edit mode
-      console.log('DEBUG: Entering program edit mode');
       setEditModeWithDebug('program');
     } 
     // If we're in splits edit mode, do nothing
   };
   
   const toggleSplitsEditMode = () => {
-    console.log('DEBUG: Splits edit button pressed, current mode:', editMode);
-    
     // Toggle between splits edit mode and no edit mode
     if (editMode === 'splits') {
       // Exit splits edit mode
-      console.log('DEBUG: Exiting splits edit mode');
       setEditModeWithDebug('none');
     } else if (editMode === 'none') {
       // Enter splits edit mode
-      console.log('DEBUG: Entering splits edit mode');
       setEditModeWithDebug('splits');
     }
     // If we're in program edit mode, do nothing
@@ -672,7 +659,7 @@ const WorkoutScreen = () => {
   }, []);
 
   // Memoize callbacks
-  const handleDaySelect = useCallback((day: string) => {
+  const handleDaySelect = useCallback((day: WeekDay) => {
     if (editMode !== 'program') return;
     
     if (selectedDay === day) {
@@ -686,34 +673,40 @@ const WorkoutScreen = () => {
   const handleSplitSelect = useCallback((split: Split) => {
     if (!selectedDay || editMode !== 'program') return;
     
-    setSplits(prevSplits => {
-      // First, remove the selected day from all splits
-      const updatedSplits = prevSplits.map(s => ({
-        ...s,
-        days: s.days.filter(d => d !== selectedDay)
-      }));
-      
-      // Then, add the selected day to the chosen split
-      return updatedSplits.map(s => {
-      if (s.id === split.id) {
-          return {
-            ...s,
-            days: [...s.days, selectedDay]
-          };
-        }
-        return s;
-      });
+    console.log('Assigning split to day:', {
+      splitId: split.id,
+      splitName: split.name,
+      day: selectedDay,
+      currentSplits: splits
     });
     
+    const updatedSplits = splits.map(s => {
+      // First, remove the selected day from all splits
+      const daysWithoutSelected = s.days.filter(d => d !== selectedDay);
+      
+      // Then, add the selected day to the chosen split
+      if (s.id === split.id) {
+        return {
+          ...s,
+          days: [...daysWithoutSelected, selectedDay]
+        };
+      }
+      return {
+        ...s,
+        days: daysWithoutSelected
+      };
+    });
+    
+    console.log('Updated splits after assignment:', updatedSplits);
+    updateSplits(updatedSplits);
     setSelectedDay(null);
     setSelectedSplit(null);
-  }, [selectedDay, editMode]);
+  }, [selectedDay, editMode, splits, updateSplits]);
 
   // Save current state as default
   const saveCurrentStateAsDefault = useCallback(async () => {
     try {
-      await storageService.saveDefaultWorkoutState(splits);
-      console.log('Current state saved as default');
+      await dataService.saveDefaultWorkoutState(splits);
     } catch (error) {
       console.error('Error saving default state:', error);
     }
@@ -727,13 +720,12 @@ const WorkoutScreen = () => {
 
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        console.log('Saving updated splits:', data.length);
-        await storageService.saveSplits(data);
+        await updateSplits(data);
       } catch (error) {
         console.error('Error saving splits:', error);
       }
     }, 500); // Reduced to 500ms for faster updates
-  }, []);
+  }, [updateSplits]);
 
   // Load splits from storage
   useEffect(() => {
@@ -742,11 +734,10 @@ const WorkoutScreen = () => {
       
       try {
         // First check for saved splits (most recent data)
-        const loadedSplits = await storageService.getSplits();
+        const loadedSplits = await dataService.getSplits();
         
         if (loadedSplits.length > 0) {
-          console.log('Loaded saved splits:', loadedSplits.length);
-          setSplits(loadedSplits);
+          await updateSplits(loadedSplits);
           
           // Process data immediately after loading
           const processedData = processSplitsData(loadedSplits);
@@ -754,10 +745,9 @@ const WorkoutScreen = () => {
           setExercises(processedData.exercises);
         } else {
           // Fall back to default state only if no saved data exists
-          const defaultSplits = await storageService.getDefaultWorkoutState();
+          const defaultSplits = await dataService.getDefaultWorkoutState();
           if (defaultSplits.length > 0) {
-            console.log('Loaded default splits:', defaultSplits.length);
-            setSplits(defaultSplits);
+            await updateSplits(defaultSplits);
             
             // Process data immediately after loading
             const processedData = processSplitsData(defaultSplits);
@@ -772,7 +762,7 @@ const WorkoutScreen = () => {
       }
     };
     loadSplits();
-  }, [processSplitsData]);
+  }, [processSplitsData, updateSplits]);
 
   // Update processed data when splits change
   useEffect(() => {
@@ -817,7 +807,6 @@ const WorkoutScreen = () => {
     const keyboardWillShow = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
       (e) => {
-        console.log('DEBUG: Keyboard shown - current edit mode:', editMode);
         setKeyboardHeight(e.endCoordinates.height);
       }
     );
@@ -825,7 +814,6 @@ const WorkoutScreen = () => {
     const keyboardWillHide = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        console.log('DEBUG: Keyboard hidden - current edit mode:', editMode);
         setKeyboardHeight(0);
       }
     );
@@ -834,79 +822,85 @@ const WorkoutScreen = () => {
       keyboardWillShow.remove();
       keyboardWillHide.remove();
     };
-  }, [editMode]);
+  }, []);
 
-  const handleSplitNameEdit = useCallback((splitId: string, newName: string) => {
-    console.log('DEBUG: Split name edited');
+  const handleSplitNameEdit = useCallback((id: string, newName: string) => {
+    console.log('Editing split name:', {
+      splitId: id,
+      newName,
+      currentSplits: splits
+    });
     
-    // Only allow editing when in splits edit mode
-    if (editMode !== 'splits') {
-      console.log('DEBUG: Prevented split name edit - not in splits edit mode');
-      return;
-    }
-    
-    setSplits(prevSplits => 
-      prevSplits.map(split => 
-      split.id === splitId ? { ...split, name: newName } : split
-      )
+    const updatedSplits = splits.map((split: Split) => 
+      split.id === id ? { ...split, name: newName } : split
     );
-  }, [editMode]);
+    
+    console.log('Updated splits after name change:', updatedSplits);
+    updateSplits(updatedSplits);
+  }, [splits, updateSplits]);
 
-  const handleColorSelect = useCallback((splitId: string, color: string) => {
-    console.log('DEBUG: Split color selected');
+  const handleColorSelect = useCallback((id: string, color: string) => {
+    console.log('Changing split color:', {
+      splitId: id,
+      newColor: color,
+      currentSplits: splits
+    });
     
-    // Only allow color selection when in splits edit mode
-    if (editMode !== 'splits') {
-      console.log('DEBUG: Prevented color selection - not in splits edit mode');
-      return;
-    }
-    
-    setSplits(prevSplits => 
-      prevSplits.map(split => 
-      split.id === splitId ? { ...split, color } : split
-      )
+    const updatedSplits = splits.map((split: Split) => 
+      split.id === id ? { ...split, color } : split
     );
-  }, [editMode]);
+    
+    console.log('Updated splits after color change:', updatedSplits);
+    updateSplits(updatedSplits);
+  }, [splits, updateSplits]);
 
   const handleAddSplit = useCallback(() => {
-    console.log('DEBUG: Add split button pressed');
-    
-    // Only allow adding splits when in splits edit mode
-    if (editMode !== 'splits') {
-      console.log('DEBUG: Prevented adding split - not in splits edit mode');
-      return;
-    }
-    
-    if (splits.length >= 7) return;
-    
     const newSplit: Split = {
       id: Date.now().toString(),
-      name: '',
+      name: `Split ${splits.length + 1}`,
+      color: '#FF5733',
       days: [],
-      exercises: [],
-      color: undefined
+      exercises: []
     };
-    setSplits(prevSplits => [...prevSplits, newSplit]);
-  }, [splits.length, editMode]);
+    
+    console.log('Adding new split:', {
+      newSplit,
+      currentSplits: splits
+    });
+    
+    const updatedSplits = [...splits, newSplit];
+    console.log('Updated splits after adding:', updatedSplits);
+    updateSplits(updatedSplits);
+  }, [splits, updateSplits]);
 
-  const handleDeleteSplit = useCallback((splitId: string) => {
-    console.log('DEBUG: Delete split button pressed');
+  const handleDeleteSplit = useCallback((id: string) => {
+    console.log('Deleting split:', {
+      splitId: id,
+      currentSplits: splits
+    });
     
-    // Only allow deleting splits when in splits edit mode
-    if (editMode !== 'splits') {
-      console.log('DEBUG: Prevented deleting split - not in splits edit mode');
-      return;
-    }
+    const updatedSplits = splits.filter((split: Split) => split.id !== id);
+    console.log('Updated splits after deletion:', updatedSplits);
+    updateSplits(updatedSplits);
+  }, [splits, updateSplits]);
+
+  const handleSplitDetailUpdate = useCallback((updatedSplit: Split) => {
+    console.log('Updating split details:', {
+      updatedSplit,
+      currentSplits: splits
+    });
     
-    setSplits(prevSplits => prevSplits.filter(split => split.id !== splitId));
-  }, [editMode]);
+    const updatedSplits = splits.map((split: Split) => 
+      split.id === updatedSplit.id ? updatedSplit : split
+    );
+    
+    console.log('Updated splits after detail update:', updatedSplits);
+    updateSplits(updatedSplits);
+  }, [splits, updateSplits]);
 
   const toggleExerciseExpansion = useCallback((exerciseId: string) => {
-    console.log('DEBUG: Exercise expansion toggled, current editMode:', editMode);
-    
     // Only allow exercise expansion when not in edit mode
     if (editMode !== 'none') {
-      console.log('DEBUG: Exercise expansion blocked - edit mode active');
       return;
     }
     
@@ -921,11 +915,8 @@ const WorkoutScreen = () => {
 
   // Function to handle input focus for the keyboard
   const handleFocusScroll = (inputY: number, inputHeight: number) => {
-    console.log('DEBUG: Input focused during edit mode:', editMode);
-    
     // Only respond to input focus in splits edit mode
     if (editMode !== 'splits') {
-      console.log('DEBUG: Ignoring focus event - not in splits edit mode');
       return;
     }
     
@@ -951,14 +942,6 @@ const WorkoutScreen = () => {
   // Memoize the onClose and onUpdate handlers
   const handleSplitDetailClose = useCallback(() => {
     setSelectedSplitDetail(null);
-  }, []);
-
-  const handleSplitDetailUpdate = useCallback((updatedSplit: Split) => {
-    setSplits(prevSplits => 
-      prevSplits.map(split => 
-        split.id === updatedSplit.id ? updatedSplit : split
-      )
-    );
   }, []);
 
   // Memoize the split detail screen props
@@ -1022,7 +1005,6 @@ const WorkoutScreen = () => {
     >
       <TouchableWithoutFeedback 
         onPress={() => {
-          console.log('DEBUG: Background pressed, dismissing keyboard');
           // Just dismiss keyboard without changing edit mode
           Keyboard.dismiss();
         }}

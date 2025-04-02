@@ -1,12 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Split, Exercise } from '../screens/WorkoutScreen';
+import { Split, Exercise } from '../types';
 
 // Storage keys
 const STORAGE_KEYS = {
   SPLITS: 'splits',
   DEFAULT_WORKOUT_STATE: 'default_workout_state',
   SPLIT_EXERCISES: (splitId: string) => `split_exercises_${splitId}`,
+  WORKOUT_SESSIONS: 'workout_sessions',
 } as const;
+
+interface WorkoutSession {
+  date: string;
+  completed: boolean;
+}
 
 class StorageService {
   // Splits
@@ -63,6 +69,25 @@ class StorageService {
       await AsyncStorage.setItem(STORAGE_KEYS.SPLIT_EXERCISES(splitId), JSON.stringify(exercises));
     } catch (error) {
       console.error('Error saving split exercises:', error);
+    }
+  }
+
+  // Workout Sessions
+  async getWorkoutSessions(): Promise<WorkoutSession[]> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.WORKOUT_SESSIONS);
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Error getting workout sessions:', error);
+      return [];
+    }
+  }
+
+  async saveWorkoutSessions(sessions: WorkoutSession[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.WORKOUT_SESSIONS, JSON.stringify(sessions));
+    } catch (error) {
+      console.error('Error saving workout sessions:', error);
     }
   }
 
