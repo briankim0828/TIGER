@@ -6,22 +6,29 @@ import ExerciseSelectionView from '../components/ExerciseSelectionView';
 import { ScrollView as RNScrollView } from 'react-native';
 import { storageService } from '../services/storage';
 import CustomTextInput from '../components/CustomTextInput';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+type WorkoutStackParamList = {
+  WorkoutMain: undefined;
+  SplitDetail: { split: Split };
+  ExerciseSelection: undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
+type RoutePropType = RouteProp<WorkoutStackParamList, 'SplitDetail'>;
 
 // Extend the Exercise type to include sets and reps
 interface ExerciseWithDetails extends Omit<Exercise, 'sets'> {
   sets: Set[];
 }
 
-interface SplitDetailScreenProps {
-  split: Split;
-  onClose: () => void;
-  onUpdate: (updatedSplit: Split) => void;
-}
-
-const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, onUpdate }) => {
+const SplitDetailScreen = () => {
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<RoutePropType>();
+  const split = route.params.split;
   const splitColor = split.color || '#2A2E38';
   const [exercises, setExercises] = useState<ExerciseWithDetails[]>([]);
-  const [showExerciseSelection, setShowExerciseSelection] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
 
@@ -45,35 +52,25 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
             sets: (exercise as any).sets || []
           }));
           setExercises(exercisesWithSplitIds);
-          // Update parent component with loaded exercises
-          onUpdate({
-            ...split,
-            exercises: exercisesWithSplitIds
-          });
         }
       } catch (error) {
         console.error('Error loading exercises:', error);
       }
     };
     loadExercises();
-  }, [split.id, onUpdate, split]);
+  }, [split.id]);
 
   // Save exercises to storage whenever they change
   useEffect(() => {
     const saveExercises = async () => {
       try {
         await storageService.saveSplitExercises(split.id, exercises);
-        // Update parent component with current exercises
-        onUpdate({
-          ...split,
-          exercises
-        });
       } catch (error) {
         console.error('Error saving exercises:', error);
       }
     };
     saveExercises();
-  }, [exercises, split.id, onUpdate, split]);
+  }, [exercises, split.id]);
 
   const handleAddExercise = (newExercises: Exercise[]) => {
     const workoutExercises = newExercises.map(convertToWorkoutExercise);
@@ -97,84 +94,73 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
 
   const addExerciseButton = (
     <Pressable
-      borderStyle={showExerciseSelection ? "solid" : "dashed"}
-      borderWidth={1}
-      borderColor="#6B8EF2"
-      bg={showExerciseSelection ? "#6B8EF2" : "transparent"}
-      borderRadius="lg"
-      py={3}
-      mb={5}
-      _pressed={{ opacity: 0.7 }}
-      onPress={() => setShowExerciseSelection(true)}
-    >
-      <HStack space={2} justifyContent="center" alignItems="center">
-        <Icon 
-          as={AntDesign} 
-          name="plus" 
-          color={showExerciseSelection ? "white" : "#6B8EF2"} 
-          size="sm" 
-        />
-        <Text 
-          color={showExerciseSelection ? "white" : "#6B8EF2"} 
-          fontSize="md"
-        >
-          Add Exercise
-        </Text>
-      </HStack>
-    </Pressable>
+                        w="100%"
+                        borderStyle="dashed"
+                        borderWidth={1}
+                        borderColor="#6B8EF2"
+                        bg="transparent"
+                        borderRadius="lg"
+                        py={2}
+                        _pressed={{ opacity: 0.7 }}
+                        onPress={() => navigation.navigate('ExerciseSelection')}
+                      >
+                        <HStack space={2} justifyContent="center" alignItems="center">
+                          <Icon 
+                            as={AntDesign} 
+                            name="plus" 
+                            color="#6B8EF2" 
+                            size="sm" 
+                          />
+                          <Text 
+                            color="#6B8EF2" 
+                            fontSize="md"
+                          >
+                            Add Exercise
+                          </Text>
+                        </HStack>
+                      </Pressable>
   );
 
   return (
     <Box flex={1} bg="#1E2028">
-      <HStack alignItems="center" p={4}>
-        <IconButton
-          icon={<Icon as={AntDesign} name="arrowleft" size="lg" color="white" />}
-          onPress={onClose}
-          variant="ghost"
-          _pressed={{ 
-            bg: 'transparent',
-            _icon: {
-              color: '#6B8EF2'
-            }
-          }}
-        />
-        <Text color="white" fontSize="xl" fontWeight="bold" flex={1}>
-          {split.name}
-        </Text>
-        <Button
-          variant="ghost"
-          onPress={() => setIsEditing(!isEditing)}
-          _text={{ color: "#6B8EF2" }}
-        >
-          {isEditing ? "Done" : "Edit"}
-        </Button>
-      </HStack>
+      <Box flex={1}>
+        <HStack justifyContent="space-between" alignItems="center" p={4}>
+          <HStack space={2} alignItems="center">
+            <IconButton
+              icon={<Icon as={AntDesign} name="left" color="white" />}
+              onPress={() => navigation.goBack()}
+              variant="ghost"
+            />
+            <Text color="white" fontSize="xl" fontWeight="bold">
+              {split.name}
+            </Text>
+          </HStack>
+          <IconButton
+            icon={<Icon as={AntDesign} name={isEditing ? "check" : "edit"} color="white" />}
+            onPress={() => setIsEditing(!isEditing)}
+            variant="ghost"
+          />
+        </HStack>
 
-      {/* Content */}
-      <Box 
-        flex={1} 
-        bg="#2A2E38" 
-        borderTopLeftRadius="2xl" 
-        borderTopRightRadius="2xl"
-        overflow="hidden"
-      >
         <ScrollView 
           ref={scrollViewRef}
           flex={1}
           showsVerticalScrollIndicator={false}
         >
-          <VStack space={4} p={4}>
+          <VStack space={4} p={3}>
             {exercises.length > 0 ? (
               <VStack space={3}>
                 {exercises.map((exercise, index) => (
                   <Box
                     key={exercise.id}
-                    bg="#1E2028"
-                    p={4}
+                    bg="transparent"
+                    p={3}
                     borderRadius="lg"
+                    borderWidth={1}
+                    borderColor="gray.700"
                   >
                     <HStack justifyContent="space-between" alignItems="center">
-                      <HStack space={2} alignItems="center" flex={1}>
+                      <HStack space={3} alignItems="center" flex={1}>
                         <Box
                           w="3"
                           h="full"
@@ -196,6 +182,8 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                           onPress={() => handleRemoveExercise(index)}
                           variant="ghost"
                           _pressed={{ opacity: 0.7 }}
+                          size="md"
+                          p={0}
                         />
                       )}
                     </HStack>
@@ -204,67 +192,23 @@ const SplitDetailScreen: React.FC<SplitDetailScreenProps> = ({ split, onClose, o
                 
                 {isEditing && addExerciseButton}
               </VStack>
-            ) : (
-              <Box bg="#2A2E38" borderRadius="lg" p={5}>
+            ) :
+              <Box bg="transparent" borderRadius="lg" p={3} borderWidth={1} borderColor="gray.700">
                 <VStack space={5} alignItems="center">
                   <Text color="gray.400" fontSize="lg">
                     Add exercises to {split.name} day
                   </Text>
                   {isEditing && (
                     <Box w="100%">
-                      <Pressable
-                        w="100%"
-                        borderStyle="dashed"
-                        borderWidth={1}
-                        borderColor="#6B8EF2"
-                        bg="transparent"
-                        borderRadius="lg"
-                        py={4}
-                        _pressed={{ opacity: 0.7 }}
-                        onPress={() => setShowExerciseSelection(true)}
-                      >
-                        <HStack space={2} justifyContent="center" alignItems="center">
-                          <Icon 
-                            as={AntDesign} 
-                            name="plus" 
-                            color="#6B8EF2" 
-                            size="sm" 
-                          />
-                          <Text 
-                            color="#6B8EF2" 
-                            fontSize="md"
-                          >
-                            Add Exercise
-                          </Text>
-                        </HStack>
-                      </Pressable>
+                      {addExerciseButton}
                     </Box>
                   )}
                 </VStack>
               </Box>
-            )}
+            }
           </VStack>
         </ScrollView>
       </Box>
-
-      {/* Exercise Selection Modal */}
-      {showExerciseSelection && (
-        <Box
-          position="absolute"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
-          bg="rgba(0, 0, 0, 0.5)"
-          justifyContent="center"
-          alignItems="center"
-        >
-          <ExerciseSelectionView
-            onClose={() => setShowExerciseSelection(false)}
-            onAddExercise={handleAddExercise}
-          />
-        </Box>
-      )}
     </Box>
   );
 };

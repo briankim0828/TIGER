@@ -3,21 +3,16 @@ import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NativeBaseProvider, Box, StatusBar, Text } from 'native-base';
 import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DataProvider } from './src/contexts/DataContext';
-import WorkoutScreen from './src/screens/WorkoutScreen';
+import { DataProvider, useData } from './src/contexts/DataContext';
+import WorkoutMain from './src/screens/WorkoutMain';
 import ProgressScreen from './src/screens/ProgressScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
-import SplitDetailScreen from './src/screens/SplitDetailScreen';
-import ExerciseSelectionView from './src/components/ExerciseSelectionView';
 import BottomNavbar from './src/components/BottomNavbar';
-import { Split, Exercise } from './src/types';
 
 type RootStackParamList = {
   Workout: undefined;
   Progress: undefined;
   Profile: undefined;
-  SplitDetail: { split: Split; onClose: () => void; onUpdate: (split: Split) => void };
-  ExerciseSelection: { onClose: () => void; onAddExercise: (exercises: Exercise[]) => void };
 };
 
 type TabType = 'workout' | 'progress' | 'profile';
@@ -48,14 +43,18 @@ const GlobalHeader = () => {
 
 // Navigation wrapper component to use navigation hook
 const NavigationWrapper = () => {
-  const [selectedTab, setSelectedTab] = useState<TabType>('workout'); // this is where the default tab is set
+  const [selectedTab, setSelectedTab] = useState<TabType>('workout');
   const navigation = useNavigation<NavigationProp>();
   const insets = useSafeAreaInsets();
+  const { splits, exercises, bodyPartSections } = useData();
 
   // Add debugging logs
   React.useEffect(() => {
     console.log('Current tab:', selectedTab);
-  }, [selectedTab]);
+    console.log('Data Storage State:', {
+      splits
+    });
+  }, [selectedTab, splits]);
 
   const handleTabChange = (tab: TabType) => {
     console.log('handleTabChange');
@@ -81,20 +80,13 @@ const NavigationWrapper = () => {
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: "#1E2028" },
+            animation: 'fade',
+            contentStyle: { backgroundColor: '#232530' }
           }}
         >
-          <Stack.Screen name="Workout" component={WorkoutScreen} />
+          <Stack.Screen name="Workout" component={WorkoutMain} />
           <Stack.Screen name="Progress" component={ProgressScreen} />
           <Stack.Screen name="Profile" component={ProfileScreen} />
-          <Stack.Screen 
-            name="SplitDetail" 
-            component={SplitDetailScreen as React.ComponentType<any>} 
-          />
-          <Stack.Screen 
-            name="ExerciseSelection" 
-            component={ExerciseSelectionView as React.ComponentType<any>} 
-          />
         </Stack.Navigator>
       </Box>
       <BottomNavbar selectedTab={selectedTab} onTabChange={handleTabChange} />

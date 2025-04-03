@@ -9,15 +9,26 @@ import {
   Button,
   ScrollView,
   Icon,
-  Divider
+  Divider,
+  IconButton
 } from 'native-base';
 import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
-import { Exercise, BODY_PARTS, DEFAULT_EXERCISES_BY_BODY_PART } from '../types';
+import { Exercise, BODY_PARTS, DEFAULT_EXERCISES_BY_BODY_PART, Split } from '../types';
 import { useData } from '../contexts/DataContext';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+type WorkoutStackParamList = {
+  WorkoutMain: undefined;
+  SplitDetail: { split: Split };
+  ExerciseSelection: undefined;
+};
+
+type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 
 interface ExerciseSelectionViewProps {
-  onClose: () => void;
-  onAddExercise: (exercises: Exercise[]) => void;
+  onClose?: () => void;
+  onAddExercise?: (exercises: Exercise[]) => void;
 }
 
 // Icon mapping for body parts
@@ -31,7 +42,8 @@ const BODY_PART_ICONS: Record<string, any> = {
   'Cardio': <Feather name="heart" size={16} />
 };
 
-const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionViewProps) => {
+const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionViewProps = {}) => {
+  const navigation = useNavigation<NavigationProp>();
   const { bodyPartSections, exercises: allExercises } = useData();
   const [selectedBodyPart, setSelectedBodyPart] = useState<string | null>(null);
   const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
@@ -82,8 +94,9 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
 
   const handleAddExercises = () => {
     if (selectedExercises.length > 0) {
-      onAddExercise(selectedExercises);
-      onClose();
+      onAddExercise?.(selectedExercises);
+      onClose?.();
+      navigation.goBack();
       // Reset selections
       setSelectedBodyPart(null);
       setSelectedExercises([]);
@@ -210,7 +223,7 @@ const ExerciseSelectionView = ({ onClose, onAddExercise }: ExerciseSelectionView
                   variant="outline"
                   borderColor="gray.600"
                   _text={{ color: "gray.400" }}
-                  onPress={onClose} 
+                  onPress={onClose || (() => navigation.goBack())} 
                   flex={1}
                   mr={2}
                 >

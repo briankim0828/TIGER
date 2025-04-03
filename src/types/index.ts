@@ -70,13 +70,13 @@ export const BODY_PARTS = [
 export type BodyPart = typeof BODY_PARTS[number];
 
 export const WEEKDAYS = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday'
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+  'Sun'
 ] as const;
 
 export type WeekDay = typeof WEEKDAYS[number]; 

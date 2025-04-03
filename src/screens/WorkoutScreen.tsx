@@ -4,7 +4,6 @@ import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
 import CustomTextInput from '../components/CustomTextInput';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, 
   TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
-import SplitDetailScreen from './SplitDetailScreen';
 import { FlashList } from '@shopify/flash-list';
 import { dataService } from '../services/data';
 import Animated, { 
@@ -16,6 +15,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Exercise, Split, BODY_PARTS, WEEKDAYS, WeekDay } from '../types';
 import { useData } from '../contexts/DataContext';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { WorkoutStackParamList } from './WorkoutMain';
+
+type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 
 // Interface for body part section data
 export interface BodyPartSectionData {
@@ -128,9 +132,6 @@ const ExerciseItem = React.memo(({
     </Pressable>
   );
 });
-
-// Memoize the SplitDetailScreen component
-const MemoizedSplitDetailScreen = React.memo(SplitDetailScreen);
 
 // Memoized body part section component
 const BodyPartSection = React.memo(({ 
@@ -537,6 +538,7 @@ const SplitItem = React.memo(({
 });
 
 const WorkoutScreen = () => {
+  const navigation = useNavigation<NavigationProp>();
   const scrollViewRef = useRef<RNScrollView>(null);
   const { splits, updateSplits } = useData();
   
@@ -558,7 +560,6 @@ const WorkoutScreen = () => {
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [selectedSplitDetail, setSelectedSplitDetail] = useState<Split | null>(null);
   const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isInitialLoadRef = useRef(true);
@@ -799,9 +800,9 @@ const WorkoutScreen = () => {
     
     // Only allow navigating to split details when not in any edit mode
     if (editMode === 'none') {
-      setSelectedSplitDetail(split);
+      navigation.navigate('SplitDetail', { split });
     }
-  }, [selectedDay, editMode, handleSplitSelect]);
+  }, [selectedDay, editMode, handleSplitSelect, navigation]);
 
   useEffect(() => {
     const keyboardWillShow = Keyboard.addListener(
@@ -939,21 +940,6 @@ const WorkoutScreen = () => {
     }
   };
 
-  // Memoize the onClose and onUpdate handlers
-  const handleSplitDetailClose = useCallback(() => {
-    setSelectedSplitDetail(null);
-  }, []);
-
-  // Memoize the split detail screen props
-  const splitDetailScreenProps = useMemo(() => {
-    if (!selectedSplitDetail) return null;
-    return {
-      split: selectedSplitDetail,
-      onClose: handleSplitDetailClose,
-      onUpdate: handleSplitDetailUpdate
-    };
-  }, [selectedSplitDetail, handleSplitDetailClose, handleSplitDetailUpdate]);
-
   // Update the render function to create a stable set of body part sections
   const bodyPartSections = useMemo(() => {
     return Object.entries(processedDataRef.current.exercisesByBodyPart || {}).map(([bodyPart, exercises]) => ({
@@ -992,10 +978,6 @@ const WorkoutScreen = () => {
       />
     );
   }, [editMode, selectedDay, handleSplitPress, handleSplitNameEdit, handleColorSelect, handleDeleteSplit, handleFocusScroll]);
-
-  if (selectedSplitDetail && splitDetailScreenProps) {
-    return <MemoizedSplitDetailScreen {...splitDetailScreenProps} />;
-  }
 
   return (
     <KeyboardAvoidingView 
