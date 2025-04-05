@@ -18,6 +18,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WorkoutStackParamList } from './WorkoutMain';
 import { parseFontSize } from '../../helper/fontsize';
+import { supabase } from '../utils/supabaseClient';
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 
@@ -602,11 +603,26 @@ const WorkoutScreen = () => {
     // If we're in splits edit mode, do nothing
   };
   
-  const toggleSplitsEditMode = () => {
+  const toggleSplitsEditMode =async () => {
     // Toggle between splits edit mode and no edit mode
     if (editMode === 'splits') {
       // Exit splits edit mode
+      console.log(splits);
+      // get user id of current user from supabase
+      const { data: user } = await supabase.auth.getUser();
+      console.log(user.user?.id);
+      // save splits to supabase
+      const { data, error } = await supabase
+        .from('splits')
+        .insert({
+          user_id: user.user?.id,
+          created_at: Date.now(),
+          splits: splits,
+        });
+        console.log("🚀 ~ toggleSplitsEditMode ~ error:", error)
+        console.log("🚀 ~ toggleSplitsEditMode ~ data:", data)
       setEditModeWithDebug('none');
+      
     } else if (editMode === 'none') {
       // Enter splits edit mode
       setEditModeWithDebug('splits');

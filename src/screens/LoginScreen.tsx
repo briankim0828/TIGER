@@ -8,7 +8,7 @@ import { useNavigation } from "@react-navigation/native";
 const LoginScreen = () => {
   const toast = useToast();
   const navigation = useNavigation();
-  
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
@@ -20,6 +20,10 @@ const LoginScreen = () => {
       let result;
       if (isSignUp) {
         result = await supabase.auth.signUp({ email, password });
+        // save user to supabase
+        const { data, error } = await supabase
+          .from("users")
+          .insert({ id: result.data.user?.id, email: result.data.user?.email });
       } else {
         result = await supabase.auth.signInWithPassword({ email, password });
       }
@@ -56,15 +60,15 @@ const LoginScreen = () => {
             value={email}
             onChangeText={setEmail}
             style={styles.input}
-            placeholderTextColor='gray'
+            placeholderTextColor="gray"
             autoCapitalize="none"
-            />
+          />
 
           <TextInput
             placeholder="Password"
             value={password}
             style={styles.input}
-            placeholderTextColor='gray'
+            placeholderTextColor="gray"
             onChangeText={setPassword}
             secureTextEntry={true}
           />
@@ -93,7 +97,6 @@ const LoginScreen = () => {
 };
 
 export default LoginScreen;
-
 
 const styles = StyleSheet.create({
   input: {
