@@ -10,6 +10,7 @@ import WorkoutCalendar from "../components/WorkoutCalendar";
 import { Split } from "../types";
 import { useFocusEffect } from "@react-navigation/native";
 import { storageService } from "../services/storage";
+import RBSheet from 'react-native-raw-bottom-sheet';
 
 interface WorkoutSession {
   date: string;
@@ -20,6 +21,7 @@ const ProgressScreen: React.FC = () => {
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
+  const refRBSheet = useRef();
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -155,6 +157,7 @@ const ProgressScreen: React.FC = () => {
   );
 
   const handleWorkoutPress = useCallback(() => {
+    refRBSheet.current.open();
     if (selectedDate) {
       console.log(`showing workout for ${selectedDate}`);
     } else {
@@ -215,6 +218,28 @@ const ProgressScreen: React.FC = () => {
           </Text>
         </Pressable>
       </Box>
+      <RBSheet
+        ref={refRBSheet}
+        useNativeDriver={true}
+        customStyles={{
+          wrapper: {
+            backgroundColor: 'transparent',
+            borderRadius: 50,
+          },
+          draggableIcon: {
+            backgroundColor: '#000',
+            borderRadius: 50,
+          },
+        }}
+        customModalProps={{
+          animationType: 'slide',
+          statusBarTranslucent: true,
+        }}
+        customAvoidingViewProps={{
+          enabled: false,
+        }}>
+        <Text>Hello</Text>
+      </RBSheet>
     </Box>
   );
 };
