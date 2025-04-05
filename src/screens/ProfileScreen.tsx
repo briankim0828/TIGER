@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Text, VStack, HStack, Avatar, ScrollView, Pressable, Spinner } from 'native-base';
+import { Box, Text, VStack, HStack, Avatar, ScrollView, Pressable, Spinner, Button } from 'native-base';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
 import { User } from '@supabase/supabase-js';
+import { useNavigation } from '@react-navigation/native';
 
 type WorkoutTab = {
   id: number;
@@ -11,6 +12,7 @@ type WorkoutTab = {
 };
 
 const ProfileScreen: React.FC = () => {
+  const navigation = useNavigation();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -57,6 +59,16 @@ const ProfileScreen: React.FC = () => {
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      // Navigation will be handled by the auth state change listener in App.tsx
+    } catch (error) {
+      console.error('Error logging out:', error);
     }
   };
 
@@ -122,16 +134,26 @@ const ProfileScreen: React.FC = () => {
               Statistics
             </Text>
             <HStack space={4} flexWrap="wrap">
-              <Box bg="#2A2D36" p={4} rounded="lg" width="47%">
+              <Box bg="#2A2D36" p={4} rounded="lg" width="45%">
                 <Text color="gray.400" fontSize="sm">Total Workouts</Text>
                 <Text color="white" fontSize="xl" fontWeight="bold">{stats.totalWorkouts}</Text>
               </Box>
-              <Box bg="#2A2D36" p={4} rounded="lg" width="47%">
+              <Box bg="#2A2D36" p={4} rounded="lg" width="45%">
                 <Text color="gray.400" fontSize="sm">Hours Trained</Text>
                 <Text color="white" fontSize="xl" fontWeight="bold">{stats.hoursTrained}</Text>
               </Box>
             </HStack>
           </VStack>
+
+          {/* Logout Button */}
+          <Button
+            bg="#FF4B4B"
+            _pressed={{ bg: "#E63939" }}
+            onPress={handleLogout}
+            mt={4}
+          >
+            Logout
+          </Button>
         </VStack>
       </ScrollView>
     </Box>

@@ -56,6 +56,7 @@ const LoginScreen = () => {
             value={email}
             onChangeText={setEmail}
             style={styles.input}
+            placeholderTextColor='gray'
             autoCapitalize="none"
             />
 
@@ -63,6 +64,7 @@ const LoginScreen = () => {
             placeholder="Password"
             value={password}
             style={styles.input}
+            placeholderTextColor='gray'
             onChangeText={setPassword}
             secureTextEntry={true}
           />
