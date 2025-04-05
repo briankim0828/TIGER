@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import "react-native-gesture-handler"
 import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { NativeBaseProvider, Box, StatusBar, Text } from 'native-base';

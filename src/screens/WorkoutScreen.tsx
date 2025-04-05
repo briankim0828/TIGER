@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, forwardRef } from 'react';
-import { Box, HStack, Text, Button, Icon, VStack, Pressable, IconButton, ScrollView, Collapse, Divider } from 'native-base';
-import { AntDesign, MaterialIcons, Feather } from '@expo/vector-icons';
-import CustomTextInput from '../components/CustomTextInput';
+import { Box, HStack, Text, Icon, VStack, Pressable, IconButton, ScrollView, Collapse, Divider } from 'native-base';
+import { AntDesign,  } from '@expo/vector-icons';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, 
   TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
@@ -13,11 +12,12 @@ import Animated, {
   withSequence,
   withDelay
 } from 'react-native-reanimated';
-import { Exercise, Split, BODY_PARTS, WEEKDAYS, WeekDay } from '../types';
+import { Exercise, Split, WEEKDAYS, WeekDay } from '../types';
 import { useData } from '../contexts/DataContext';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { WorkoutStackParamList } from './WorkoutMain';
+import { parseFontSize } from '../../helper/fontsize';
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 
@@ -364,8 +364,10 @@ const SplitItem = React.memo(({
 }) => {
   // Animation value for border color
   const borderColor = useSharedValue("#3A3E48");
+  console.log("🚀 ~ borderColor:", borderColor.value)
   const pressBorderColor = useSharedValue("#3A3E48");
   const arrowOpacity = useSharedValue(1);
+  const [value, setValue] = useState(split.name);
 
   // Update border color when selection changes
   useEffect(() => {
@@ -385,6 +387,7 @@ const SplitItem = React.memo(({
   }, [editMode]);
 
   const borderAnimatedStyle = useAnimatedStyle(() => {
+    // const borderColorValue = selectedDay !== null ? "#6B8EF2" : "#3A3E48";
     return {
       borderColor: borderColor.value,
     };
@@ -414,6 +417,16 @@ const SplitItem = React.memo(({
     }
   };
 
+  const handleNameEdit = (text: string) => {
+    setValue(text);
+    onNameEdit(text);
+  }
+  
+  const calculatedFontSize = useMemo(() => {
+    return parseFontSize('lg');
+  }
+  , []);
+  
   return (
     <Pressable
       onPress={onPress}
@@ -433,7 +446,7 @@ const SplitItem = React.memo(({
           right: 0,
           bottom: 0,
           borderRadius: 12,
-          borderWidth: 1,
+          borderWidth: 2,
           zIndex: 2
         }, borderAnimatedStyle]} 
         pointerEvents="none" 
@@ -467,14 +480,12 @@ const SplitItem = React.memo(({
         {isEditingSplits ? (
           <HStack flex={1} space={2} alignItems="center">
             <Box flex={1}>
-              <CustomTextInput
-                value={split.name}
-                onChangeText={onNameEdit}
-                color="white"
-                fontSize="lg"
-                onFocusScroll={onFocusScroll}
+              <TextInput
+                value={value}
+                onChangeText={handleNameEdit}
                 placeholder="Enter split name"
                 placeholderTextColor="rgba(255, 255, 255, 0.4)"
+                style={{color: 'white', fontSize: calculatedFontSize}}
               />
             </Box>
             <Text color="white" fontSize="sm">
@@ -799,6 +810,7 @@ const WorkoutScreen = () => {
     }
     
     // Only allow navigating to split details when not in any edit mode
+    console.log("🚀 ~ handleSplitPress ~ split:", split)
     if (editMode === 'none') {
       navigation.navigate('SplitDetail', { split });
     }
@@ -826,17 +838,17 @@ const WorkoutScreen = () => {
   }, []);
 
   const handleSplitNameEdit = useCallback((id: string, newName: string) => {
-    console.log('Editing split name:', {
-      splitId: id,
-      newName,
-      currentSplits: splits
-    });
+    // console.log('Editing split name:', {
+    //   splitId: id,
+    //   newName,
+    //   currentSplits: splits
+    // });
     
     const updatedSplits = splits.map((split: Split) => 
       split.id === id ? { ...split, name: newName } : split
     );
     
-    console.log('Updated splits after name change:', updatedSplits);
+    // console.log('Updated splits after name change:', updatedSplits);
     updateSplits(updatedSplits);
   }, [splits, updateSplits]);
 
@@ -895,7 +907,7 @@ const WorkoutScreen = () => {
       split.id === updatedSplit.id ? updatedSplit : split
     );
     
-    console.log('Updated splits after detail update:', updatedSplits);
+    // console.log('Updated splits after detail update:', updatedSplits);
     updateSplits(updatedSplits);
   }, [splits, updateSplits]);
 
@@ -962,22 +974,22 @@ const WorkoutScreen = () => {
   ), [splits, expandedExercises, toggleExerciseExpansion]);
 
   // Render function for the splits.map section
-  const renderSplitItem = useCallback((split: Split) => {
-    return (
-      <SplitItem
-        key={split.id}
-        split={split}
-        isEditingSplits={editMode === 'splits'}
-        selectedDay={selectedDay}
-        onPress={() => handleSplitPress(split)}
-        onNameEdit={(text: string) => handleSplitNameEdit(split.id, text)}
-        onColorSelect={(color: string) => handleColorSelect(split.id, color)}
-        onDelete={() => handleDeleteSplit(split.id)}
-        onFocusScroll={handleFocusScroll}
-        editMode={editMode}
-      />
-    );
-  }, [editMode, selectedDay, handleSplitPress, handleSplitNameEdit, handleColorSelect, handleDeleteSplit, handleFocusScroll]);
+  // const renderSplitItem = useCallback((split: Split) => {
+  //   return (
+  //     <SplitItem
+  //       key={split.id}
+  //       split={split}
+  //       isEditingSplits={editMode === 'splits'}
+  //       selectedDay={selectedDay}
+  //       onPress={() => handleSplitPress(split)}
+  //       onNameEdit={(text: string) => handleSplitNameEdit(split.id, text)}
+  //       onColorSelect={(color: string) => handleColorSelect(split.id, color)}
+  //       onDelete={() => handleDeleteSplit(split.id)}
+  //       onFocusScroll={handleFocusScroll}
+  //       editMode={editMode}
+  //     />
+  //   );
+  // }, [editMode, selectedDay, handleSplitPress, handleSplitNameEdit, handleColorSelect, handleDeleteSplit, handleFocusScroll]);
 
   return (
     <KeyboardAvoidingView 
@@ -995,6 +1007,7 @@ const WorkoutScreen = () => {
           <ScrollView 
             ref={scrollViewRef}
             flex={1} 
+            automaticallyAdjustKeyboardInsets={true}
             keyboardShouldPersistTaps="handled"
             scrollEnabled={true}
             contentContainerStyle={{ 
