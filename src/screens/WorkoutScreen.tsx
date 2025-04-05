@@ -669,11 +669,14 @@ const WorkoutScreen = () => {
       console.log(user.user?.id);
       // save splits to supabase
       // setdata to supbase splits table where user_id is the user id and splits is the splits array always and update the splits array
-      const { data, error } = await supabase.from("splits").upsert({
-        user_id: user.user?.id,
-        created_at: Date.now(),
-        splits: splits,
-      });
+      const { data, error } = await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: splits,
+        },
+        { onConflict: ["user_id"] } // This ensures that only `user_id` is considered for conflict
+      );
+
       console.log("🚀 ~ toggleSplitsEditMode ~ data:", data);
       setEditModeWithDebug("none");
     } else if (editMode === "none") {
