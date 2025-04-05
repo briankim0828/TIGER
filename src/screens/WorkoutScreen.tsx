@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, forwardRef } from 'react';
-import { Box, HStack, Text, Icon, VStack, Pressable, IconButton, ScrollView, Collapse, Divider } from 'native-base';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Box, HStack, Text, Icon, VStack, Pressable, IconButton, ScrollView, Collapse } from 'native-base';
 import { AntDesign,  } from '@expo/vector-icons';
 import { KeyboardAvoidingView, Platform, ScrollView as RNScrollView, Keyboard, Dimensions, 
-  TouchableWithoutFeedback, View, TextInput, findNodeHandle, NativeEventEmitter, NativeModules, UIManager, FlatList } from 'react-native';
+  TouchableWithoutFeedback, View, TextInput } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { dataService } from '../services/data';
 import Animated, { 
@@ -364,7 +364,6 @@ const SplitItem = React.memo(({
 }) => {
   // Animation value for border color
   const borderColor = useSharedValue("#3A3E48");
-  console.log("🚀 ~ borderColor:", borderColor.value)
   const pressBorderColor = useSharedValue("#3A3E48");
   const arrowOpacity = useSharedValue(1);
   const [value, setValue] = useState(split.name);
@@ -810,7 +809,6 @@ const WorkoutScreen = () => {
     }
     
     // Only allow navigating to split details when not in any edit mode
-    console.log("🚀 ~ handleSplitPress ~ split:", split)
     if (editMode === 'none') {
       navigation.navigate('SplitDetail', { split });
     }

@@ -1,22 +1,32 @@
-import React, { useState } from 'react';
-import "react-native-gesture-handler"
-import { NavigationContainer, useNavigation } from '@react-navigation/native';
-import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { NativeBaseProvider, Box, StatusBar, Text } from 'native-base';
-import { SafeAreaProvider, SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DataProvider, useData } from './src/contexts/DataContext';
-import WorkoutMain from './src/screens/WorkoutMain';
-import ProgressScreen from './src/screens/ProgressScreen';
-import ProfileScreen from './src/screens/ProfileScreen';
-import BottomNavbar from './src/components/BottomNavbar';
+import React, { useEffect, useState } from "react";
+import "react-native-gesture-handler";
+import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import {
+  createNativeStackNavigator,
+  NativeStackNavigationProp,
+} from "@react-navigation/native-stack";
+import { NativeBaseProvider, Box, StatusBar, Text } from "native-base";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { DataProvider, useData } from "./src/contexts/DataContext";
+import WorkoutMain from "./src/screens/WorkoutMain";
+import ProgressScreen from "./src/screens/ProgressScreen";
+import ProfileScreen from "./src/screens/ProfileScreen";
+import BottomNavbar from "./src/components/BottomNavbar";
+import LoginScreen from "./src/screens/LoginScreen";
+import { supabase } from "./src/utils/supabaseClient";
 
 type RootStackParamList = {
   Workout: undefined;
   Progress: undefined;
   Profile: undefined;
+  Login: undefined;
 };
 
-type TabType = 'workout' | 'progress' | 'profile';
+type TabType = "workout" | "progress" | "profile";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -26,13 +36,13 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 const GlobalHeader = () => {
   const insets = useSafeAreaInsets();
   return (
-    <Box 
-      bg="#1E2028" 
+    <Box
+      bg="#1E2028"
       pt={0.2}
-      px={4} 
-      pb={2} 
-      borderBottomWidth={0} 
-      alignItems="center" 
+      px={4}
+      pb={2}
+      borderBottomWidth={0}
+      alignItems="center"
       justifyContent="center"
     >
       <Text color="white" fontSize="24" fontWeight="bold">
@@ -43,33 +53,52 @@ const GlobalHeader = () => {
 };
 
 // Navigation wrapper component to use navigation hook
+const AuthNavigationWrapper = () => {
+  return (
+    <Box flex={1} bg="#1E2028">
+      <GlobalHeader />
+      <Box flex={1}>
+        <Stack.Navigator
+          screenOptions={{
+            headerShown: false,
+            animation: "fade",
+            contentStyle: { backgroundColor: "#232530" },
+          }}
+        >
+          <Stack.Screen name="Login" component={LoginScreen} />
+        </Stack.Navigator>
+      </Box>
+    </Box>
+  );
+};
+
+// Navigation wrapper component to use navigation hook
 const NavigationWrapper = () => {
-  const [selectedTab, setSelectedTab] = useState<TabType>('workout');
+  const [selectedTab, setSelectedTab] = useState<TabType>("workout");
   const navigation = useNavigation<NavigationProp>();
-  const insets = useSafeAreaInsets();
-  const { splits, exercises, bodyPartSections } = useData();
+  const { splits } = useData();
 
   // Add debugging logs
   React.useEffect(() => {
-    console.log('Current tab:', selectedTab);
-    console.log('Data Storage State:', {
-      splits
+    console.log("Current tab:", selectedTab);
+    console.log("Data Storage State:", {
+      splits,
     });
   }, [selectedTab, splits]);
 
   const handleTabChange = (tab: TabType) => {
-    console.log('handleTabChange');
+    console.log("handleTabChange");
     setSelectedTab(tab);
     // Navigate to the corresponding screen
     switch (tab) {
-      case 'workout':
-        navigation.navigate('Workout');
+      case "workout":
+        navigation.navigate("Workout");
         break;
-      case 'progress':
-        navigation.navigate('Progress');
+      case "progress":
+        navigation.navigate("Progress");
         break;
-      case 'profile':
-        navigation.navigate('Profile');
+      case "profile":
+        navigation.navigate("Profile");
         break;
     }
   };
@@ -81,8 +110,8 @@ const NavigationWrapper = () => {
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
-            animation: 'fade',
-            contentStyle: { backgroundColor: '#232530' }
+            animation: "fade",
+            contentStyle: { backgroundColor: "#232530" },
           }}
         >
           <Stack.Screen name="Workout" component={WorkoutMain} />
@@ -96,14 +125,41 @@ const NavigationWrapper = () => {
 };
 
 export default function App() {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // Check if the user is logged in on app load
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser(); // Using the new method
+      setUser(user); // Set user state
+    };
+
+    fetchUser(); // Check on app load
+
+    // Listen for authentication state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null); // Update user state based on session
+    });
+
+    // Cleanup listener on unmount
+    return () => {
+      if (authListener && authListener.subscription) {
+        authListener.subscription.unsubscribe(); // Proper cleanup
+      }
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NativeBaseProvider>
         <DataProvider>
-          <SafeAreaView style={{ flex: 1, backgroundColor: "#1E2028" }} edges={['top', 'left', 'right', 'bottom']}>
+          <SafeAreaView
+            style={{ flex: 1, backgroundColor: "#1E2028" }}
+            edges={["top", "left", "right", "bottom"]}
+          >
             <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
             <NavigationContainer>
-              <NavigationWrapper />
+              {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
             </NavigationContainer>
           </SafeAreaView>
         </DataProvider>

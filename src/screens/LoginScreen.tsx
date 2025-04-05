@@ -1,25 +1,44 @@
-import React, { useState } from 'react';
-import { Box, VStack, Input, Button, Text, useToast, Center, Heading } from 'native-base';
-import { useAuth } from '../firebase/AuthContext';
+import React, { useState } from "react";
+import { Box, VStack, Button, useToast, Center, Heading } from "native-base";
+import { supabase } from "../utils/supabaseClient";
+import { StyleSheet, TextInput } from "react-native";
+import { parseFontSize } from "../../helper/fontsize";
+import { useNavigation } from "@react-navigation/native";
 
 const LoginScreen = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
-  const { signIn, signUp } = useAuth();
   const toast = useToast();
+  const navigation = useNavigation();
+  
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  console.log("🚀 ~ LoginScreen ~ email:", email);
 
   const handleAuth = async () => {
     try {
+      let result;
       if (isSignUp) {
-        await signUp(email, password);
+        result = await supabase.auth.signUp({ email, password });
       } else {
-        await signIn(email, password);
+        result = await supabase.auth.signInWithPassword({ email, password });
       }
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      toast.show({
+        description: isSignUp
+          ? "Signup successful!"
+          : "Signed in successfully!",
+        placement: "top",
+      });
     } catch (error) {
       toast.show({
-        description: error instanceof Error ? error.message : "Authentication failed",
-        placement: "top"
+        description:
+          error instanceof Error ? error.message : "Authentication failed",
+        placement: "top",
       });
     }
   };
@@ -31,23 +50,21 @@ const LoginScreen = () => {
           <Heading color="white" size="xl" mb={8}>
             {isSignUp ? "Create Account" : "Welcome Back"}
           </Heading>
-          
-          <Input
+
+          <TextInput
             placeholder="Email"
             value={email}
             onChangeText={setEmail}
-            color="white"
-            fontSize="md"
+            style={styles.input}
             autoCapitalize="none"
-          />
-          
-          <Input
+            />
+
+          <TextInput
             placeholder="Password"
             value={password}
+            style={styles.input}
             onChangeText={setPassword}
-            type="password"
-            color="white"
-            fontSize="md"
+            secureTextEntry={true}
           />
 
           <Button
@@ -63,7 +80,9 @@ const LoginScreen = () => {
             onPress={() => setIsSignUp(!isSignUp)}
             _text={{ color: "#6B8EF2" }}
           >
-            {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+            {isSignUp
+              ? "Already have an account? Sign In"
+              : "Need an account? Sign Up"}
           </Button>
         </VStack>
       </Center>
@@ -71,4 +90,16 @@ const LoginScreen = () => {
   );
 };
 
-export default LoginScreen; 
+export default LoginScreen;
+
+
+const styles = StyleSheet.create({
+  input: {
+    color: "white",
+    fontSize: parseFontSize("md"),
+    borderWidth: 1,
+    borderColor: "white",
+    borderRadius: 7,
+    padding: 15,
+  },
+});

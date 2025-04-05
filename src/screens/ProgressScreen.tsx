@@ -25,7 +25,6 @@ const ProgressScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [calendarKey, setCalendarKey] = useState(0);
   const [splits, setSplits] = useState<Split[]>([]);
-  console.log("🚀 ~ splits:", splits)
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
 
@@ -62,7 +61,6 @@ const ProgressScreen: React.FC = () => {
       try {
         // Load splits data first
         const splitsData = await storageService.getSplits();
-        console.log("🚀 ~ initialLoad ~ splitsData:", splitsData)
         const workoutsData = await storageService.getWorkoutSessions();
 
         if (splitsData) {
