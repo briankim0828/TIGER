@@ -64,7 +64,7 @@ export const BODY_PARTS = [
   'Arms',
   'Shoulders',
   'Core',
-  'Cardio'
+  'Cardio',
 ] as const;
 
 export type BodyPart = typeof BODY_PARTS[number];

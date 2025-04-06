@@ -12,16 +12,21 @@ import { useFocusEffect } from "@react-navigation/native";
 import { storageService } from "../services/storage";
 import RBSheet from 'react-native-raw-bottom-sheet';
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { StyleSheet } from "react-native";
+
+
 interface WorkoutSession {
   date: string;
   completed: boolean;
 }
 
 const ProgressScreen: React.FC = () => {
+
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
-  const refRBSheet = useRef();
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -39,6 +44,13 @@ const ProgressScreen: React.FC = () => {
     splits: [],
     workouts: [],
   });
+
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // callbacks
+  const handleSheetChanges = useCallback((index: number) => {
+    console.log('handleSheetChanges', index);
+  }, []);
 
   // Get today's date string in the same format as the calendar
   const todayString = useMemo(() => {
@@ -155,9 +167,10 @@ const ProgressScreen: React.FC = () => {
     },
     [todayString, selectedDate]
   );
+  bottomSheetRef.current?.close();
 
   const handleWorkoutPress = useCallback(() => {
-    refRBSheet.current.open();
+    bottomSheetRef.current?.expand();
     if (selectedDate) {
       console.log(`showing workout for ${selectedDate}`);
     } else {
@@ -176,72 +189,73 @@ const ProgressScreen: React.FC = () => {
   }
 
   return (
-    <Box flex={1} bg="#1E2028">
-      <Box flex={1}>
+    <GestureHandlerRootView style={styles.container}>
+      <Box flex={1} bg="#1E2028">
+        <Box flex={1}>
 
-        {/* calendar component */}
-        <WorkoutCalendar
-          key={`calendar-${calendarKey}`}
-          month={currentMonth}
-          year={currentYear}
-          workouts={workouts}
-          splits={splits}
-          onDayPress={handleDayPress}
-        />
+          {/* calendar component */}
+          <WorkoutCalendar
+            key={`calendar-${calendarKey}`}
+            month={currentMonth}
+            year={currentYear}
+            workouts={workouts}
+            splits={splits}
+            onDayPress={handleDayPress}
+          />
 
-        {/* button */}
-        <Pressable
-          position="absolute"
-          bottom={6}
-          left={6}
-          right={6}
-          bg="#6B8EF2"
-          py={4}
-          px={6}
-          borderRadius="xl"
-          onPress={handleWorkoutPress}
-          _pressed={{ opacity: 0.8 }}
-          opacity={isFutureDate ? 0.65 : 1}
-          disabled={isFutureDate}
-        >
-          <Text
-            color="white"
-            fontSize="lg"
-            fontWeight="bold"
-            textAlign="center"
+          {/* button */}
+          <Pressable
+            position="absolute"
+            bottom={6}
+            left={6}
+            right={6}
+            bg="#6B8EF2"
+            py={4}
+            px={6}
+            borderRadius="xl"
+            onPress={handleWorkoutPress}
+            _pressed={{ opacity: 0.8 }}
+            opacity={isFutureDate ? 0.65 : 1}
+            disabled={isFutureDate}
           >
-            {isFutureDate
-              ? "Not Yet..."
-              : selectedDate
-              ? `Session from ${selectedDate}`
-              : "Begin Workout"}
-          </Text>
-        </Pressable>
+            <Text
+              color="white"
+              fontSize="lg"
+              fontWeight="bold"
+              textAlign="center"
+            >
+              {isFutureDate
+                ? "Not Yet..."
+                : selectedDate
+                  ? `Session from ${selectedDate}`
+                  : "Begin Workout"}
+            </Text>
+          </Pressable>
+        </Box>
+        <BottomSheet
+          ref={bottomSheetRef}
+          onChange={handleSheetChanges}
+        >
+          <BottomSheetView style={styles.contentContainer}>
+            <Text>Awesome 🎉</Text>
+          </BottomSheetView>
+        </BottomSheet>
       </Box>
-      <RBSheet
-        ref={refRBSheet}
-        useNativeDriver={true}
-        customStyles={{
-          wrapper: {
-            backgroundColor: 'transparent',
-            borderRadius: 50,
-          },
-          draggableIcon: {
-            backgroundColor: '#000',
-            borderRadius: 50,
-          },
-        }}
-        customModalProps={{
-          animationType: 'slide',
-          statusBarTranslucent: true,
-        }}
-        customAvoidingViewProps={{
-          enabled: false,
-        }}>
-        <Text>Hello</Text>
-      </RBSheet>
-    </Box>
+    </GestureHandlerRootView>
   );
 };
 
 export default ProgressScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'grey',
+  },
+  contentContainer: {
+    flex: 1,
+    padding: 36,
+    height: 300,
+    alignItems: 'center',
+  },
+});

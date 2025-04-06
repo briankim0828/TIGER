@@ -660,6 +660,21 @@ const WorkoutScreen = () => {
     }
   };
 
+  // await supabase.from("splits").insert(
+  //   {
+  //     user_id: user.user?.id,
+  //     start_time: Date.now(),
+  //     end_time: Date.now(),
+  //     sets: [
+  //       {reps: 10, weight: 100, rest: 10},
+  //       {reps: 10, weight: 100, rest: 10},
+  //       {reps: 10, weight: 100, rest: 10},
+  //     ],
+  //     ecercise: ,
+  //     created_at: Date.now(),
+  //   },
+  // );
+
   // Define handler functions for toggling edit modes
   const toggleProgramEditMode = async () => {
     // Toggle between program edit mode and no edit mode

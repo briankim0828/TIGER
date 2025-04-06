@@ -170,6 +170,27 @@ const ExerciseSelectionView = () => {
                   </Text>
                 </Pressable>
               ))}
+              <Pressable
+                onPress={() => handleBodyPartSelect('My Exercises')}
+                py={4}
+                px={3}
+                bg={
+                  selectedBodyPart === 'My Exercises'
+                    ? "rgba(107, 142, 242, 0.1)"
+                    : "transparent"
+                }
+                _pressed={{ bg: "rgba(107, 142, 242, 0.05)" }}
+              >
+                <Text
+                  color={selectedBodyPart === 'My Exercises' ? "white" : "gray.400"}
+                  fontWeight={
+                    selectedBodyPart === 'My Exercises' ? "semibold" : "normal"
+                  }
+                >
+                  My Exercises
+                </Text>
+              </Pressable>
+
             </ScrollView>
           </Box>
 
@@ -184,6 +205,7 @@ const ExerciseSelectionView = () => {
                 borderColor="gray.700"
               >
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+
                   <HStack space={2}>
                     {selectedExercises.map((exercise, index) => (
                       <Pressable
@@ -252,18 +274,25 @@ const ExerciseSelectionView = () => {
                     </Pressable>
                   ))
                 ) : (
-                  <Center flex={1} p={4}>
-                    <Icon
-                      as={MaterialIcons}
-                      name="category"
-                      color="gray.500"
-                      size="xl"
-                      mb={2}
-                    />
-                    <Text color="gray.400" textAlign="center">
-                      Select a body part to see available exercises
-                    </Text>
-                  </Center>
+                  selectedBodyPart === 'My Exercises' ?
+                    <HStack space={2}>
+                      <Text color="white" fontSize="sm">
+                        My Exercises
+                      </Text>
+                    </HStack>
+                    :
+                    <Center flex={1} p={4}>
+                      <Icon
+                        as={MaterialIcons}
+                        name="category"
+                        color="gray.500"
+                        size="xl"
+                        mb={2}
+                      />
+                      <Text color="gray.400" textAlign="center">
+                        Select a body part to see available exercises
+                      </Text>
+                    </Center>
                 )}
               </ScrollView>
             </Box>
