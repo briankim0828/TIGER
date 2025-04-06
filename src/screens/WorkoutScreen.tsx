@@ -261,7 +261,7 @@ const getFirstLetter = (text: string) => {
 const WeekdayItem = React.memo(
   ({
     day,
-    splits,
+    splits = [],
     isSelected,
     onPress,
     isEditing,
@@ -272,7 +272,7 @@ const WeekdayItem = React.memo(
     onPress: () => void;
     isEditing: boolean;
   }) => {
-    const daySplits = splits.filter((split) => split.days.includes(day));
+    const daySplits = splits?.length > 0 ? splits.filter((split) => split.days.includes(day)) : [];
     const color =
       daySplits.length > 0 ? daySplits[0].color || "#3A3E48" : "#3A3E48";
 
@@ -639,17 +639,28 @@ const WorkoutScreen = () => {
   });
 
   useEffect(() => {
-    getUserSplits();    
+    getUserSplits();
   }, []);
-  
+
   const getUserSplits = async () => {
-    const { data, error } = await supabase.from("splits").select("*");
-    if (error) {
+    const { data: user } = await supabase.auth.getUser();
+
+    const { data, error }: any = await supabase
+      .from("splits")
+      .select("*")
+      .eq("user_id", user.user?.id)
+      .single();
+      if (error) {
       console.error("Error fetching splits:", error);
-    } else {
-      console.log("Splits fetched successfully:", data);
+      return;
+    }
+    console.log('data.splits', data);
+    
+    if (data?.splits?.length > 0) {
+      updateSplits(data.splits);
     }
   };
+
   // Define handler functions for toggling edit modes
   const toggleProgramEditMode = () => {
     // Toggle between program edit mode and no edit mode
