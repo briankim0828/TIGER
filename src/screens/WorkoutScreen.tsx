@@ -618,10 +618,6 @@ const WorkoutScreen = () => {
     setEditMode(newMode);
   };
 
-  // Derive individual edit states from the unified edit mode
-  const isEditingProgram = editMode === "program";
-  const isEditingSplits = editMode === "splits";
-
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -630,8 +626,6 @@ const WorkoutScreen = () => {
   const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const isInitialLoadRef = useRef(true);
-  const isKeyboardVisibleRef = useRef(false);
-  const isAnimatingRef = useRef(false);
 
   // Cache for processed data
   const processedDataRef = useRef<{
@@ -644,6 +638,18 @@ const WorkoutScreen = () => {
     bodyPartSections: [],
   });
 
+  useEffect(() => {
+    getUserSplits();    
+  }, []);
+  
+  const getUserSplits = async () => {
+    const { data, error } = await supabase.from("splits").select("*");
+    if (error) {
+      console.error("Error fetching splits:", error);
+    } else {
+      console.log("Splits fetched successfully:", data);
+    }
+  };
   // Define handler functions for toggling edit modes
   const toggleProgramEditMode = () => {
     // Toggle between program edit mode and no edit mode
@@ -664,7 +670,7 @@ const WorkoutScreen = () => {
     if (editMode === "splits") {
       // Exit splits edit mode
       const { data: user } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from("splits").upsert(
+      await supabase.from("splits").upsert(
         {
           user_id: user.user?.id,
           splits: splits,
