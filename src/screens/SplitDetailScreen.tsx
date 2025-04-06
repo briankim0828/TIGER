@@ -16,6 +16,7 @@ import { storageService } from "../services/storage";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useData } from "../contexts/DataContext";
+import { supabase } from "../utils/supabaseClient";
 
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
@@ -87,7 +88,7 @@ const SplitDetailScreen = () => {
     saveExercises();
   }, [exercises, split.id]);
 
-  const handleAddExercise = (newExercises: Exercise[]) => {
+  const handleAddExercise = async(newExercises: Exercise[]) => {
     const newSelectedWorkoutExercises = newExercises.map(
       convertToWorkoutExercise
     );
@@ -102,6 +103,18 @@ const SplitDetailScreen = () => {
       splitItem.id === split.id ? { ...split, exercises: list } : splitItem
     );
 
+    const { data: user } = await supabase.auth.getUser();
+    await supabase.from("splits").upsert(
+      {
+        user_id: user.user?.id,
+        splits: updatedSplits,
+        created_at: Date.now(),
+      },
+      {
+        onConflict: ["user_id"],
+      }
+    );
+    
     // console.log('Updated splits after detail update:', updatedSplits);
     updateSplits(updatedSplits);
   };

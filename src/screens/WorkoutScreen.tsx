@@ -650,24 +650,36 @@ const WorkoutScreen = () => {
       .select("*")
       .eq("user_id", user.user?.id)
       .single();
-      if (error) {
+    if (error) {
       console.error("Error fetching splits:", error);
       return;
     }
-    console.log('data.splits', data);
-    
+
     if (data?.splits?.length > 0) {
       updateSplits(data.splits);
     }
   };
 
   // Define handler functions for toggling edit modes
-  const toggleProgramEditMode = () => {
+  const toggleProgramEditMode = async () => {
     // Toggle between program edit mode and no edit mode
     if (editMode === "program") {
       // Exit program edit mode
       setSelectedDay(null);
       setSelectedSplit(null);
+
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: splits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
+
       setEditModeWithDebug("none");
     } else if (editMode === "none") {
       // Enter program edit mode
@@ -772,15 +784,8 @@ const WorkoutScreen = () => {
   );
 
   const handleSplitSelect = useCallback(
-    (split: Split) => {
+    async (split: Split) => {
       if (!selectedDay || editMode !== "program") return;
-
-      console.log("Assigning split to day:", {
-        splitId: split.id,
-        splitName: split.name,
-        day: selectedDay,
-        currentSplits: splits,
-      });
 
       const updatedSplits = splits.map((s) => {
         // First, remove the selected day from all splits
@@ -793,12 +798,21 @@ const WorkoutScreen = () => {
             days: [...daysWithoutSelected, selectedDay],
           };
         }
-        return {
-          ...s,
-          days: daysWithoutSelected,
-        };
+        return { ...s, days: daysWithoutSelected };
       });
 
+
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: updatedSplits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
       console.log("Updated splits after assignment:", updatedSplits);
       updateSplits(updatedSplits);
       setSelectedDay(null);
@@ -935,25 +949,30 @@ const WorkoutScreen = () => {
   }, []);
 
   const handleSplitNameEdit = useCallback(
-    (id: string, newName: string) => {
-      // console.log('Editing split name:', {
-      //   splitId: id,
-      //   newName,
-      //   currentSplits: splits
-      // });
-
+    async (id: string, newName: string) => {
       const updatedSplits = splits.map((split: Split) =>
         split.id === id ? { ...split, name: newName } : split
       );
 
-      // console.log('Updated splits after name change:', updatedSplits);
+
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: updatedSplits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
       updateSplits(updatedSplits);
     },
     [splits, updateSplits]
   );
 
   const handleColorSelect = useCallback(
-    (id: string, color: string) => {
+    async (id: string, color: string) => {
       console.log("Changing split color:", {
         splitId: id,
         newColor: color,
@@ -964,13 +983,25 @@ const WorkoutScreen = () => {
         split.id === id ? { ...split, color } : split
       );
 
-      console.log("Updated splits after color change:", updatedSplits);
+
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: updatedSplits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
+
       updateSplits(updatedSplits);
     },
     [splits, updateSplits]
   );
 
-  const handleAddSplit = useCallback(() => {
+  const handleAddSplit = useCallback(async () => {
     const newSplit: Split = {
       id: Date.now().toString(),
       name: `Split ${splits.length + 1}`,
@@ -979,18 +1010,25 @@ const WorkoutScreen = () => {
       exercises: [],
     };
 
-    console.log("Adding new split:", {
-      newSplit,
-      currentSplits: splits,
-    });
-
     const updatedSplits = [...splits, newSplit];
-    console.log("Updated splits after adding:", updatedSplits);
+
+    const { data: user } = await supabase.auth.getUser();
+    await supabase.from("splits").upsert(
+      {
+        user_id: user.user?.id,
+        splits: updatedSplits,
+        created_at: Date.now(),
+      },
+      {
+        onConflict: ["user_id"],
+      }
+    );
+
     updateSplits(updatedSplits);
   }, [splits, updateSplits]);
 
   const handleDeleteSplit = useCallback(
-    (id: string) => {
+    async (id: string) => {
       console.log("Deleting split:", {
         splitId: id,
         currentSplits: splits,
@@ -998,13 +1036,25 @@ const WorkoutScreen = () => {
 
       const updatedSplits = splits.filter((split: Split) => split.id !== id);
       console.log("Updated splits after deletion:", updatedSplits);
+
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: updatedSplits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
       updateSplits(updatedSplits);
     },
     [splits, updateSplits]
   );
 
   const handleSplitDetailUpdate = useCallback(
-    (updatedSplit: Split) => {
+    async (updatedSplit: Split) => {
       console.log("Updating split details:", {
         updatedSplit,
         currentSplits: splits,
@@ -1014,6 +1064,17 @@ const WorkoutScreen = () => {
         split.id === updatedSplit.id ? updatedSplit : split
       );
 
+      const { data: user } = await supabase.auth.getUser();
+      await supabase.from("splits").upsert(
+        {
+          user_id: user.user?.id,
+          splits: updatedSplits,
+          created_at: Date.now(),
+        },
+        {
+          onConflict: ["user_id"],
+        }
+      );
       // console.log('Updated splits after detail update:', updatedSplits);
       updateSplits(updatedSplits);
     },
