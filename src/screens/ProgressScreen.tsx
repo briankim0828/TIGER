@@ -178,6 +178,28 @@ const ProgressScreen: React.FC = () => {
     }
   }, [selectedDate]);
 
+  // Get the day of week from the selected date
+  const getDayOfWeek = useCallback((dateString: string | null) => {
+    if (!dateString) return null;
+    
+    const date = new Date(dateString);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[date.getDay()];
+  }, []);
+
+  // Find the split scheduled for the selected day
+  const getScheduledSplit = useCallback((dayOfWeek: string | null) => {
+    if (!dayOfWeek) return null;
+    
+    return splits.find(split => split.days.includes(dayOfWeek));
+  }, [splits]);
+
+  // Get the scheduled split for the selected date
+  const scheduledSplit = useMemo(() => {
+    const dayOfWeek = getDayOfWeek(selectedDate || todayString);
+    return getScheduledSplit(dayOfWeek);
+  }, [selectedDate, todayString, getDayOfWeek, getScheduledSplit]);
+
   if (loading) {
     return (
       <Box flex={1} justifyContent="center" alignItems="center" bg="#1E2028">
@@ -192,6 +214,9 @@ const ProgressScreen: React.FC = () => {
     <GestureHandlerRootView style={styles.container}>
       <Box flex={1} bg="#1E2028">
         <Box flex={1}>
+          <Text color="white" fontSize="2xl" fontWeight="bold" pl={4}>
+            My Progress
+          </Text>
 
           {/* calendar component */}
           <WorkoutCalendar
@@ -203,41 +228,69 @@ const ProgressScreen: React.FC = () => {
             onDayPress={handleDayPress}
           />
 
-          {/* button */}
-          <Pressable
-            position="absolute"
-            bottom={6}
-            left={6}
-            right={6}
-            bg="#6B8EF2"
-            py={4}
-            px={6}
-            borderRadius="xl"
-            onPress={handleWorkoutPress}
-            _pressed={{ opacity: 0.8 }}
-            opacity={isFutureDate ? 0.65 : 1}
-            disabled={isFutureDate}
-          >
-            <Text
-              color="white"
-              fontSize="lg"
-              fontWeight="bold"
-              textAlign="center"
+          {/* button - now positioned below calendar */}
+          <Box px={4} py={1} >
+            <Pressable
+              bg="#6B8EF2"
+              py={4}
+              px={6}
+              borderRadius="xl"
+              onPress={handleWorkoutPress}
+              _pressed={{ opacity: 0.8 }}
+              opacity={isFutureDate ? 0.65 : 1}
+              disabled={isFutureDate}
             >
-              {isFutureDate
-                ? "Not Yet..."
-                : selectedDate
-                  ? `Session from ${selectedDate}`
-                  : "Begin Workout"}
-            </Text>
-          </Pressable>
+              <Text
+                color="white"
+                fontSize="lg"
+                fontWeight="bold"
+                textAlign="center"
+                p={0.1}
+              >
+                {isFutureDate
+                  ? "Not Yet..."
+                  : selectedDate
+                    ? `Session from ${selectedDate}`
+                    : "Begin Workout"}
+              </Text>
+            </Pressable>
+          </Box>
         </Box>
         <BottomSheet
           ref={bottomSheetRef}
           onChange={handleSheetChanges}
+          enablePanDownToClose={true}
+          index={-1}
         >
           <BottomSheetView style={styles.contentContainer}>
-            <Text>Awesome 🎉</Text>
+            <Text color="white" fontSize="xl" fontWeight="bold" mb={4}>
+              {selectedDate ? `Session from ${selectedDate}` : "Begin Workout"}
+            </Text>
+            
+            {scheduledSplit && (
+              <Box bg="#2A2E38" p={4} borderRadius="lg" mb={4}>
+                <Text color="white" fontSize="md">
+                  Scheduled Split: <Text fontWeight="bold" color={scheduledSplit.color || "#6B8EF2"}>{scheduledSplit.name}</Text>
+                </Text>
+                <Text color="gray.400" fontSize="sm" mt={1}>
+                  {getDayOfWeek(selectedDate || todayString)} Day
+                </Text>
+              </Box>
+            )}
+            
+            <Pressable
+              mt={4}
+              bg="red.500"
+              py={3}
+              px={6}
+              borderRadius="lg"
+              onPress={() => bottomSheetRef.current?.close()}
+              _pressed={{ opacity: 0.8 }}
+            >
+              <Text color="white" fontSize="md" fontWeight="bold">
+                Finish
+              </Text>
+            </Pressable>
           </BottomSheetView>
         </BottomSheet>
       </Box>

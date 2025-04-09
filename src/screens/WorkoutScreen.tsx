@@ -178,7 +178,7 @@ const BodyPartSection = React.memo(
     isFirstItem?: boolean;
   }) => {
     return (
-      <Box mt={isFirstItem ? 2 : 6}>
+      <Box mt={isFirstItem ? 2 : 6} >
         <Text color="gray.400" fontSize="sm" mb={2}>
           {bodyPart}
         </Text>

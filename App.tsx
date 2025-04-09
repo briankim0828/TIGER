@@ -74,7 +74,7 @@ const AuthNavigationWrapper = () => {
 
 // Navigation wrapper component to use navigation hook
 const NavigationWrapper = () => {
-  const [selectedTab, setSelectedTab] = useState<TabType>("workout");
+  const [selectedTab, setSelectedTab] = useState<TabType>("progress");
   const navigation = useNavigation<NavigationProp>();
   const { splits } = useData();
 
@@ -113,6 +113,7 @@ const NavigationWrapper = () => {
             animation: "fade",
             contentStyle: { backgroundColor: "#232530" },
           }}
+          initialRouteName="Progress"
         >
           <Stack.Screen name="Workout" component={WorkoutMain} />
           <Stack.Screen name="Progress" component={ProgressScreen} />

@@ -119,9 +119,27 @@ const SplitDetailScreen = () => {
     updateSplits(updatedSplits);
   };
 
-  const handleRemoveExercise = (index: number) => {
+  const handleRemoveExercise = async (index: number) => {
     const updatedExercises = exercises.filter((_, i) => i !== index);
     setExercises(updatedExercises);
+    
+    const updatedSplits = splits.map((splitItem: Split) =>
+      splitItem.id === split.id ? { ...split, exercises: updatedExercises } : splitItem
+    );
+
+    const { data: user } = await supabase.auth.getUser();
+    await supabase.from("splits").upsert(
+      {
+        user_id: user.user?.id,
+        splits: updatedSplits,
+        created_at: Date.now(),
+      },
+      {
+        onConflict: ["user_id"],
+      }
+    );
+    
+    updateSplits(updatedSplits);
   };
 
   const handleUpdateExercise = (

@@ -29,7 +29,7 @@ interface MonthSection {
   days: number[];
 }
 
-const MONTH_HEIGHT = 250;
+const MONTH_HEIGHT = 330;
 
 // Enable LayoutAnimation for Android
 if (
@@ -273,32 +273,23 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
     [onDayPress, selectedDate]
   );
 
-  // Reduced to only 2 months for even better performance
+  // Reduced to only 1 month for better performance
   const monthSections = useMemo(() => {
     const sections: MonthSection[] = [];
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
 
-    // Generate only 2 months for better performance
-    for (let i = 0; i < 2; i++) {
-      let year = currentYear;
-      let month = currentMonth + i;
-
-      while (month > 11) {
-        month -= 12;
-        year += 1;
-      }
-
-      sections.push({
-        month: month,
-        year: year,
-        days: Array.from(
-          { length: getDaysInMonth(month, year) },
-          (_, index) => index + 1
-        ),
-      });
-    }
+    // Generate only 1 month for better performance
+    sections.push({
+      month: currentMonth,
+      year: currentYear,
+      days: Array.from(
+        { length: getDaysInMonth(currentMonth, currentYear) },
+        (_, index) => index + 1
+      ),
+    });
+    
     return sections;
   }, []);
 
@@ -522,8 +513,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   );
 
   return (
-    <Box flex={1} bg="#1E2028">
-      <Box flex={1} bg="#1E2028" px={2} pt={4}>
+      <Box bg="#1E2028" px={2} pt={4} height={MONTH_HEIGHT}>
         <FlatList
           ref={flatListRef}
           data={monthSections}
@@ -534,20 +524,19 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
           scrollEventThrottle={32}
           initialScrollIndex={0}
           getItemLayout={getItemLayout}
-          windowSize={3}
+          windowSize={1}
           removeClippedSubviews={false}
-          initialNumToRender={2}
-          maxToRenderPerBatch={2}
+          initialNumToRender={1}
+          maxToRenderPerBatch={1}
           updateCellsBatchingPeriod={10}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          style={{ backgroundColor: "#1E2028" }}
+          style={{ backgroundColor: "#1E2028"}}
           maintainVisibleContentPosition={{
             minIndexForVisible: 0,
           }}
         />
       </Box>
-    </Box>
   );
 };
 
