@@ -620,6 +620,8 @@ const WorkoutScreen = () => {
 
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
   const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
+  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
+  const [isFirstMount, setIsFirstMount] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -639,8 +641,11 @@ const WorkoutScreen = () => {
   });
 
   useEffect(() => {
-    getUserSplits();
-  }, []);
+    if (isFirstMount) {
+      getUserSplits();
+      setIsFirstMount(false);
+    }
+  }, [isFirstMount]);
 
   const getUserSplits = async () => {
     const { data: user } = await supabase.auth.getUser();
