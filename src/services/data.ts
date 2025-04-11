@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   EXERCISES: 'exercises',
   WORKOUT_SESSIONS: 'workout_sessions',
   DEFAULT_WORKOUT_STATE: 'default_workout_state',
+  SPLIT_EXERCISES: (splitId: string) => `split_exercises_${splitId}`,
 } as const;
 
 class DataService {
@@ -82,6 +83,26 @@ class DataService {
       await this.saveExercises(allDefaultExercises);
     } catch (error) {
       console.error('Error initializing default exercises:', error);
+      throw error;
+    }
+  }
+
+  // Split Exercises
+  async getSplitExercises(splitId: string): Promise<Exercise[]> {
+    try {
+      const data = await AsyncStorage.getItem(STORAGE_KEYS.SPLIT_EXERCISES(splitId));
+      return data ? JSON.parse(data) : [];
+    } catch (error) {
+      console.error('Error getting split exercises:', error);
+      return [];
+    }
+  }
+
+  async saveSplitExercises(splitId: string, exercises: Exercise[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.SPLIT_EXERCISES(splitId), JSON.stringify(exercises));
+    } catch (error) {
+      console.error('Error saving split exercises:', error);
       throw error;
     }
   }
@@ -163,6 +184,16 @@ class DataService {
       await AsyncStorage.setItem(STORAGE_KEYS.DEFAULT_WORKOUT_STATE, JSON.stringify(splits));
     } catch (error) {
       console.error('Error saving default workout state:', error);
+      throw error;
+    }
+  }
+
+  // Clear all data (useful for testing or resetting the app)
+  async clearAll(): Promise<void> {
+    try {
+      await AsyncStorage.clear();
+    } catch (error) {
+      console.error('Error clearing storage:', error);
       throw error;
     }
   }

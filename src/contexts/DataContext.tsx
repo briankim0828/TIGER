@@ -21,6 +21,9 @@ interface DataContextType {
   updateExercises: (exercises: Exercise[]) => Promise<void>;
   addWorkoutSession: (session: WorkoutSession) => Promise<void>;
   saveDefaultWorkoutState: (splits: Split[]) => Promise<void>;
+  getSplitExercises: (splitId: string) => Promise<Exercise[]>;
+  saveSplitExercises: (splitId: string, exercises: Exercise[]) => Promise<void>;
+  clearStorage: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -117,6 +120,35 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
+  const getSplitExercises = useCallback(async (splitId: string) => {
+    try {
+      return await dataService.getSplitExercises(splitId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to get split exercises');
+      throw err;
+    }
+  }, []);
+
+  const saveSplitExercises = useCallback(async (splitId: string, exercises: Exercise[]) => {
+    try {
+      await dataService.saveSplitExercises(splitId, exercises);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save split exercises');
+      throw err;
+    }
+  }, []);
+
+  const clearStorage = useCallback(async () => {
+    try {
+      await dataService.clearAll();
+      // Refresh data to update state with empty storage
+      await refreshData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear storage');
+      throw err;
+    }
+  }, [refreshData]);
+
   return (
     <DataContext.Provider
       value={{
@@ -131,7 +163,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateSplits,
         updateExercises,
         addWorkoutSession,
-        saveDefaultWorkoutState
+        saveDefaultWorkoutState,
+        getSplitExercises,
+        saveSplitExercises,
+        clearStorage
       }}
     >
       {children}

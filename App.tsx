@@ -81,10 +81,10 @@ const NavigationWrapper = () => {
   // Add debugging logs
   React.useEffect(() => {
     console.log("Current tab:", selectedTab);
-    console.log("Data Storage State:", {
-      splits,
-    });
-  }, [selectedTab, splits]);
+    // console.log("Data Storage State:", {
+    //   splits,
+    // });
+  }, [selectedTab]);
 
   const handleTabChange = (tab: TabType) => {
     console.log("handleTabChange");

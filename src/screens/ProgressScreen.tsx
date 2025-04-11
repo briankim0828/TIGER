@@ -9,7 +9,7 @@ import { Box, Text, Pressable } from "native-base";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import { Split } from "../types";
 import { useFocusEffect } from "@react-navigation/native";
-import { storageService } from "../services/storage";
+import { useData } from "../contexts/DataContext";
 import RBSheet from 'react-native-raw-bottom-sheet';
 
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,6 +23,7 @@ interface WorkoutSession {
 }
 
 const ProgressScreen: React.FC = () => {
+  const { splits, workoutSessions, workoutDays, loading: dataLoading } = useData();
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -31,17 +32,14 @@ const ProgressScreen: React.FC = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loading, setLoading] = useState(true);
   const [calendarKey, setCalendarKey] = useState(0);
-  const [splits, setSplits] = useState<Split[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
 
   // Add refs for caching
   const isInitialLoadRef = useRef(true);
   const processedDataRef = useRef<{
-    splits: Split[];
     workouts: WorkoutSession[];
   }>({
-    splits: [],
     workouts: [],
   });
 
@@ -73,20 +71,8 @@ const ProgressScreen: React.FC = () => {
 
       setLoading(true);
       try {
-        // Load splits data first
-        const splitsData = await storageService.getSplits();
-        const workoutsData = await storageService.getWorkoutSessions();
-
-        if (splitsData) {
-          setSplits(splitsData);
-          processedDataRef.current.splits = splitsData;
-        } else {
-          setSplits([]);
-          processedDataRef.current.splits = [];
-        }
-
-        if (workoutsData) {
-          const formattedWorkouts = workoutsData.map((session) => ({
+        if (workoutDays) {
+          const formattedWorkouts = workoutDays.map((session) => ({
             date: session.date,
             completed: session.completed,
           }));
@@ -109,51 +95,36 @@ const ProgressScreen: React.FC = () => {
     };
 
     initialLoad();
-  }, []);
+  }, [workoutDays]);
 
-  // When returning to this screen, only update with newest data, don't reset to defaults
+  // Update when data changes
   useFocusEffect(
-    React.useCallback(() => {
-      if (!isInitialLoadRef.current) {
-        const refreshData = async () => {
-          try {
-            // Get latest splits data
-            const splitsData = await storageService.getSplits();
-            const workoutsData = await storageService.getWorkoutSessions();
+    useCallback(() => {
+      // Skip if it's the initial load
+      if (isInitialLoadRef.current) return;
 
-            if (splitsData) {
-              // Only update if data has changed
-              if (
-                JSON.stringify(splitsData) !==
-                JSON.stringify(processedDataRef.current.splits)
-              ) {
-                setSplits(splitsData);
-                processedDataRef.current.splits = splitsData;
-              }
-            }
+      setLoading(true);
+      try {
+        if (workoutDays) {
+          const formattedWorkouts = workoutDays.map((session) => ({
+            date: session.date,
+            completed: session.completed,
+          }));
+          setWorkouts(formattedWorkouts);
+          processedDataRef.current.workouts = formattedWorkouts;
+        } else {
+          setWorkouts([]);
+          processedDataRef.current.workouts = [];
+        }
 
-            if (workoutsData) {
-              const formattedWorkouts = workoutsData.map((session) => ({
-                date: session.date,
-                completed: session.completed,
-              }));
-              // Only update if data has changed
-              if (
-                JSON.stringify(formattedWorkouts) !==
-                JSON.stringify(processedDataRef.current.workouts)
-              ) {
-                setWorkouts(formattedWorkouts);
-                processedDataRef.current.workouts = formattedWorkouts;
-              }
-            }
-          } catch (error) {
-            console.error("Error refreshing data:", error);
-          }
-        };
-
-        refreshData();
+        // Increment the calendar key to force a complete re-render
+        setCalendarKey((prev) => prev + 1);
+      } catch (error) {
+        console.error("Error updating data:", error);
+      } finally {
+        setLoading(false);
       }
-    }, [isInitialLoadRef])
+    }, [workoutDays])
   );
 
   const handleDayPress = useCallback(
@@ -164,10 +135,10 @@ const ProgressScreen: React.FC = () => {
       } else {
         setSelectedDate(date);
       }
+      bottomSheetRef.current?.close();
     },
     [todayString, selectedDate]
   );
-  bottomSheetRef.current?.close();
 
   const handleWorkoutPress = useCallback(() => {
     bottomSheetRef.current?.expand();
@@ -200,7 +171,7 @@ const ProgressScreen: React.FC = () => {
     return getScheduledSplit(dayOfWeek);
   }, [selectedDate, todayString, getDayOfWeek, getScheduledSplit]);
 
-  if (loading) {
+  if (loading || dataLoading) {
     return (
       <Box flex={1} justifyContent="center" alignItems="center" bg="#1E2028">
         <Text color="white" fontSize="md">

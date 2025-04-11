@@ -12,7 +12,6 @@ import {
 import { AntDesign } from "@expo/vector-icons";
 import { Split, Exercise, Set } from "../types";
 import { ScrollView as RNScrollView } from "react-native";
-import { storageService } from "../services/storage";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useData } from "../contexts/DataContext";
@@ -40,7 +39,7 @@ const SplitDetailScreen = () => {
   const [exercises, setExercises] = useState<ExerciseWithDetails[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
-  const { splits, updateSplits } = useData();
+  const { splits, updateSplits, getSplitExercises, saveSplitExercises } = useData();
 
   // Convert SelectionExercise to WorkoutExercise
   const convertToWorkoutExercise = (exercise: {
@@ -57,9 +56,7 @@ const SplitDetailScreen = () => {
   useEffect(() => {
     const loadExercises = async () => {
       try {
-        const loadedExercises = await storageService.getSplitExercises(
-          split.id
-        );
+        const loadedExercises = await getSplitExercises(split.id);
         if (loadedExercises.length > 0) {
           // Add splitIds to loaded exercises
           const exercisesWithSplitIds = loadedExercises.map((exercise) => ({
@@ -74,19 +71,19 @@ const SplitDetailScreen = () => {
       }
     };
     loadExercises();
-  }, [split.id]);
+  }, [split.id, getSplitExercises]);
 
   // Save exercises to storage whenever they change
   useEffect(() => {
     const saveExercises = async () => {
       try {
-        await storageService.saveSplitExercises(split.id, exercises);
+        await saveSplitExercises(split.id, exercises);
       } catch (error) {
         console.error("Error saving exercises:", error);
       }
     };
     saveExercises();
-  }, [exercises, split.id]);
+  }, [exercises, split.id, saveSplitExercises]);
 
   const handleAddExercise = async(newExercises: Exercise[]) => {
     const newSelectedWorkoutExercises = newExercises.map(
