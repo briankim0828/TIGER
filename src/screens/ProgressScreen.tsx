@@ -43,7 +43,23 @@ const ProgressScreen: React.FC = () => {
     workouts: [],
   });
 
+  // bottom sheet
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const snapPointsArray = useMemo(() => ['12%', '100%'], []);
+  // const snapPoints = useMemo(() => ['45%', '100%'], []);
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: 'transparent',
+    },
+    contentContainer: {
+      paddingTop: 10,
+      paddingBottom: 50,
+      alignItems: 'center',
+      // borderWidth: 2,
+      // borderColor: 'red'
+    },
+  });
 
   // callbacks
   const handleSheetChanges = useCallback((index: number) => {
@@ -141,7 +157,7 @@ const ProgressScreen: React.FC = () => {
   );
 
   const handleWorkoutPress = useCallback(() => {
-    bottomSheetRef.current?.expand();
+    bottomSheetRef.current?.snapToIndex(1);
     if (selectedDate) {
       console.log(`showing workout for ${selectedDate}`);
     } else {
@@ -230,16 +246,25 @@ const ProgressScreen: React.FC = () => {
         <BottomSheet
           ref={bottomSheetRef}
           onChange={handleSheetChanges}
-          enablePanDownToClose={true}
+          enablePanDownToClose={false}
           index={-1}
+          snapPoints={snapPointsArray}
+          handleIndicatorStyle={{
+            backgroundColor: 'white',
+            width: 40,
+            height: 4,
+          }}
+          backgroundStyle = {{
+            backgroundColor: '#2A2E38',
+          }}
         >
-          <BottomSheetView style={styles.contentContainer}>
-            <Text color="white" fontSize="xl" fontWeight="bold" mb={4}>
-              {selectedDate ? `Session from ${selectedDate}` : "Begin Workout"}
-            </Text>
+          <BottomSheetView style={styles.contentContainer} >
+              <Text color="white" fontSize="xl" fontWeight="bold" mb={4}>
+                {selectedDate ? `Session from ${selectedDate}` : "Begin Workout"}
+              </Text>
             
             {scheduledSplit && (
-              <Box bg="#2A2E38" p={4} borderRadius="lg" mb={4}>
+              <Box bg="#1E2028" p={4} borderRadius="lg" mb={4}>
                 <Text color="white" fontSize="md">
                   Scheduled Split: <Text fontWeight="bold" color={scheduledSplit.color || "#6B8EF2"}>{scheduledSplit.name}</Text>
                 </Text>
@@ -259,7 +284,7 @@ const ProgressScreen: React.FC = () => {
               _pressed={{ opacity: 0.8 }}
             >
               <Text color="white" fontSize="md" fontWeight="bold">
-                Finish
+                Cancel
               </Text>
             </Pressable>
           </BottomSheetView>
@@ -271,15 +296,3 @@ const ProgressScreen: React.FC = () => {
 
 export default ProgressScreen;
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'grey',
-  },
-  contentContainer: {
-    flex: 1,
-    padding: 36,
-    height: 300,
-    alignItems: 'center',
-  },
-});
