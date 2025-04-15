@@ -12,12 +12,45 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { DataProvider, useData } from "./src/contexts/DataContext";
+import { WorkoutProvider, useWorkout } from "./src/contexts/WorkoutContext";
 import WorkoutMain from "./src/screens/WorkoutMain";
 import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
+import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
+import { TouchableWithoutFeedback, Keyboard, View, StyleSheet } from "react-native";
+
+// Active Workout Modal Component
+const ActiveWorkoutModalContainer = () => {
+  const { isWorkoutActive, workoutExercises, endWorkout } = useWorkout();
+
+  return (
+    <ActiveWorkoutModal 
+      isVisible={isWorkoutActive}
+      exercises={workoutExercises}
+      onClose={endWorkout}
+    />
+  );
+};
+
+// Create a wrapper component for keyboard dismissal
+const DismissKeyboardWrapper = ({ children }: { children: React.ReactNode }) => {
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.container}>
+        {children}
+      </View>
+    </TouchableWithoutFeedback>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});
 
 type RootStackParamList = {
   Workout: undefined;
@@ -120,6 +153,10 @@ const NavigationWrapper = () => {
           <Stack.Screen name="Profile" component={ProfileScreen} />
         </Stack.Navigator>
       </Box>
+      
+      {/* Active Workout Modal */}
+      <ActiveWorkoutModalContainer />
+
       <BottomNavbar selectedTab={selectedTab} onTabChange={handleTabChange} />
     </Box>
   );
@@ -154,15 +191,23 @@ export default function App() {
     <SafeAreaProvider>
       <NativeBaseProvider>
         <DataProvider>
-          <SafeAreaView
-            style={{ flex: 1, backgroundColor: "#1E2028" }}
-            edges={["top", "left", "right", "bottom"]}
-          >
-            <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
-            <NavigationContainer>
-              {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
-            </NavigationContainer>
-          </SafeAreaView>
+          <WorkoutProvider>
+            <SafeAreaView 
+              style={{ flex: 0, backgroundColor: "#1E2028" }}
+              edges={["top"]}
+            />
+            <SafeAreaView
+              style={{ flex: 1, backgroundColor: "#18191c" }}
+              edges={[ "left", "right", "bottom"]}
+            >
+              <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
+              <NavigationContainer>
+                <DismissKeyboardWrapper>
+                  {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
+                </DismissKeyboardWrapper>
+              </NavigationContainer>
+            </SafeAreaView>
+          </WorkoutProvider>
         </DataProvider>
       </NativeBaseProvider>
     </SafeAreaProvider>

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Text, VStack, HStack, Avatar, ScrollView, Pressable, Spinner, Button } from 'native-base';
+import { Box, Text, VStack, HStack, Avatar, ScrollView, Pressable, Spinner, Button, IconButton, useToast } from 'native-base';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '../utils/supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
+import { decode } from 'base64-arraybuffer';
 
 type WorkoutTab = {
   id: number;
@@ -13,8 +15,10 @@ type WorkoutTab = {
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
+  const toast = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [stats, setStats] = useState({
     totalWorkouts: 0,
     hoursTrained: 0
@@ -72,6 +76,131 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const pickImage = async () => {
+    try {
+      // Request permission
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        toast.show({
+          title: "Permission needed",
+          description: "Please grant permission to access your photos",
+          placement: "top",
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: 'images',
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        await uploadImage(result.assets[0]);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      toast.show({
+        title: "Error",
+        description: "Failed to pick image. Please try again.",
+        placement: "top",
+        duration: 3000,
+      });
+    }
+  };
+
+  const uploadImage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
+    if (!user) return;
+    
+    try {
+      setUploading(true);
+      
+      // Generate a completely unique filename to avoid any caching issues
+      const fileExt = imageAsset.uri.split('.').pop();
+      const timestamp = Date.now();
+      const filePath = `${user.id}_${timestamp}.${fileExt}`;
+      
+      console.log('Image selected:', {
+        uri: imageAsset.uri,
+        width: imageAsset.width,
+        height: imageAsset.height,
+        type: imageAsset.type,
+        fileSize: imageAsset.fileSize,
+      });
+      
+      // Convert base64 to ArrayBuffer
+      const base64Data = imageAsset.base64;
+      if (!base64Data) throw new Error('No base64 data found');
+      
+      // Check the first few characters of base64 to confirm it's an image
+      console.log('Base64 data prefix:', base64Data.substring(0, 30) + '...');
+      
+      const arrayBuffer = decode(base64Data);
+      console.log('ArrayBuffer created with byte length:', arrayBuffer.byteLength);
+      
+      console.log('Creating new file at path:', filePath);
+      
+      // Always use upload with a unique path to avoid any caching or replacement issues
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, arrayBuffer, {
+          contentType: `image/${fileExt}`,
+          cacheControl: 'no-cache, no-store, must-revalidate'
+        });
+      
+      if (uploadError) {
+        console.error('Upload error details:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('Upload success:', uploadData);
+      
+      // Get public URL with cache busting
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+      
+      // Add strong cache busting
+      const cacheBustedUrl = `${publicUrl}?t=${timestamp}&nocache=${Math.random()}`;
+      console.log('New avatar URL with cache busting:', cacheBustedUrl);
+      
+      // Update user metadata with cache busting
+      const { data: userData, error: userUpdateError } = await supabase.auth.updateUser({
+        data: { 
+          avatar_url: cacheBustedUrl,
+          last_avatar_update: timestamp
+        }
+      });
+      
+      if (userUpdateError) throw userUpdateError;
+      console.log('User metadata updated:', userData);
+      
+      // Refresh user data
+      await fetchUserData();
+      
+      toast.show({
+        title: "Success",
+        description: "Profile picture updated successfully",
+        placement: "top",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Error updating avatar:', error);
+      toast.show({
+        title: "Error",
+        description: "Failed to update profile picture. Please try again.",
+        placement: "top",
+        duration: 3000,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (loading) {
     return (
       <Box flex={1} bg="#1E2028" justifyContent="center" alignItems="center">
@@ -86,12 +215,26 @@ const ProfileScreen: React.FC = () => {
         <VStack space={6} p={4}>
           {/* Profile Header */}
           <VStack space={4} alignItems="center" pt={4}>
-            <Avatar
-              size="2xl"
-              source={{
-                uri: user?.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80',
-              }}
-            />
+            <Box position="relative">
+              <Avatar
+                size="2xl"
+                source={{
+                  uri: user?.user_metadata?.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1000&q=80',
+                }}
+              />
+              <IconButton
+                icon={uploading ? <Spinner size="sm" color="#fff" /> : <MaterialIcons name="edit" size={20} color="#fff" />}
+                position="absolute"
+                bottom={0}
+                right={0}
+                bg="#6B8EF2"
+                rounded="full"
+                size="sm"
+                onPress={pickImage}
+                isDisabled={uploading}
+                _pressed={{ bg: "#5A7CD9" }}
+              />
+            </Box>
             <VStack space={1} alignItems="center">
               <Text color="white" fontSize="2xl" fontWeight="bold">
                 {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User'}

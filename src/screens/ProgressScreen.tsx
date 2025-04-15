@@ -7,15 +7,12 @@ import React, {
 } from "react";
 import { Box, Text, Pressable } from "native-base";
 import WorkoutCalendar from "../components/WorkoutCalendar";
-import { Split } from "../types";
 import { useFocusEffect } from "@react-navigation/native";
 import { useData } from "../contexts/DataContext";
-import RBSheet from 'react-native-raw-bottom-sheet';
-
+import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { StyleSheet } from "react-native";
-
+import SessionSummaryModal from "../components/SessionSummaryModal";
 
 interface WorkoutSession {
   date: string;
@@ -24,6 +21,7 @@ interface WorkoutSession {
 
 const ProgressScreen: React.FC = () => {
   const { splits, workoutSessions, workoutDays, loading: dataLoading } = useData();
+  const { startWorkout } = useWorkout();
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -32,8 +30,14 @@ const ProgressScreen: React.FC = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loading, setLoading] = useState(true);
   const [calendarKey, setCalendarKey] = useState(0);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>(useMemo(() => {
+    return `${currentYear}-${String(currentMonth + 1).padStart(
+      2,
+      "0"
+    )}-${String(today.getDate()).padStart(2, "0")}`;
+  }, [currentYear, currentMonth, today]));
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
+  const [showSessionSummary, setShowSessionSummary] = useState(false);
 
   // Add refs for caching
   const isInitialLoadRef = useRef(true);
@@ -42,29 +46,6 @@ const ProgressScreen: React.FC = () => {
   }>({
     workouts: [],
   });
-
-  // bottom sheet
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  const snapPointsArray = useMemo(() => ['12%', '100%'], []);
-  // const snapPoints = useMemo(() => ['45%', '100%'], []);
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: 'transparent',
-    },
-    contentContainer: {
-      paddingTop: 10,
-      paddingBottom: 50,
-      alignItems: 'center',
-      // borderWidth: 2,
-      // borderColor: 'red'
-    },
-  });
-
-  // callbacks
-  const handleSheetChanges = useCallback((index: number) => {
-    console.log('handleSheetChanges', index);
-  }, []);
 
   // Get today's date string in the same format as the calendar
   const todayString = useMemo(() => {
@@ -145,25 +126,22 @@ const ProgressScreen: React.FC = () => {
 
   const handleDayPress = useCallback(
     (date: string) => {
-      // If selecting today's date or pressing the same date again, clear the selection
-      if (date === todayString || date === selectedDate) {
-        setSelectedDate(null);
-      } else {
-        setSelectedDate(date);
+      // If pressing the same date again, do nothing
+      if (date === selectedDate) {
+        return;
       }
-      bottomSheetRef.current?.close();
+      setSelectedDate(date);
     },
-    [todayString, selectedDate]
+    [selectedDate]
   );
 
   const handleWorkoutPress = useCallback(() => {
-    bottomSheetRef.current?.snapToIndex(1);
-    if (selectedDate) {
-      console.log(`showing workout for ${selectedDate}`);
-    } else {
-      console.log("begin workout");
-    }
-  }, [selectedDate]);
+    setShowSessionSummary(true);
+  }, []);
+
+  const handleCloseSummary = useCallback(() => {
+    setShowSessionSummary(false);
+  }, []);
 
   // Get the day of week from the selected date
   const getDayOfWeek = useCallback((dateString: string | null) => {
@@ -178,14 +156,28 @@ const ProgressScreen: React.FC = () => {
   const getScheduledSplit = useCallback((dayOfWeek: string | null) => {
     if (!dayOfWeek) return null;
     
-    return splits.find(split => split.days.includes(dayOfWeek));
+    return splits.find(split => split.days.includes(dayOfWeek)) || null;
   }, [splits]);
 
   // Get the scheduled split for the selected date
   const scheduledSplit = useMemo(() => {
     const dayOfWeek = getDayOfWeek(selectedDate || todayString);
-    return getScheduledSplit(dayOfWeek);
+    return getScheduledSplit(dayOfWeek) || null;
   }, [selectedDate, todayString, getDayOfWeek, getScheduledSplit]);
+
+  const handleStartWorkout = useCallback(() => {
+    if (scheduledSplit) {
+      // Convert split exercises to Exercise objects with sets
+      const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
+        ...ex,
+        splitIds: [scheduledSplit.id],
+        sets: [{ id: `set-${ex.id}-1`, weight: 0, reps: 0, completed: false }]
+      }));
+      
+      // Start the workout with these exercises
+      startWorkout(exercisesWithSets);
+    }
+  }, [scheduledSplit, startWorkout]);
 
   if (loading || dataLoading) {
     return (
@@ -243,56 +235,26 @@ const ProgressScreen: React.FC = () => {
             </Pressable>
           </Box>
         </Box>
-        <BottomSheet
-          ref={bottomSheetRef}
-          onChange={handleSheetChanges}
-          enablePanDownToClose={false}
-          index={-1}
-          snapPoints={snapPointsArray}
-          handleIndicatorStyle={{
-            backgroundColor: 'white',
-            width: 40,
-            height: 4,
-          }}
-          backgroundStyle = {{
-            backgroundColor: '#2A2E38',
-          }}
-        >
-          <BottomSheetView style={styles.contentContainer} >
-              <Text color="white" fontSize="xl" fontWeight="bold" mb={4}>
-                {selectedDate ? `Session from ${selectedDate}` : "Begin Workout"}
-              </Text>
-            
-            {scheduledSplit && (
-              <Box bg="#1E2028" p={4} borderRadius="lg" mb={4}>
-                <Text color="white" fontSize="md">
-                  Scheduled Split: <Text fontWeight="bold" color={scheduledSplit.color || "#6B8EF2"}>{scheduledSplit.name}</Text>
-                </Text>
-                <Text color="gray.400" fontSize="sm" mt={1}>
-                  {getDayOfWeek(selectedDate || todayString)} Day
-                </Text>
-              </Box>
-            )}
-            
-            <Pressable
-              mt={4}
-              bg="red.500"
-              py={3}
-              px={6}
-              borderRadius="lg"
-              onPress={() => bottomSheetRef.current?.close()}
-              _pressed={{ opacity: 0.8 }}
-            >
-              <Text color="white" fontSize="md" fontWeight="bold">
-                Cancel
-              </Text>
-            </Pressable>
-          </BottomSheetView>
-        </BottomSheet>
+        
+        {showSessionSummary && (
+          <SessionSummaryModal
+            selectedDate={selectedDate}
+            scheduledSplit={scheduledSplit}
+            onClose={handleCloseSummary}
+            onStartWorkout={handleStartWorkout}
+          />
+        )}
       </Box>
     </GestureHandlerRootView>
   );
 };
 
 export default ProgressScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+});
 

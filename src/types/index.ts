@@ -89,7 +89,8 @@ export const DEFAULT_EXERCISES_BY_BODY_PART: Record<string, Omit<Exercise, 'spli
     { id: 'chest-3', name: 'Decline Bench Press', bodyPart: 'Chest' },
     { id: 'chest-4', name: 'Chest Flyes', bodyPart: 'Chest' },
     { id: 'chest-5', name: 'Push-Ups', bodyPart: 'Chest' },
-    { id: 'chest-6', name: 'Cable Flyes', bodyPart: 'Chest' }
+    { id: 'chest-6', name: 'Cable Flyes', bodyPart: 'Chest' },
+    { id: 'chest-7', name: 'Dips', bodyPart: 'Chest' }
   ],
   'Back': [
     { id: 'back-1', name: 'Barbell Row', bodyPart: 'Back' },

@@ -9,8 +9,8 @@ interface BottomNavbarProps {
 
 const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange }) => {
   return (
-    <Box bg="#1E2028" borderTopWidth={1} borderColor="gray.800">
-      <HStack py={2} px={4} space={8} justifyContent="space-around" alignItems="center">
+    <Box bg="#18191c" borderTopWidth={1} borderColor="gray.800">
+      <HStack px={4} space={8} justifyContent="space-around" alignItems="center"pt={4} pb={1}>
         <Pressable onPress={() => onTabChange('workout')}>
           <VStack alignItems="center" space={1}>
             <Icon 
