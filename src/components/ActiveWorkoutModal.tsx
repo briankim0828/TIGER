@@ -1,8 +1,8 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView } from 'react-native';
+import { StyleSheet, ScrollView, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Box, Text, Pressable, HStack, VStack, Input, Button } from 'native-base';
+import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider } from 'native-base';
 import { Exercise } from '../types';
 
 interface ActiveWorkoutModalProps {
@@ -34,11 +34,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // State
   const [workoutTimer, setWorkoutTimer] = useState(0);
-  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [currentExercises, setCurrentExercises] = useState<Exercise[]>([]);
+  const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
   
   // Snap points for different states - must be a memoized array to prevent re-renders
-  const snapPoints = useMemo(() => ['12%', '100%'], []);
+  // const snapPoints = useMemo(() => ['12%', '100%'], []);
+  const snapPoints = ['10%', '100%'];
   
   // Initialize with exercises
   useEffect(() => {
@@ -55,7 +56,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   useEffect(() => {
     const timer = setTimeout(() => {
       if (isVisible && bottomSheetRef.current) {
-        bottomSheetRef.current.snapToIndex(2); // Open to full height
+        bottomSheetRef.current.expand(); // Open to full height
       } else if (!isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.close();
       }
@@ -105,19 +106,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // Log when active exercise changes
   useEffect(() => {
-    if (currentExercises.length > 0 && activeExerciseIndex >= 0) {
-      const activeExercise = currentExercises[activeExerciseIndex];
-      console.log('ActiveWorkoutModal - Active exercise changed:', {
-        index: activeExerciseIndex,
-        exercise: {
-          id: activeExercise.id,
-          name: activeExercise.name,
-          bodyPart: activeExercise.bodyPart,
-          sets: activeExercise.sets
-        }
+    if (currentExercises.length > 0) {
+      console.log('ActiveWorkoutModal - Exercises loaded:', {
+        count: currentExercises.length,
+        exercises: currentExercises.map(ex => ({
+          id: ex.id,
+          name: ex.name,
+          bodyPart: ex.bodyPart,
+          sets: ex.sets?.length
+        }))
       });
     }
-  }, [activeExerciseIndex, currentExercises]);
+  }, [currentExercises]);
+  
+  // Toggle exercise expansion
+  const toggleExerciseExpansion = useCallback((exerciseId: string) => {
+    setExpandedExercises(prev => ({
+      ...prev,
+      [exerciseId]: !prev[exerciseId]
+    }));
+  }, []);
   
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
@@ -125,7 +133,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ref={bottomSheetRef}
         onChange={handleSheetChanges}
         enablePanDownToClose={false}
-        index={isVisible ? 2 : -1}
+        index={isVisible ? 1 : -1}
         snapPoints={snapPoints}
         handleIndicatorStyle={{
           backgroundColor: 'white',
@@ -137,118 +145,167 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         }}
       >
         <BottomSheetView style={styles.contentContainer}>
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-            <Box width="100%" px={4}>
-              <HStack justifyContent="space-between" alignItems="center" mb={6}>
+          <HStack justifyContent="space-between" alignItems="center" px={4}>
                 <Text color="white" fontSize="xl" fontWeight="bold">
                   Workout in Progress
                 </Text>
                 <Text color="white" fontSize="lg">
                   {formatTimer(workoutTimer)}
                 </Text>
-              </HStack>
-              
-              {/* Exercise list with sets */}
-              <VStack space={4} mb={4} width="100%">
-                {currentExercises.map((exercise, index) => (
-                  <Pressable 
-                    key={exercise.id}
-                    onPress={() => setActiveExerciseIndex(index)}
-                  >
-                    <Box 
-                      bg={index === activeExerciseIndex ? "#3A3E48" : "#1E2028"} 
-                      p={4} 
-                      borderRadius="lg"
-                      borderWidth={index === activeExerciseIndex ? 1 : 0}
-                      borderColor="#6B8EF2"
-                    >
-                      <Text color="white" fontSize="md" fontWeight="bold">
-                        {exercise.name}
-                      </Text>
-                      <Text color="gray.400" fontSize="xs">
-                        {exercise.bodyPart}
-                      </Text>
-                      
-                      {/* Sets for this exercise */}
-                      {index === activeExerciseIndex && exercise.sets && (
-                        <VStack space={2} mt={2}>
-                          {exercise.sets.map((set, setIndex) => (
-                            <HStack key={set.id} justifyContent="space-between" alignItems="center" mt={2}>
-                              <Text color="gray.400" width="60px">Set {setIndex + 1}</Text>
-                              <HStack space={2} flex={1} justifyContent="flex-end">
-                                <Input 
-                                  placeholder="Weight" 
-                                  keyboardType="numeric"
-                                  width="80px"
-                                  color="white"
-                                  value={set.weight > 0 ? set.weight.toString() : ''}
-                                />
-                                <Input 
-                                  placeholder="Reps" 
-                                  keyboardType="numeric"
-                                  width="80px"
-                                  color="white"
-                                  value={set.reps > 0 ? set.reps.toString() : ''}
-                                />
-                                <Button 
-                                  size="sm" 
-                                  colorScheme={set.completed ? "green" : "gray"}
-                                >
-                                  {set.completed ? "Done" : "Do"}
-                                </Button>
-                              </HStack>
-                            </HStack>
-                          ))}
+          </HStack>
+          
+          <Box flex={1} width="100%" display="flex">
+            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+              <Box width="100%" pb={80}> {/* Added padding to bottom for button area */}
+                
+                {/* Exercise list with sets */}
+                <VStack space={2} width="100%">
+                  {currentExercises.map((exercise, index) => (
+                    <Box key={exercise.id}>
+                      <Pressable 
+                        onPress={() => toggleExerciseExpansion(exercise.id)}
+                      >
+                        <Box 
+                          bg={"transparent"} 
+                          p={4} 
+                          borderRadius="lg"
+                          borderColor="#6B8EF2"
+                        >
+                          <Text color="white" fontSize="md" fontWeight="bold">
+                            {exercise.name}
+                          </Text>
+                          <Text color="gray.400" fontSize="xs">
+                            {exercise.bodyPart}
+                          </Text>
                           
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            colorScheme="blue"
-                            mt={2}
-                          >
-                            Add Set
-                          </Button>
-                        </VStack>
+                          {/* Sets for this exercise */}
+                          {expandedExercises[exercise.id] && exercise.sets && (
+                            <VStack space={2} mt={2} px={2}>
+                              {exercise.sets.map((set, setIndex) => (
+                                <HStack key={set.id} justifyContent="space-between" alignItems="center" mt={2}>
+                                  <Text color="white" width="60px">Set {setIndex + 1}</Text>
+                                  <HStack space={2} flex={1} justifyContent="flex-end">
+                                    <Input 
+                                      placeholder="Weight" 
+                                      keyboardType="numeric"
+                                      width="80px"
+                                      color="white"
+                                      value={set.weight > 0 ? set.weight.toString() : ''}
+                                    />
+                                    <Input 
+                                      placeholder="Reps" 
+                                      keyboardType="numeric"
+                                      width="80px"
+                                      color="white"
+                                      value={set.reps > 0 ? set.reps.toString() : ''}
+                                    />
+                                    <Button 
+                                      size="sm" 
+                                      colorScheme={set.completed ? "green" : "gray"}
+                                    >
+                                      {set.completed ? "Done" : "Do"}
+                                    </Button>
+                                  </HStack>
+                                </HStack>
+                              ))}
+                              
+                              <Pressable
+                                onPress={() => {/* Add your onPress logic here */}}
+                                mt={2}
+                                py={2}
+                                px={4}
+                                borderRadius="md"
+                                borderWidth={1}
+                                borderColor="#6B8EF2"
+                                alignItems="center"
+                                justifyContent="center"
+                                _pressed={{ opacity: 0.8 }}
+                              >
+                                <Text color="#6B8EF2" fontSize="sm" fontWeight="bold">
+                                  Add Set
+                                </Text>
+                              </Pressable>
+                            </VStack>
+                          )}
+                        </Box>
+                      </Pressable>
+                      
+                      {/* Add divider after each exercise except the last one */}
+                      {index < currentExercises.length - 1 && (
+                        <Divider bg="gray.700" thickness="1" my={1} opacity={1} width="95%" alignSelf="center" />
                       )}
                     </Box>
-                  </Pressable>
-                ))}
-              </VStack>
-              
-              <HStack space={2} justifyContent="space-between" mt={4}>
-                <Button 
-                  colorScheme="blue" 
-                  size="sm"
-                  flex={1}
-                >
-                  Add Exercise
-                </Button>
+                  ))}
+                </VStack>
                 
-                <Button 
-                  colorScheme="gray" 
-                  size="sm"
+                <Box mt={6} mb={2} px={2}>
+                  <Pressable
+                    bg="transparent"
+                    py={2}
+                    px={4}
+                    borderRadius="md"
+                    borderWidth={1}
+                    borderColor="#6B8EF2"
+                    alignItems="center"
+                    justifyContent="center"
+                    _pressed={{ opacity: 0.8 }}
+                  >
+                    <Text color="#6B8EF2" fontSize="md" fontWeight="bold">
+                      Add Exercise
+                    </Text>
+                  </Pressable>
+                </Box>
+              </Box>
+            </ScrollView>
+            
+            {/* Fixed buttons at bottom */}
+            <Box 
+              position="absolute" 
+              bottom={0} 
+              left={0} 
+              right={0} 
+              bg="#2A2E38" 
+              p={2} 
+              mb={2}
+              // borderTopWidth={1}
+              // borderTopColor="gray.700"
+            >
+              <HStack space={2}>
+                <Pressable
+                  bg="transparent"
+                  py={3}
+                  px={6}
+                  borderRadius="lg"
+                  borderWidth={1.5}
+                  borderColor="red.500"
                   flex={1}
+                  alignItems="center"
+                  justifyContent="center"
+                  _pressed={{ opacity: 0.8 }}
                 >
-                  Replace Exercise
-                </Button>
-              </HStack>
+                  <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
+                    Cancel Workout
+                  </Text>
+                </Pressable>
               
-              <Pressable
-                mt={6}
-                bg="red.500"
-                py={3}
-                px={6}
-                borderRadius="lg"
-                onPress={handleEndWorkout}
-                _pressed={{ opacity: 0.8 }}
-                mb={4}
-              >
-                <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
-                  End Workout
-                </Text>
-              </Pressable>
+                <Pressable
+                  bg="red.500"
+                  py={3}
+                  px={6}
+                  borderRadius="lg"
+                  onPress={handleEndWorkout}
+                  _pressed={{ opacity: 0.8 }}
+                  flex={1}
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                    End Workout
+                  </Text>
+                </Pressable>
+              </HStack>
             </Box>
-          </ScrollView>
+          </Box>
         </BottomSheetView>
       </BottomSheet>
     </GestureHandlerRootView>
@@ -269,7 +326,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     width: '100%',
-    paddingBottom: 0, // Added prop to get rid of the bottom padding
+    paddingBottom: 0,
   },
   scrollView: {
     flex: 1,

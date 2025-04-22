@@ -1,5 +1,5 @@
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
-import { StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Box, Text, Pressable, VStack, HStack } from 'native-base';
@@ -40,9 +40,20 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   
   // State for exercises
   const [currentExercises, setCurrentExercises] = React.useState<Exercise[]>([]);
+  const [contentHeight, setContentHeight] = useState(0);
   
-  // Snap points for different states - must be a memoized array to prevent re-renders
-  const snapPoints = useMemo(() => ['12%', '70%'], []);
+  // Calculate snap points based on content height
+  const snapPoints = useMemo(() => {
+    // Use minimum height + content height or percentage-based fallback
+    const calculatedHeight = contentHeight > 0 ? contentHeight + 40 : '50%';
+    return [calculatedHeight];
+  }, [contentHeight]);
+  
+  // Handle the content layout to get its height
+  const onContentLayout = useCallback((event: any) => {
+    const { height } = event.nativeEvent.layout;
+    setContentHeight(height);
+  }, []);
   
   // Initialize component
   useEffect(() => {
@@ -52,8 +63,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         // Initialize with exercises from the scheduled split if available
         const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
           ...ex,
-          splitIds: [scheduledSplit.id],
-          sets: [{ id: `set-${ex.id}-1`, weight: 0, reps: 0, completed: false }]
+          splitIds: [scheduledSplit.id]
         }));
         
         console.log('SessionSummaryModal - Initializing exercises:', JSON.stringify(exercisesWithSets, null, 2));
@@ -79,7 +89,6 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   const handleSheetChanges = useCallback((index: number) => {    
     // If sheet is closed, call onClose
     if (index === -1) {
-      console.log('SessionSummaryModal - Workout cancelled');
       // set the visibility of the session summary modal to false in prgressScreen
       onClose();
     }
@@ -87,6 +96,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   
   // Cancel workout
   const handleCancelWorkout = useCallback(() => {
+    console.log('SessionSummaryModal - Workout cancelled');
     bottomSheetRef.current?.close();
   }, []);
   
@@ -125,7 +135,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         }}
       >
         <BottomSheetView style={styles.contentContainer}>
-          <Box width="100%" px={3} pb={4}>
+          <Box width="100%" px={3} pb={4} onLayout={onContentLayout}>
             <Text color="white" fontSize="xl" fontWeight="bold" textAlign="center">
               {scheduledSplit ? scheduledSplit.name : "No splits scheduled"}
             </Text>
@@ -140,31 +150,19 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
             
             {/* Scheduled exercises preview */}
             {currentExercises.length > 0 && (
-              <Box bg="transparent" p={4} borderRadius="lg" mb={4}>
-                <VStack space={1}>
-                  {currentExercises.map(exercise => (
-                    <Text key={exercise.id} color="white" fontSize="sm">
-                      • {exercise.name} ({exercise.bodyPart})
-                    </Text>
+              <Box bg="transparent" p={2} borderRadius="lg" mb={2} width="100%">
+                <Box flexDirection="row" flexWrap="wrap">
+                  {currentExercises.map((exercise, index) => (
+                    <Box key={exercise.id} width="50%" mb={2} pr={index % 2 === 0 ? 1 : 0} pl={index % 2 === 1 ? 1 : 0}>
+                      <Text color="white" fontSize="sm">
+                        {index + 1}. {exercise.name}
+                      </Text>
+                    </Box>
                   ))}
-                </VStack>
+                </Box>
               </Box>
             )}
             <HStack space={2}>
-              <Pressable
-                mt={4}
-                bg="#6B8EF2"
-                py={3}
-                flex={1}
-                borderRadius="lg"
-                onPress={handleStartWorkout}
-                _pressed={{ opacity: 0.8 }}
-              >
-                <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
-                  Start Workout
-                </Text>
-              </Pressable>
-              
               <Pressable
                 mt={4}
                 bg="red.500"
@@ -176,6 +174,20 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
               >
                 <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
                   Cancel
+                </Text>
+              </Pressable>
+
+              <Pressable
+                mt={4}
+                bg="#6B8EF2"
+                py={3}
+                flex={1}
+                borderRadius="lg"
+                onPress={handleStartWorkout}
+                _pressed={{ opacity: 0.8 }}
+              >
+                <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                  Start Workout
                 </Text>
               </Pressable>
             </HStack>
@@ -194,7 +206,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     top: 0,
-    zIndex: 100,
+    zIndex: 999,
     pointerEvents: 'box-none',
   },
   contentContainer: {

@@ -67,30 +67,47 @@ const ExerciseSelectionView = () => {
     // Group exercises by body part
     const groupedExercises: Record<string, Exercise[]> = {};
 
-    // First, add exercises from the data store
+    // First initialize with all default exercises
+    BODY_PARTS.forEach((bodyPart) => {
+      const defaultExercises = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(
+        (ex) => ({
+          ...ex,
+          splitIds: [],
+        })
+      );
+      groupedExercises[bodyPart] = [...defaultExercises];
+    });
+
+    // Then, add or update exercises from the data store
     if (allExercises.length > 0) {
       allExercises.forEach((exercise) => {
         if (!groupedExercises[exercise.bodyPart]) {
           groupedExercises[exercise.bodyPart] = [];
         }
-        groupedExercises[exercise.bodyPart].push(exercise);
+        
+        // Check if this exercise already exists in the group
+        const existingIndex = groupedExercises[exercise.bodyPart].findIndex(
+          ex => ex.id === exercise.id
+        );
+        
+        if (existingIndex >= 0) {
+          // Update existing exercise
+          groupedExercises[exercise.bodyPart][existingIndex] = exercise;
+        } else {
+          // Add new exercise
+          groupedExercises[exercise.bodyPart].push(exercise);
+        }
       });
     }
-    // For any missing body parts, add default exercises
-    BODY_PARTS.forEach((bodyPart) => {
-      if (
-        !groupedExercises[bodyPart] ||
-        groupedExercises[bodyPart].length === 0
-      ) {
-        const defaultExercises = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(
-          (ex) => ({
-            ...ex,
-            splitIds: [],
-          })
-        );
-        groupedExercises[bodyPart] = defaultExercises;
-      }
-    });
+
+    // Log the exercises to debug
+    console.log('ExerciseSelectionView - Initialized exercises:', 
+      Object.keys(groupedExercises).map(bodyPart => ({
+        bodyPart,
+        count: groupedExercises[bodyPart].length,
+        exercises: groupedExercises[bodyPart].map(ex => ex.name)
+      }))
+    );
 
     setExercisesByBodyPart(groupedExercises);
   }, [allExercises]);

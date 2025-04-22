@@ -682,6 +682,7 @@ const WorkoutScreen = () => {
 
   // Define handler functions for toggling edit modes
   const toggleProgramEditMode = async () => {
+    console.log("toggleProgramEditMode");
     // Toggle between program edit mode and no edit mode
     if (editMode === "program") {
       // Exit program edit mode

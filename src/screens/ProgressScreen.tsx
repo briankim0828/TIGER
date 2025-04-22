@@ -11,7 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useData } from "../contexts/DataContext";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from "react-native";
+import { ScrollView, StyleSheet } from "react-native";
 import SessionSummaryModal from "../components/SessionSummaryModal";
 
 interface WorkoutSession {
@@ -59,6 +59,11 @@ const ProgressScreen: React.FC = () => {
   const isFutureDate = useMemo(() => {
     if (!selectedDate) return false;
     return selectedDate > todayString;
+  }, [selectedDate, todayString]);
+
+  // Check if selected date is today
+  const isToday = useMemo(() => {
+    return selectedDate === todayString;
   }, [selectedDate, todayString]);
 
   // Initial load - should only happen once when app starts
@@ -191,7 +196,7 @@ const ProgressScreen: React.FC = () => {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <Box flex={1} bg="#1E2028">
+      <ScrollView style={{ flex: 1, backgroundColor: "#1E2028" }}>
         <Box flex={1}>
           <Text color="white" fontSize="2xl" fontWeight="bold" pl={4}>
             My Progress
@@ -208,7 +213,7 @@ const ProgressScreen: React.FC = () => {
           />
 
           {/* button - now positioned below calendar */}
-          <Box px={4} py={1} >
+          <Box px={4} py={1} pt={5}>
             <Pressable
               bg="#6B8EF2"
               py={4}
@@ -228,23 +233,24 @@ const ProgressScreen: React.FC = () => {
               >
                 {isFutureDate
                   ? "Not Yet..."
-                  : selectedDate
-                    ? `Session from ${selectedDate}`
-                    : "Begin Workout"}
+                  : isToday
+                    ? "Begin Today's Workout"
+                    : `Session from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
               </Text>
             </Pressable>
           </Box>
         </Box>
-        
-        {showSessionSummary && (
-          <SessionSummaryModal
-            selectedDate={selectedDate}
-            scheduledSplit={scheduledSplit}
-            onClose={handleCloseSummary}
-            onStartWorkout={handleStartWorkout}
-          />
-        )}
-      </Box>
+      </ScrollView>
+      
+      {/* Move SessionSummaryModal outside of ScrollView to position at bottom of screen */}
+      {showSessionSummary && (
+        <SessionSummaryModal
+          selectedDate={selectedDate}
+          scheduledSplit={scheduledSplit}
+          onClose={handleCloseSummary}
+          onStartWorkout={handleStartWorkout}
+        />
+      )}
     </GestureHandlerRootView>
   );
 };
