@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider } from 'native-base';
 import { Exercise } from '../types';
+import { useWorkout } from '../contexts/WorkoutContext';
 
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
@@ -16,18 +17,39 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   exercises,
   onClose,
 }) => {
+  // Access the updateSet function from WorkoutContext
+  const { updateSet, currentWorkoutSession } = useWorkout();
+  
   // Log props when component mounts or props change
   useEffect(() => {
-    console.log('ActiveWorkoutModal - Activated with data:', {
-      isVisible,
-      exercises: exercises.map(ex => ({
-        id: ex.id,
-        name: ex.name,
-        bodyPart: ex.bodyPart,
-        sets: ex.sets
-      }))
-    });
-  }, [isVisible, exercises]);
+    // console.log('ActiveWorkoutModal - Activated with data:', {
+    //   isVisible,
+    //   exercises: exercises.map(ex => ({
+    //     id: ex.id,
+    //     name: ex.name,
+    //     bodyPart: ex.bodyPart,
+    //     sets: ex.sets?.length
+    //   }))
+    // });
+    
+    if (currentWorkoutSession && isVisible) {
+      console.log('ActiveWorkoutModal - Current workout session:', {
+        session_date: currentWorkoutSession.session_date,
+        split_id: currentWorkoutSession.split_id,
+        user_id: currentWorkoutSession.user_id,
+        exercises_count: currentWorkoutSession.exercises.length,
+        sets_status: currentWorkoutSession.sets.map((exerciseSets, i) => ({
+          exercise: currentWorkoutSession.exercises[i]?.name,
+          sets: exerciseSets.map(set => ({
+            id: set.id,
+            weight: set.weight,
+            reps: set.reps,
+            completed: set.completed
+          }))
+        }))
+      });
+    }
+  }, [isVisible, exercises, currentWorkoutSession]);
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -105,19 +127,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   };
   
   // Log when active exercise changes
-  useEffect(() => {
-    if (currentExercises.length > 0) {
-      console.log('ActiveWorkoutModal - Exercises loaded:', {
-        count: currentExercises.length,
-        exercises: currentExercises.map(ex => ({
-          id: ex.id,
-          name: ex.name,
-          bodyPart: ex.bodyPart,
-          sets: ex.sets?.length
-        }))
-      });
-    }
-  }, [currentExercises]);
+  // useEffect(() => {
+  //   if (currentExercises.length > 0) {
+  //     console.log('ActiveWorkoutModal - Exercises loaded:', {
+  //       count: currentExercises.length,
+  //       exercises: currentExercises.map(ex => ({
+  //         id: ex.id,
+  //         name: ex.name,
+  //         bodyPart: ex.bodyPart,
+  //         sets: ex.sets?.length
+  //       }))
+  //     });
+  //   }
+  // }, [currentExercises]);
   
   // Toggle exercise expansion
   const toggleExerciseExpansion = useCallback((exerciseId: string) => {
@@ -126,6 +148,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       [exerciseId]: !prev[exerciseId]
     }));
   }, []);
+
+  // Handle weight change
+  const handleWeightChange = useCallback((exerciseIndex: number, setIndex: number, weight: string) => {
+    const weightValue = parseFloat(weight) || 0;
+    console.log(`ActiveWorkoutModal - Weight changed for exercise ${exerciseIndex}, set ${setIndex}: ${weightValue}`);
+    updateSet(exerciseIndex, setIndex, { weight: weightValue });
+  }, [updateSet]);
+
+  // Handle reps change
+  const handleRepsChange = useCallback((exerciseIndex: number, setIndex: number, reps: string) => {
+    const repsValue = parseInt(reps) || 0;
+    console.log(`ActiveWorkoutModal - Reps changed for exercise ${exerciseIndex}, set ${setIndex}: ${repsValue}`);
+    updateSet(exerciseIndex, setIndex, { reps: repsValue });
+  }, [updateSet]);
+
+  // Handle set completion toggle
+  const handleSetCompletion = useCallback((exerciseIndex: number, setIndex: number, completed: boolean) => {
+    const newCompletedStatus = !completed;
+    console.log(`ActiveWorkoutModal - Set completion toggled for exercise ${exerciseIndex}, set ${setIndex}: ${newCompletedStatus}`);
+    updateSet(exerciseIndex, setIndex, { completed: newCompletedStatus });
+  }, [updateSet]);
   
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
@@ -160,7 +203,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 
                 {/* Exercise list with sets */}
                 <VStack space={2} width="100%">
-                  {currentExercises.map((exercise, index) => (
+                  {currentExercises.map((exercise, exerciseIndex) => (
                     <Box key={exercise.id}>
                       <Pressable 
                         onPress={() => toggleExerciseExpansion(exercise.id)}
@@ -191,6 +234,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                       width="80px"
                                       color="white"
                                       value={set.weight > 0 ? set.weight.toString() : ''}
+                                      onChangeText={(text) => handleWeightChange(exerciseIndex, setIndex, text)}
                                     />
                                     <Input 
                                       placeholder="Reps" 
@@ -198,10 +242,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                       width="80px"
                                       color="white"
                                       value={set.reps > 0 ? set.reps.toString() : ''}
+                                      onChangeText={(text) => handleRepsChange(exerciseIndex, setIndex, text)}
                                     />
                                     <Button 
                                       size="sm" 
                                       colorScheme={set.completed ? "green" : "gray"}
+                                      onPress={() => handleSetCompletion(exerciseIndex, setIndex, set.completed)}
                                     >
                                       {set.completed ? "Done" : "Do"}
                                     </Button>
@@ -231,7 +277,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       </Pressable>
                       
                       {/* Add divider after each exercise except the last one */}
-                      {index < currentExercises.length - 1 && (
+                      {exerciseIndex < currentExercises.length - 1 && (
                         <Divider bg="gray.700" thickness="1" my={1} opacity={1} width="95%" alignSelf="center" />
                       )}
                     </Box>
@@ -266,7 +312,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               right={0} 
               bg="#2A2E38" 
               p={2} 
-              mb={2}
+              pb={3}
+              // mb={2}
+              // borderWidth={1}
+              // borderColor="red"
               // borderTopWidth={1}
               // borderTopColor="gray.700"
             >

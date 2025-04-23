@@ -26,11 +26,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         id: scheduledSplit.id,
         name: scheduledSplit.name,
         days: scheduledSplit.days,
-        exercises: scheduledSplit.exercises.map(ex => ({
-          id: ex.id,
-          name: ex.name,
-          bodyPart: ex.bodyPart
-        }))
+        exercises: scheduledSplit.exercises.map(ex => ex.name).join(', ')
       } : null
     });
   }, [selectedDate, scheduledSplit]);
@@ -61,13 +57,13 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     const timer = setTimeout(() => {
       if (scheduledSplit && bottomSheetRef.current) {
         // Initialize with exercises from the scheduled split if available
-        const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
+        const exercisesWithSplitId = scheduledSplit.exercises.map(ex => ({
           ...ex,
           splitIds: [scheduledSplit.id]
         }));
         
-        console.log('SessionSummaryModal - Initializing exercises:', JSON.stringify(exercisesWithSets, null, 2));
-        setCurrentExercises(exercisesWithSets);
+        // console.log('SessionSummaryModal - Initializing exercises:', JSON.stringify(exercisesWithSets, null, 2));
+        setCurrentExercises(exercisesWithSplitId);
       }
     }, 100);
     

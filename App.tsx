@@ -24,12 +24,12 @@ import { TouchableWithoutFeedback, Keyboard, View, StyleSheet } from "react-nati
 
 // Active Workout Modal Component
 const ActiveWorkoutModalContainer = () => {
-  const { isWorkoutActive, workoutExercises, endWorkout } = useWorkout();
+  const { isWorkoutActive, currentWorkoutSession, endWorkout } = useWorkout();
 
   return (
     <ActiveWorkoutModal 
       isVisible={isWorkoutActive}
-      exercises={workoutExercises}
+      exercises={currentWorkoutSession?.exercises || []}
       onClose={endWorkout}
     />
   );

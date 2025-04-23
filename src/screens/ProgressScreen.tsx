@@ -176,11 +176,10 @@ const ProgressScreen: React.FC = () => {
       const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
         ...ex,
         splitIds: [scheduledSplit.id],
-        sets: [{ id: `set-${ex.id}-1`, weight: 0, reps: 0, completed: false }]
       }));
       
-      // Start the workout with these exercises
-      startWorkout(exercisesWithSets);
+      // Start the workout with these exercises and pass the split ID
+      startWorkout(exercisesWithSets, scheduledSplit.id);
     }
   }, [scheduledSplit, startWorkout]);
 
