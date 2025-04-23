@@ -129,15 +129,48 @@ const ProgressScreen: React.FC = () => {
     }, [workoutDays])
   );
 
+  // Get the day of week from the selected date
+  const getDayOfWeek = useCallback((dateString: string | null) => {
+    if (!dateString) return null;
+    
+    const date = new Date(dateString);
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[date.getDay()];
+  }, []);
+
   const handleDayPress = useCallback(
     (date: string) => {
       // If pressing the same date again, do nothing
       if (date === selectedDate) {
         return;
       }
+      
+      // Find the workout session for this date
+      const workoutSession = workoutSessions.find(session => session.date === date);
+      
+      // Debug log with detailed information about selected date
+      console.log('[DEBUG] Selected Date Info:', {
+        date,
+        isToday: date === todayString,
+        isFuture: date > todayString,
+        dayOfWeek: getDayOfWeek(date),
+        workoutSession: workoutSession 
+          ? {
+              id: workoutSession.id,
+              date: workoutSession.date,
+              startTime: workoutSession.startTime,
+              durationSec: workoutSession.durationSec,
+              splitId: workoutSession.splitId,
+              exercisesCount: workoutSession.exercises.length,
+              totalSets: workoutSession.sets.flat().length,
+              completed: workoutSession.completed
+            } 
+          : 'No session found'
+      });
+      
       setSelectedDate(date);
     },
-    [selectedDate]
+    [selectedDate, todayString, getDayOfWeek, workoutSessions]
   );
 
   const handleWorkoutPress = useCallback(() => {
@@ -146,15 +179,6 @@ const ProgressScreen: React.FC = () => {
 
   const handleCloseSummary = useCallback(() => {
     setShowSessionSummary(false);
-  }, []);
-
-  // Get the day of week from the selected date
-  const getDayOfWeek = useCallback((dateString: string | null) => {
-    if (!dateString) return null;
-    
-    const date = new Date(dateString);
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return days[date.getDay()];
   }, []);
 
   // Find the split scheduled for the selected day
@@ -172,6 +196,12 @@ const ProgressScreen: React.FC = () => {
 
   const handleStartWorkout = useCallback(() => {
     if (scheduledSplit) {
+      console.log('ProgressScreen - Starting workout with split:', {
+        splitId: scheduledSplit.id,
+        splitName: scheduledSplit.name,
+        exercise_count: scheduledSplit.exercises.length
+      });
+      
       // Convert split exercises to Exercise objects with sets
       const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
         ...ex,

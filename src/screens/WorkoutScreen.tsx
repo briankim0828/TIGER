@@ -43,6 +43,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WorkoutStackParamList } from "./WorkoutMain";
 import { parseFontSize } from "../../helper/fontsize";
 import { supabase } from "../utils/supabaseClient";
+import { newUuid } from "../utils/ids";
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 
@@ -108,7 +109,7 @@ const ExerciseItem = React.memo(
       <Pressable
         onPress={() => onToggle(exercise.id)}
         bg="#1E2028"
-        p={3}
+        p={1.5}
         borderRadius="md"
         position="relative"
       >
@@ -178,7 +179,7 @@ const BodyPartSection = React.memo(
     isFirstItem?: boolean;
   }) => {
     return (
-      <Box mt={isFirstItem ? 2 : 6} >
+      <Box mt={isFirstItem ? 2 : 1} >
         <Text color="gray.400" fontSize="sm" mb={2}>
           {bodyPart}
         </Text>
@@ -207,13 +208,7 @@ const OptimizedExerciseList = React.memo(
     editMode,
   }: {
     data: BodyPartSectionData[];
-    renderItem: ({
-      item,
-      index,
-    }: {
-      item: BodyPartSectionData;
-      index: number;
-    }) => React.ReactElement;
+    renderItem: ({ item, index }: { item: BodyPartSectionData; index: number }) => React.ReactElement;
     extraData: any[];
     editMode: string;
   }) => {
@@ -221,33 +216,13 @@ const OptimizedExerciseList = React.memo(
     if (!data || data.length === 0) return null;
 
     return (
-      <View
-        style={{
-          flex: 1,
-          minHeight: 200,
-          width: "100%",
-        }}
-      >
-        <FlashList
-          data={data}
-          renderItem={renderItem}
-          estimatedItemSize={250}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={true}
-          extraData={[...extraData, editMode]}
-          // Add these parameters for better rendering during scrolling
-          overrideItemLayout={(layout, item) => {
-            // Provide consistent item height estimation
-            layout.size = 250;
-          }}
-          // Increase draw distance to render more items during scrolling
-          drawDistance={500}
-          // Improve refresh trigger sensitivity
-          onRefresh={null}
-          refreshing={false}
-        />
-      </View>
+      <VStack space={2} width="100%">
+        {data.map((item, index) => (
+          <React.Fragment key={item.id}>
+            {renderItem({ item, index })}
+          </React.Fragment>
+        ))}
+      </VStack>
     );
   }
 );
@@ -329,7 +304,7 @@ const WeekdayItem = React.memo(
             p={2}
             borderRadius="lg"
             w="full"
-            h="16"
+            h="60px"
             justifyContent="center"
             alignItems="center"
             position="relative"
@@ -412,6 +387,11 @@ const SplitItem = React.memo(
     const arrowOpacity = useSharedValue(1);
     const [value, setValue] = useState(split.name);
 
+    // Update value when split name changes (for example when switching between splits)
+    useEffect(() => {
+      setValue(split.name);
+    }, [split.name]);
+
     // Update border color when selection changes
     useEffect(() => {
       borderColor.value = withTiming(
@@ -460,9 +440,14 @@ const SplitItem = React.memo(
       }
     };
 
-    const handleNameEdit = (text: string) => {
+    // Only track changes locally in the input
+    const handleTextChange = (text: string) => {
       setValue(text);
-      onNameEdit(text);
+    };
+
+    // Apply the changes to the parent state when editing is complete
+    const handleEditingComplete = () => {
+      onNameEdit(value);
     };
 
     const calculatedFontSize = useMemo(() => {
@@ -475,7 +460,7 @@ const SplitItem = React.memo(
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         bg="transparent"
-        p={4}
+        p={3}
         pl={6}
         borderRadius="md"
         position="relative"
@@ -530,7 +515,9 @@ const SplitItem = React.memo(
               <Box flex={1}>
                 <TextInput
                   value={value}
-                  onChangeText={handleNameEdit}
+                  onChangeText={handleTextChange}
+                  onEndEditing={handleEditingComplete}
+                  onBlur={handleEditingComplete}
                   placeholder="Enter split name"
                   placeholderTextColor="rgba(255, 255, 255, 0.4)"
                   style={{ color: "white", fontSize: calculatedFontSize }}
@@ -689,6 +676,7 @@ const WorkoutScreen = () => {
       setSelectedDay(null);
       setSelectedSplit(null);
 
+      // Save to Supabase when exiting program edit mode
       const { data: user } = await supabase.auth.getUser();
       await supabase.from("splits").upsert(
         {
@@ -697,7 +685,7 @@ const WorkoutScreen = () => {
           created_at: Date.now(),
         },
         {
-          onConflict: ["user_id"],
+          onConflict: "user_id",
         }
       );
 
@@ -709,28 +697,47 @@ const WorkoutScreen = () => {
     // If we're in splits edit mode, do nothing
   };
 
-  const toggleSplitsEditMode = async () => {
-    // Toggle between splits edit mode and no edit mode
-    if (editMode === "splits") {
-      // Exit splits edit mode
-      const { data: user } = await supabase.auth.getUser();
+  // Modify the handleSplitNameEdit function to separate local state updates from database operations
+  const handleSplitNameEdit = useCallback(
+    (id: string, newName: string) => {
+      // Only update local state, no database operation
+      const updatedSplits = splits.map((split: Split) =>
+        split.id === id ? { ...split, name: newName } : split
+      );
+      updateSplits(updatedSplits);
+    },
+    [splits, updateSplits]
+  );
+  
+  // Add a new function to save all splits to Supabase (to be called when edit mode is exited)
+  const saveSplitsToSupabase = useCallback(async () => {
+    console.log("Saving splits to Supabase");
+    const { data: user } = await supabase.auth.getUser();
+    if (user?.user?.id) {
       await supabase.from("splits").upsert(
         {
-          user_id: user.user?.id,
+          user_id: user.user.id,
           splits: splits,
           created_at: Date.now(),
         },
         {
-          onConflict: ["user_id"],
+          onConflict: "user_id"
         }
       );
+    }
+  }, [splits]);
+
+  // Modify the toggle function to save splits when exiting edit mode
+  const toggleSplitsEditMode = useCallback(async () => {
+    if (editMode === "splits") {
+      // Exiting edit mode - save changes to Supabase
+      await saveSplitsToSupabase();
       setEditModeWithDebug("none");
-    } else if (editMode === "none") {
-      // Enter splits edit mode
+    } else {
+      // Entering edit mode
       setEditModeWithDebug("splits");
     }
-    // If we're in program edit mode, do nothing
-  };
+  }, [editMode, saveSplitsToSupabase]);
 
   // Add animation value for border color
   const borderColor = useSharedValue("#3A3E48");
@@ -748,6 +755,17 @@ const WorkoutScreen = () => {
       borderColor: borderColor.value,
     };
   });
+
+  // Define the desired order of body parts
+  const BODY_PART_ORDER: string[] = [
+    'Chest',
+    'Back',
+    'Legs',
+    'Shoulders',
+    'Arms',
+    'Core',
+    'Cardio',
+  ];
 
   // Optimize data processing
   const processSplitsData = useCallback((splitsData: Split[]) => {
@@ -777,14 +795,17 @@ const WorkoutScreen = () => {
       return acc;
     }, {} as Record<string, Exercise[]>);
 
-    // Pre-compute bodyPartSections for rendering
-    const bodyPartSections = Object.entries(exercisesByBodyPart).map(
-      ([bodyPart, bodyPartExercises]) => ({
-        id: bodyPart,
-        bodyPart,
-        exercises: bodyPartExercises,
-      })
-    );
+    // Pre-compute bodyPartSections for rendering, respecting the defined order
+    const bodyPartSections = BODY_PART_ORDER.reduce((acc, bodyPart) => {
+      if (exercisesByBodyPart[bodyPart]) {
+        acc.push({
+          id: bodyPart,
+          bodyPart,
+          exercises: exercisesByBodyPart[bodyPart],
+        });
+      }
+      return acc;
+    }, [] as BodyPartSectionData[]);
 
     return { exercises, exercisesByBodyPart, bodyPartSections };
   }, []);
@@ -822,18 +843,7 @@ const WorkoutScreen = () => {
         return { ...s, days: daysWithoutSelected };
       });
 
-
-      const { data: user } = await supabase.auth.getUser();
-      await supabase.from("splits").upsert(
-        {
-          user_id: user.user?.id,
-          splits: updatedSplits,
-          created_at: Date.now(),
-        },
-        {
-          onConflict: ["user_id"],
-        }
-      );
+      // Only update local state, Supabase will be updated when user presses "Done"
       console.log("Updated splits after assignment:", updatedSplits);
       updateSplits(updatedSplits);
       setSelectedDay(null);
@@ -969,29 +979,6 @@ const WorkoutScreen = () => {
     };
   }, []);
 
-  const handleSplitNameEdit = useCallback(
-    async (id: string, newName: string) => {
-      const updatedSplits = splits.map((split: Split) =>
-        split.id === id ? { ...split, name: newName } : split
-      );
-
-
-      const { data: user } = await supabase.auth.getUser();
-      await supabase.from("splits").upsert(
-        {
-          user_id: user.user?.id,
-          splits: updatedSplits,
-          created_at: Date.now(),
-        },
-        {
-          onConflict: ["user_id"],
-        }
-      );
-      updateSplits(updatedSplits);
-    },
-    [splits, updateSplits]
-  );
-
   const handleColorSelect = useCallback(
     async (id: string, color: string) => {
       console.log("Changing split color:", {
@@ -1000,21 +987,9 @@ const WorkoutScreen = () => {
         currentSplits: splits,
       });
 
+      // Only update local state, Supabase will be updated when user presses "Done"
       const updatedSplits = splits.map((split: Split) =>
         split.id === id ? { ...split, color } : split
-      );
-
-
-      const { data: user } = await supabase.auth.getUser();
-      await supabase.from("splits").upsert(
-        {
-          user_id: user.user?.id,
-          splits: updatedSplits,
-          created_at: Date.now(),
-        },
-        {
-          onConflict: ["user_id"],
-        }
       );
 
       updateSplits(updatedSplits);
@@ -1024,27 +999,15 @@ const WorkoutScreen = () => {
 
   const handleAddSplit = useCallback(async () => {
     const newSplit: Split = {
-      id: Date.now().toString(),
+      id: newUuid(),
       name: `Split ${splits.length + 1}`,
       color: "#FF5733",
       days: [],
       exercises: [],
     };
 
+    // Only update local state, Supabase will be updated when user presses "Done"
     const updatedSplits = [...splits, newSplit];
-
-    const { data: user } = await supabase.auth.getUser();
-    await supabase.from("splits").upsert(
-      {
-        user_id: user.user?.id,
-        splits: updatedSplits,
-        created_at: Date.now(),
-      },
-      {
-        onConflict: ["user_id"],
-      }
-    );
-
     updateSplits(updatedSplits);
   }, [splits, updateSplits]);
 
@@ -1055,20 +1018,9 @@ const WorkoutScreen = () => {
         currentSplits: splits,
       });
 
+      // Only update local state, Supabase will be updated when user presses "Done"
       const updatedSplits = splits.filter((split: Split) => split.id !== id);
       console.log("Updated splits after deletion:", updatedSplits);
-
-      const { data: user } = await supabase.auth.getUser();
-      await supabase.from("splits").upsert(
-        {
-          user_id: user.user?.id,
-          splits: updatedSplits,
-          created_at: Date.now(),
-        },
-        {
-          onConflict: ["user_id"],
-        }
-      );
       updateSplits(updatedSplits);
     },
     [splits, updateSplits]
@@ -1081,22 +1033,10 @@ const WorkoutScreen = () => {
         currentSplits: splits,
       });
 
+      // Only update local state, Supabase will be updated when user presses "Done"
       const updatedSplits = splits.map((split: Split) =>
         split.id === updatedSplit.id ? updatedSplit : split
       );
-
-      const { data: user } = await supabase.auth.getUser();
-      await supabase.from("splits").upsert(
-        {
-          user_id: user.user?.id,
-          splits: updatedSplits,
-          created_at: Date.now(),
-        },
-        {
-          onConflict: ["user_id"],
-        }
-      );
-      // console.log('Updated splits after detail update:', updatedSplits);
       updateSplits(updatedSplits);
     },
     [splits, updateSplits]
@@ -1151,14 +1091,9 @@ const WorkoutScreen = () => {
 
   // Update the render function to create a stable set of body part sections
   const bodyPartSections = useMemo(() => {
-    return Object.entries(
-      processedDataRef.current.exercisesByBodyPart || {}
-    ).map(([bodyPart, exercises]) => ({
-      id: bodyPart,
-      bodyPart,
-      exercises,
-    }));
-  }, [processedDataRef.current.exercisesByBodyPart]);
+    // Use the ordered sections from the processed data
+    return processedDataRef.current.bodyPartSections || [];
+  }, [processedDataRef.current.bodyPartSections]);
 
   // Render function for FlashList
   const renderBodyPartSection = useCallback(
@@ -1263,6 +1198,7 @@ const WorkoutScreen = () => {
                   justifyContent="space-between"
                   alignItems="center"
                   width="full"
+                  pb={2}
                 >
                   <Text color="white" fontSize="xl" fontWeight="bold">
                     My Splits
@@ -1283,7 +1219,7 @@ const WorkoutScreen = () => {
                   )}
                 </HStack>
 
-                <VStack space={3}>
+                <VStack space={2} >
                   {splits.length === 0 ? (
                     <Text color="gray.400" fontSize="sm" textAlign="center">
                       Tell us about your workout split!
@@ -1346,7 +1282,7 @@ const WorkoutScreen = () => {
                 </VStack>
 
                 <VStack space={4}>
-                  <HStack justifyContent="space-between" alignItems="center">
+                  <HStack justifyContent="space-between" alignItems="center" pt={4}>
                     <Text color="white" fontSize="xl" fontWeight="bold">
                       My Exercises
                     </Text>

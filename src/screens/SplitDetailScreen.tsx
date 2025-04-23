@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Box,
   HStack,
@@ -34,10 +34,11 @@ interface ExerciseWithDetails extends Omit<Exercise, "sets"> {
 const SplitDetailScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RoutePropType>();
-  const split = route.params.split;
+  const { split } = route.params;
   const splitColor = split.color || "#2A2E38";
   const [exercises, setExercises] = useState<ExerciseWithDetails[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [hasLocalChanges, setHasLocalChanges] = useState(false);
   const scrollViewRef = useRef<RNScrollView>(null);
   const { splits, updateSplits, getSplitExercises, saveSplitExercises } = useData();
 
@@ -52,38 +53,48 @@ const SplitDetailScreen = () => {
     sets: [],
   });
 
-  // Load exercises from storage when component mounts
+  // Use exercises directly from the navigation params
   useEffect(() => {
-    const loadExercises = async () => {
-      try {
-        const loadedExercises = await getSplitExercises(split.id);
-        if (loadedExercises.length > 0) {
-          // Add splitIds to loaded exercises
-          const exercisesWithSplitIds = loadedExercises.map((exercise) => ({
-            ...exercise,
-            splitIds: [split.id],
-            sets: (exercise as any).sets || [],
-          }));
-          setExercises(exercisesWithSplitIds);
-        }
-      } catch (error) {
-        console.error("Error loading exercises:", error);
-      }
-    };
-    loadExercises();
-  }, [split.id, getSplitExercises]);
+    if (split && split.exercises) {
+      console.log('SplitDetailScreen - Loading exercises from route params:', split.exercises.length);
+      const exercisesWithDetails = split.exercises.map(ex => ({
+        ...ex,
+        splitIds: [split.id], // Ensure splitId is present
+        sets: (ex as any).sets || [], // Ensure sets array exists, default to empty
+      }));
+      setExercises(exercisesWithDetails);
+    } else {
+      console.log('SplitDetailScreen - No exercises found in route params');
+      setExercises([]); // Clear exercises if none are passed
+    }
+  }, [split]); // Depend only on the split object from route params
 
   // Save exercises to storage whenever they change
   useEffect(() => {
     const saveExercises = async () => {
-      try {
-        await saveSplitExercises(split.id, exercises);
-      } catch (error) {
-        console.error("Error saving exercises:", error);
+      if (!isEditing && hasLocalChanges) {
+        const updatedSplits = splits.map((splitItem: Split) =>
+          splitItem.id === split.id ? { ...split, exercises } : splitItem
+        );
+        
+        const { data: user } = await supabase.auth.getUser();
+        await supabase.from("splits").upsert(
+          {
+            user_id: user.user?.id,
+            splits: updatedSplits,
+            created_at: Date.now(),
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+        
+        updateSplits(updatedSplits);
+        setHasLocalChanges(false);
       }
     };
     saveExercises();
-  }, [exercises, split.id, saveSplitExercises]);
+  }, [isEditing, hasLocalChanges, split, exercises, splits, updateSplits]);
 
   const handleAddExercise = async(newExercises: Exercise[]) => {
     const newSelectedWorkoutExercises = newExercises.map(
@@ -93,50 +104,13 @@ const SplitDetailScreen = () => {
       ...prevExercises,
       ...newSelectedWorkoutExercises,
     ]);
-
-    const list = [...exercises, ...newSelectedWorkoutExercises];
-
-    const updatedSplits = splits.map((splitItem: Split) =>
-      splitItem.id === split.id ? { ...split, exercises: list } : splitItem
-    );
-
-    const { data: user } = await supabase.auth.getUser();
-    await supabase.from("splits").upsert(
-      {
-        user_id: user.user?.id,
-        splits: updatedSplits,
-        created_at: Date.now(),
-      },
-      {
-        onConflict: ["user_id"],
-      }
-    );
-    
-    // console.log('Updated splits after detail update:', updatedSplits);
-    updateSplits(updatedSplits);
+    setHasLocalChanges(true);
   };
 
   const handleRemoveExercise = async (index: number) => {
     const updatedExercises = exercises.filter((_, i) => i !== index);
     setExercises(updatedExercises);
-    
-    const updatedSplits = splits.map((splitItem: Split) =>
-      splitItem.id === split.id ? { ...split, exercises: updatedExercises } : splitItem
-    );
-
-    const { data: user } = await supabase.auth.getUser();
-    await supabase.from("splits").upsert(
-      {
-        user_id: user.user?.id,
-        splits: updatedSplits,
-        created_at: Date.now(),
-      },
-      {
-        onConflict: ["user_id"],
-      }
-    );
-    
-    updateSplits(updatedSplits);
+    setHasLocalChanges(true);
   };
 
   const handleUpdateExercise = (
@@ -150,6 +124,7 @@ const SplitDetailScreen = () => {
       [field]: parseInt(value) || 0,
     };
     setExercises(newExercises);
+    setHasLocalChanges(true);
   };
 
   const addExerciseButton = (

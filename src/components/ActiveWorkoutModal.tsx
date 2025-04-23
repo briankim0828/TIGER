@@ -1,24 +1,27 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider } from 'native-base';
+import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider, Icon } from 'native-base';
 import { Exercise } from '../types';
 import { useWorkout } from '../contexts/WorkoutContext';
+import { Ionicons } from '@expo/vector-icons';
 
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
   exercises: Exercise[];
   onClose: () => void;
+  onSave?: () => Promise<void>;  // Optional prop for handling save operation
 }
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isVisible,
   exercises,
   onClose,
+  onSave
 }) => {
   // Access the updateSet function from WorkoutContext
-  const { updateSet, currentWorkoutSession } = useWorkout();
+  const { updateSet, currentWorkoutSession, addSet, endWorkout } = useWorkout();
   
   // Log props when component mounts or props change
   useEffect(() => {
@@ -58,6 +61,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [workoutTimer, setWorkoutTimer] = useState(0);
   const [currentExercises, setCurrentExercises] = useState<Exercise[]>([]);
   const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
+  const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
@@ -87,6 +91,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => clearTimeout(timer);
   }, [isVisible]);
   
+  // Reset isEndingWorkout when modal closes or visibility changes
+  useEffect(() => {
+    if (!isVisible) {
+      console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
+      setIsEndingWorkout(false);
+      setWorkoutTimer(0);
+      setExpandedExercises({});
+      setCurrentExercises([]);
+      // Reset any other state as needed
+    }
+    
+    return () => {
+      console.log('ActiveWorkoutModal - Component cleanup, resetting state');
+      setIsEndingWorkout(false);
+      setWorkoutTimer(0);
+      setExpandedExercises({});
+      setCurrentExercises([]);
+    };
+  }, [isVisible]);
+  
   // Timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -108,16 +132,43 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const handleSheetChanges = useCallback((index: number) => {
     // If sheet is closed, call onClose
     if (index === -1) {
+      console.log('ActiveWorkoutModal - Sheet closed, calling onClose');
       onClose();
     }
   }, [onClose]);
   
   // End workout
-  const handleEndWorkout = useCallback(() => {
+  const handleEndWorkout = useCallback(async () => {
     console.log('ActiveWorkoutModal - Ending workout');
-    // Save workout data logic would go here
-    bottomSheetRef.current?.close();
-  }, []);
+    
+    // Prevent multiple clicks from triggering multiple saves
+    if (isEndingWorkout) {
+      console.log('ActiveWorkoutModal - Already ending workout, ignoring duplicate call');
+      return;
+    }
+    
+    // Set flag to prevent multiple calls
+    setIsEndingWorkout(true);
+    
+    try {
+      // Use the provided onSave prop if available, otherwise fall back to endWorkout
+      if (onSave) {
+        console.log('ActiveWorkoutModal - Using provided onSave handler');
+        await onSave();
+      } else {
+        console.log('ActiveWorkoutModal - Calling endWorkout from context directly');
+        await endWorkout();
+      }
+      console.log('ActiveWorkoutModal - Save operation completed successfully');
+      
+      // After successful save, close the modal
+      bottomSheetRef.current?.close();
+    } catch (error) {
+      console.error('Error ending workout:', error);
+      // Reset the flag if there was an error
+      setIsEndingWorkout(false);
+    }
+  }, [endWorkout, onSave, isEndingWorkout]);
   
   // Format timer as MM:SS
   const formatTimer = (seconds: number) => {
@@ -149,19 +200,71 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }));
   }, []);
 
-  // Handle weight change
-  const handleWeightChange = useCallback((exerciseIndex: number, setIndex: number, weight: string) => {
-    const weightValue = parseFloat(weight) || 0;
-    console.log(`ActiveWorkoutModal - Weight changed for exercise ${exerciseIndex}, set ${setIndex}: ${weightValue}`);
-    updateSet(exerciseIndex, setIndex, { weight: weightValue });
-  }, [updateSet]);
+  // Create state for TextInput temporary values
+  const [localInputValues, setLocalInputValues] = useState<{[key: string]: {weight: string, reps: string}}>({});
 
-  // Handle reps change
-  const handleRepsChange = useCallback((exerciseIndex: number, setIndex: number, reps: string) => {
-    const repsValue = parseInt(reps) || 0;
-    console.log(`ActiveWorkoutModal - Reps changed for exercise ${exerciseIndex}, set ${setIndex}: ${repsValue}`);
+  // Initialize localInputValues when exercises change
+  useEffect(() => {
+    if (currentExercises.length > 0) {
+      const newValues: {[key: string]: {weight: string, reps: string}} = {};
+      
+      currentExercises.forEach((exercise, exerciseIndex) => {
+        if (exercise.sets) {
+          exercise.sets.forEach((set, setIndex) => {
+            const key = `${exerciseIndex}-${setIndex}`;
+            newValues[key] = {
+              weight: set.weight > 0 ? set.weight.toString() : '',
+              reps: set.reps > 0 ? set.reps.toString() : ''
+            };
+          });
+        }
+      });
+      
+      setLocalInputValues(newValues);
+    }
+  }, [currentExercises]);
+
+  // Handle weight input change locally (no update to context)
+  const handleWeightInputChange = useCallback((exerciseIndex: number, setIndex: number, text: string) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    setLocalInputValues(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        weight: text
+      }
+    }));
+  }, []);
+
+  // Handle reps input change locally (no update to context)
+  const handleRepsInputChange = useCallback((exerciseIndex: number, setIndex: number, text: string) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    setLocalInputValues(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        reps: text
+      }
+    }));
+  }, []);
+
+  // Handle weight change when editing is complete
+  const handleWeightEditComplete = useCallback((exerciseIndex: number, setIndex: number) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    const value = localInputValues[key]?.weight || '';
+    const weightValue = parseFloat(value) || 0;
+    console.log(`ActiveWorkoutModal - Weight updated for exercise ${exerciseIndex}, set ${setIndex}: ${weightValue}`);
+    updateSet(exerciseIndex, setIndex, { weight: weightValue });
+  }, [localInputValues, updateSet]);
+
+  // Handle reps change when editing is complete
+  const handleRepsEditComplete = useCallback((exerciseIndex: number, setIndex: number) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    const value = localInputValues[key]?.reps || '';
+    const repsValue = parseInt(value) || 0;
+    console.log(`ActiveWorkoutModal - Reps updated for exercise ${exerciseIndex}, set ${setIndex}: ${repsValue}`);
     updateSet(exerciseIndex, setIndex, { reps: repsValue });
-  }, [updateSet]);
+  }, [localInputValues, updateSet]);
 
   // Handle set completion toggle
   const handleSetCompletion = useCallback((exerciseIndex: number, setIndex: number, completed: boolean) => {
@@ -169,6 +272,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     console.log(`ActiveWorkoutModal - Set completion toggled for exercise ${exerciseIndex}, set ${setIndex}: ${newCompletedStatus}`);
     updateSet(exerciseIndex, setIndex, { completed: newCompletedStatus });
   }, [updateSet]);
+  
+  // Handle Add Set button click
+  const handleAddSet = useCallback((exerciseIndex: number) => {
+    console.log(`ActiveWorkoutModal - Adding set for exercise ${exerciseIndex}`);
+    addSet(exerciseIndex);
+  }, [addSet]);
   
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
@@ -199,14 +308,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           
           <Box flex={1} width="100%" display="flex">
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-              <Box width="100%" pb={80}> {/* Added padding to bottom for button area */}
+              <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
                 
                 {/* Exercise list with sets */}
-                <VStack space={2} width="100%">
+                <VStack space={1} width="100%">
                   {currentExercises.map((exercise, exerciseIndex) => (
                     <Box key={exercise.id}>
                       <Pressable 
                         onPress={() => toggleExerciseExpansion(exercise.id)}
+                        // borderWidth={1}
+                        // borderColor="red"
                       >
                         <Box 
                           bg={"transparent"} 
@@ -214,50 +325,134 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           borderRadius="lg"
                           borderColor="#6B8EF2"
                         >
-                          <Text color="white" fontSize="md" fontWeight="bold">
-                            {exercise.name}
-                          </Text>
-                          <Text color="gray.400" fontSize="xs">
-                            {exercise.bodyPart}
-                          </Text>
+                          <HStack space={2} alignItems="flex-end">
+                            <Text color="white" fontSize="md" fontWeight="bold">
+                              {exercise.name}
+                            </Text>
+                            <Text color="gray.400" fontSize="md" opacity={0.7}>
+                              {exercise.bodyPart}
+                            </Text>
+                          </HStack>
                           
                           {/* Sets for this exercise */}
                           {expandedExercises[exercise.id] && exercise.sets && (
-                            <VStack space={2} mt={2} px={2}>
-                              {exercise.sets.map((set, setIndex) => (
-                                <HStack key={set.id} justifyContent="space-between" alignItems="center" mt={2}>
-                                  <Text color="white" width="60px">Set {setIndex + 1}</Text>
-                                  <HStack space={2} flex={1} justifyContent="flex-end">
-                                    <Input 
-                                      placeholder="Weight" 
-                                      keyboardType="numeric"
-                                      width="80px"
-                                      color="white"
-                                      value={set.weight > 0 ? set.weight.toString() : ''}
-                                      onChangeText={(text) => handleWeightChange(exerciseIndex, setIndex, text)}
-                                    />
-                                    <Input 
-                                      placeholder="Reps" 
-                                      keyboardType="numeric"
-                                      width="80px"
-                                      color="white"
-                                      value={set.reps > 0 ? set.reps.toString() : ''}
-                                      onChangeText={(text) => handleRepsChange(exerciseIndex, setIndex, text)}
-                                    />
-                                    <Button 
-                                      size="sm" 
-                                      colorScheme={set.completed ? "green" : "gray"}
-                                      onPress={() => handleSetCompletion(exerciseIndex, setIndex, set.completed)}
-                                    >
-                                      {set.completed ? "Done" : "Do"}
-                                    </Button>
-                                  </HStack>
+                            <VStack px={0} pt={2} space={1}>
+                              {/* Column headers */}
+                              {/* <HStack justifyContent="space-between" alignItems="center" mb={1} p={1}>
+                                <Text color="gray.400" width="60px" fontSize="xs">Set</Text>
+                                <HStack space={2} flex={1} justifyContent="flex-end">
+                                  <Text color="gray.400" width="70px" fontSize="xs" textAlign="center">Weight</Text>
+                                  <Text color="gray.400" width="70px" fontSize="xs" textAlign="center">Reps</Text>
+
+                                  <Box width="35px">
+                                    <Text color="gray.400" fontSize="xs" textAlign="center">Done</Text>
+                                  </Box>
                                 </HStack>
+                              </HStack> */}
+
+                              <HStack justifyContent="space-between" alignItems="center" mb={1} p={1}>
+                                <Text color="rgba(255, 255, 255, 0.8)" width="60px" fontSize="xs">Set</Text>
+                                <HStack space={2} flex={1} justifyContent="flex-end">
+                                  <Text color="rgba(255, 255, 255, 0.8)" width="70px" fontSize="xs" textAlign="center">Weight</Text>
+                                  <Text color="rgba(255, 255, 255, 0.8)" width="70px" fontSize="xs" textAlign="center">Reps</Text>
+
+                                  <Box width="35px">
+                                    <Text color="rgba(255, 255, 255, 0.8)" fontSize="xs" textAlign="center">Done</Text>
+                                  </Box>
+                                </HStack>
+                              </HStack>
+                              
+                              {exercise.sets.map((set, setIndex) => (
+                                <Box 
+                                  key={set.id}
+                                  backgroundColor={set.completed ? "rgba(72, 170, 90, 0.35)" : "transparent"}
+                                  borderRadius="lg"
+                                  px={1}
+                                  py={1}
+                                >
+          
+                                  <HStack justifyContent="space-between" alignItems="center">
+                                    <Text color="white" width="60px" pl={1.5}>{setIndex + 1}</Text>
+                                    <HStack space={2} flex={1} justifyContent="flex-end">
+                                      <View style={{
+                                        width: 70,
+                                        height: 35,
+                                        // backgroundColor: '#3A3E48',
+                                        backgroundColor: 'transparent',
+                                        borderRadius: 4,
+                                        // borderColor: set.completed ? "transparent" : "rgba(255, 255, 255, 0.25)",
+                                        // borderWidth: 1,
+                                        paddingHorizontal: 8,
+                                        justifyContent: 'center'
+                                      }}>
+                                        <TextInput 
+                                          placeholder="Weight" 
+                                          placeholderTextColor="rgba(255, 255, 255, 0.25)"
+                                          keyboardType="numeric"
+                                          style={{
+                                            color: 'white',
+                                            height: 40,
+                                            fontSize: 14,
+                                            textAlign: 'center'
+                                          }}
+                                          value={localInputValues[`${exerciseIndex}-${setIndex}`]?.weight || ''}
+                                          onChangeText={(text) => handleWeightInputChange(exerciseIndex, setIndex, text)}
+                                          onEndEditing={() => handleWeightEditComplete(exerciseIndex, setIndex)}
+                                          onBlur={() => handleWeightEditComplete(exerciseIndex, setIndex)}
+                                        />
+                                      </View>
+                                      <View style={{
+                                        width: 70,
+                                        height: 35,
+                                        // backgroundColor: '#3A3E48',
+                                        // borderColor: set.completed ? "transparent" : "rgba(255, 255, 255, 0.25)",
+                                        // borderWidth: 1,
+                                        backgroundColor: 'transparent',
+                                        borderRadius: 4,
+                                        paddingHorizontal: 8,
+                                        justifyContent: 'center'
+                                      }}>
+                                        <TextInput 
+                                          placeholder="Reps" 
+                                          placeholderTextColor="rgba(255, 255, 255, 0.25)"
+                                          keyboardType="numeric"
+                                          style={{
+                                            color: 'white',
+                                            height: 40,
+                                            fontSize: 14,
+                                            textAlign: 'center'
+                                          }}
+                                          value={localInputValues[`${exerciseIndex}-${setIndex}`]?.reps || ''}
+                                          onChangeText={(text) => handleRepsInputChange(exerciseIndex, setIndex, text)}
+                                          onEndEditing={() => handleRepsEditComplete(exerciseIndex, setIndex)}
+                                          onBlur={() => handleRepsEditComplete(exerciseIndex, setIndex)}
+                                        />
+                                      </View>
+                                      <Pressable
+                                        width="35px"
+                                        height="35px"
+                                        borderRadius="lg"
+                                        bg={set.completed ? "green.500" : "gray.700"}
+                                        justifyContent="center"
+                                        alignItems="center"
+                                        onPress={() => handleSetCompletion(exerciseIndex, setIndex, set.completed)}
+                                        _pressed={{ opacity: 0.7 }}
+                                      >
+                                        <Icon 
+                                          as={Ionicons} 
+                                          name="checkmark" 
+                                          size="md" 
+                                          color="white" 
+                                        />
+                                      </Pressable>
+                                    </HStack>
+                                  </HStack>
+                                </Box>
                               ))}
                               
                               <Pressable
-                                onPress={() => {/* Add your onPress logic here */}}
-                                mt={2}
+                                onPress={() => handleAddSet(exerciseIndex)}
+                                mt={1.5}
                                 py={2}
                                 px={4}
                                 borderRadius="md"
@@ -284,27 +479,64 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   ))}
                 </VStack>
                 
-                <Box mt={6} mb={2} px={2}>
+                <Box mt={2} mb={2} px={2}>
                   <Pressable
                     bg="transparent"
                     py={2}
                     px={4}
                     borderRadius="md"
                     borderWidth={1}
-                    borderColor="#6B8EF2"
+                    borderColor="gray.400"
                     alignItems="center"
                     justifyContent="center"
                     _pressed={{ opacity: 0.8 }}
                   >
-                    <Text color="#6B8EF2" fontSize="md" fontWeight="bold">
+                    <Text color="white" fontSize="md" fontWeight="bold">
                       Add Exercise
                     </Text>
                   </Pressable>
                 </Box>
+
+                <HStack space={2} mt={4} px={2}>
+                  <Pressable
+                    bg="transparent"
+                    py={3}
+                    px={6}
+                    borderRadius="lg"
+                    borderWidth={1.5}
+                  borderColor="red.500"
+                  flex={1}
+                  alignItems="center"
+                  justifyContent="center"
+                  _pressed={{ opacity: 0.8 }}
+                >
+                  <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
+                    Discard Workout
+                  </Text>
+                </Pressable>
+              
+                <Pressable
+                  bg={isEndingWorkout ? "gray.500" : "red.500"}
+                  py={3}
+                  px={6}
+                  borderRadius="lg"
+                  onPress={handleEndWorkout}
+                  _pressed={{ opacity: 0.8 }}
+                  flex={1}
+                  alignItems="center"
+                  justifyContent="center"
+                  opacity={isEndingWorkout ? 0.7 : 1}
+                  disabled={isEndingWorkout}
+                >
+                  <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                    {isEndingWorkout ? "Saving..." : "End Workout"}
+                  </Text>
+                </Pressable>
+              </HStack>
               </Box>
             </ScrollView>
             
-            {/* Fixed buttons at bottom */}
+            {/* Fixed buttons at bottom
             <Box 
               position="absolute" 
               bottom={0} 
@@ -338,7 +570,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </Pressable>
               
                 <Pressable
-                  bg="red.500"
+                  bg={isEndingWorkout ? "gray.500" : "red.500"}
                   py={3}
                   px={6}
                   borderRadius="lg"
@@ -347,13 +579,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   flex={1}
                   alignItems="center"
                   justifyContent="center"
+                  opacity={isEndingWorkout ? 0.7 : 1}
+                  disabled={isEndingWorkout}
                 >
                   <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
-                    End Workout
+                    {isEndingWorkout ? "Saving..." : "End Workout"}
                   </Text>
                 </Pressable>
               </HStack>
-            </Box>
+            </Box> */}
           </Box>
         </BottomSheetView>
       </BottomSheet>

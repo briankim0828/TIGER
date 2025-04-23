@@ -25,12 +25,39 @@ import { TouchableWithoutFeedback, Keyboard, View, StyleSheet } from "react-nati
 // Active Workout Modal Component
 const ActiveWorkoutModalContainer = () => {
   const { isWorkoutActive, currentWorkoutSession, endWorkout } = useWorkout();
+  
+  // Keep track of whether endWorkout is being called internally
+  const [isClosingFromSave, setIsClosingFromSave] = useState(false);
+
+  // Custom wrapper for endWorkout to set the flag
+  const handleEndWorkoutAndClose = async () => {
+    setIsClosingFromSave(true);
+    await endWorkout();
+    // Reset the flag after a short delay to handle any cleanup
+    setTimeout(() => {
+      setIsClosingFromSave(false);
+    }, 500);
+  };
+
+  // Added callback to handle the modal closing without saving
+  const handleModalClose = () => {
+    console.log('App - Modal closed via onClose callback');
+    
+    // Only call endWorkout if not already closing from an endWorkout call
+    if (isWorkoutActive && !isClosingFromSave) {
+      console.log('App - Modal closed externally, calling endWorkout to cleanup');
+      endWorkout();
+    } else {
+      console.log('App - Modal already closing from save operation, skipping duplicate endWorkout call');
+    }
+  };
 
   return (
     <ActiveWorkoutModal 
       isVisible={isWorkoutActive}
       exercises={currentWorkoutSession?.exercises || []}
-      onClose={endWorkout}
+      onClose={handleModalClose}
+      onSave={handleEndWorkoutAndClose}
     />
   );
 };

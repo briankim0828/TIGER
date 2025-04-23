@@ -1,3 +1,6 @@
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
+
 // Base types
 export interface Exercise {
   id: string;
@@ -16,7 +19,7 @@ export interface Set {
 }
 
 export interface Split {
-  id: string;
+  id: string;  // uuid – generate with uuidv4()
   name: string;
   days: string[];
   color?: string;
@@ -48,12 +51,28 @@ export interface BodyPartSectionData {
 export type EditMode = 'none' | 'program' | 'splits';
 
 // Storage types
-export interface WorkoutSession {
-  id: string;
-  date: string;
-  splitId: string;
+// Live, during an active workout
+export interface LiveWorkoutSession {
+  user_id: string;                // Supabase UID
+  session_date: string;           // ISO YYYY-MM-DD
+  split_id: string | null;
+  start_time: string;             // ISO timestamp
+  duration_sec: number;           // 0 until finished
+  sets: Set[][];                  // array-of-arrays per exercise
+  exercises: Exercise[];          // mirrors WorkoutContext UI
+}
+
+// Stored locally & in Supabase
+export interface StoredWorkoutSession {
+  id?: string;                    // uuid (optional before insert)
+  date: string;                   // ISO YYYY-MM-DD
+  splitId: string | null;
+  userId: string;
+  sets: Set[][];
+  startTime: string;
+  durationSec: number;
   exercises: Exercise[];
-  completed: boolean;
+  completed: boolean;             // always true once saved
 }
 
 // Constants

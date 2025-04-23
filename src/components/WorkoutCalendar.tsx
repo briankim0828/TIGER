@@ -254,12 +254,32 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
       // Always set selectedDate to the clicked date
       setSelectedDate(dateStr);
 
+      // Find and log the cell info for the selected date
+      const dayOfWeek = DAYS_OF_WEEK[getDayOfWeek(year, month, day)];
+      const workout = getWorkoutForDate(dateStr);
+      const split = getSplitForDate(dayOfWeek as WeekDay);
+      
+      console.log('[DEBUG] Selected Cell Info:', {
+        date: dateStr,
+        day: day,
+        month: month + 1, // Adding 1 for human-readable month
+        year,
+        dayOfWeek,
+        workout: workout !== undefined ? { completed: workout } : 'No workout',
+        split: split ? { 
+          id: split.id,
+          name: split.name,
+          color: split.color,
+          exercisesCount: split.exercises.length
+        } : 'No split assigned'
+      });
+
       // Call the onDayPress callback if provided
       if (onDayPress) {
         onDayPress(dateStr);
       }
     },
-    [onDayPress]
+    [onDayPress, getWorkoutForDate, getSplitForDate]
   );
 
   // Generate current month data

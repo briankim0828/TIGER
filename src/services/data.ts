@@ -2,11 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   Exercise, 
   Split, 
-  WorkoutSession, 
+  StoredWorkoutSession, 
   WorkoutDay,
   BodyPartSectionData,
   DEFAULT_EXERCISES_BY_BODY_PART
 } from '../types';
+import { isUuid, newUuid } from '../utils/ids';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -22,7 +23,41 @@ class DataService {
   async getSplits(): Promise<Split[]> {
     try {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.SPLITS);
-      return data ? JSON.parse(data) : [];
+      const splits = data ? JSON.parse(data) : [];
+      
+      // Migrate any non-UUID IDs to proper UUIDs
+      let hasChanges = false;
+      
+      const migratedSplits = splits.map((split: Split) => {
+        // Check if ID is not a valid UUID
+        if (!isUuid(split.id)) {
+          hasChanges = true;
+          return {
+            ...split,
+            id: newUuid(),  // Generate a proper UUID
+            days: split.days ?? []  // Ensure days array exists
+          };
+        }
+        
+        // Ensure days array exists
+        if (!split.days) {
+          hasChanges = true;
+          return {
+            ...split,
+            days: []
+          };
+        }
+        
+        return split;
+      });
+      
+      // If any IDs were changed, save the updated splits back to storage
+      if (hasChanges) {
+        console.log('Migrating splits to use proper UUIDs');
+        await this.saveSplits(migratedSplits);
+      }
+      
+      return migratedSplits;
     } catch (error) {
       console.error('Error getting splits:', error);
       return [];
@@ -108,7 +143,7 @@ class DataService {
   }
 
   // Workout Sessions
-  async getWorkoutSessions(): Promise<WorkoutSession[]> {
+  async getWorkoutSessions(): Promise<StoredWorkoutSession[]> {
     try {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.WORKOUT_SESSIONS);
       return data ? JSON.parse(data) : [];
@@ -118,13 +153,22 @@ class DataService {
     }
   }
 
-  async saveWorkoutSession(session: WorkoutSession): Promise<void> {
+  async saveWorkoutSession(session: StoredWorkoutSession): Promise<void> {
     try {
       const sessions = await this.getWorkoutSessions();
       const updatedSessions = [...sessions, session];
       await AsyncStorage.setItem(STORAGE_KEYS.WORKOUT_SESSIONS, JSON.stringify(updatedSessions));
     } catch (error) {
       console.error('Error saving workout session:', error);
+      throw error;
+    }
+  }
+
+  async saveWorkoutSessions(sessions: StoredWorkoutSession[]): Promise<void> {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.WORKOUT_SESSIONS, JSON.stringify(sessions));
+    } catch (error) {
+      console.error('Error saving workout sessions:', error);
       throw error;
     }
   }
@@ -136,7 +180,7 @@ class DataService {
       return sessions.map(session => ({
         date: session.date,
         completed: session.completed,
-        splitId: session.splitId
+        splitId: session.splitId === null ? undefined : session.splitId
       }));
     } catch (error) {
       console.error('Error getting workout days:', error);
