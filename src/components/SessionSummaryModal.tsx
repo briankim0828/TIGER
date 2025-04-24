@@ -23,9 +23,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     console.log('SessionSummaryModal - Activated with data:', {
       selectedDate,
       scheduledSplit: scheduledSplit ? {
-        id: scheduledSplit.id,
         name: scheduledSplit.name,
-        days: scheduledSplit.days,
         exercises: scheduledSplit.exercises.map(ex => ex.name).join(', ')
       } : null
     });

@@ -9,15 +9,14 @@ import { Toast } from 'native-base';
 interface WorkoutContextType {
   isWorkoutActive: boolean;
   currentWorkoutSession: LiveWorkoutSession | null;
-  startWorkout: (exercises: Exercise[], splitId?: string | null) => Promise<void>;
+  startWorkout: (exercises: Exercise[], selectedDate: string, splitId?: string | null) => Promise<void>;
   endWorkout: () => Promise<void>;
+  discardWorkout: () => void;
   updateSet: (exerciseIndex: number, setIndex: number, updatedSet: Partial<Set>) => void;
   addSet: (exerciseIndex: number) => void;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
-
-
 
 export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
@@ -25,22 +24,16 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isSessionSaved, setIsSessionSaved] = useState(false);
   const { addWorkoutSession } = useData();
 
-  const startWorkout = useCallback(async (exercises: Exercise[], splitId: string | null = null) => {
-    // Reset the session saved flag when starting a new workout
+  const startWorkout = useCallback(async (exercises: Exercise[], selectedDate: string, splitId: string | null = null) => {
     setIsSessionSaved(false);
-    
-    // console.log('WorkoutContext - Starting workout with exercises:', JSON.stringify(exercises, null, 2));
-    
-    // Get current date in ISO format YYYY-MM-DD
-    const today = new Date();
-    const dateString = today.toISOString().split('T')[0];
+
+    const dateString = selectedDate;
     const dateForId = dateString.replace(/-/g, '');
-    
-    // Generate sets with the new ID schema
+
+    console.log(`WorkoutContext - Starting workout for date: ${dateString}`);
+
     const allSets: Set[][] = exercises.map((exercise) => {
-      // Create sets for this exercise if they don't exist
       if (!exercise.sets || exercise.sets.length === 0) {
-        // Default to 1 set per exercise
         return Array(1).fill(null).map((_, setIndex) => ({
           id: `${dateForId}-1-${splitId || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
           weight: 0,
@@ -48,21 +41,18 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
           completed: false
         }));
       } else {
-        // Use existing sets but assign new IDs
         return exercise.sets.map((set, setIndex) => ({
           ...set,
           id: `${dateForId}-1-${splitId || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
-          completed: false // Reset completed status
+          completed: false
         }));
       }
     });
 
     const { data: user } = await supabase.auth.getUser();
 
-    // Create a new workout session
     const newWorkoutSession: LiveWorkoutSession = {
-      // id: crypto.randomUUID(), // Generate a UUID
-      user_id: user?.user?.id || 'current-user', // Use Supabase user ID if available
+      user_id: user?.user?.id || 'current-user',
       session_date: dateString,
       split_id: splitId,
       sets: allSets,
@@ -85,13 +75,8 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setCurrentWorkoutSession(newWorkoutSession);
     setIsWorkoutActive(true);
-
     console.log("workout is active")
-    
-    // console.log('WorkoutContext - State after start:', {
-    //   isWorkoutActive: true,
-    //   currentWorkoutSession: newWorkoutSession
-    // });
+
   }, []);
 
   const updateSet = useCallback((exerciseIndex: number, setIndex: number, updatedSet: Partial<Set>) => {
@@ -175,20 +160,20 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Update DataContext
       await addWorkoutSession(stored);
       
-      console.log('WorkoutContext - Completed session details:', {
-        id: stored.id,
-        session_date: sessionToSave.session_date,
-        split_id: sessionToSave.split_id,
-        user_id: sessionToSave.user_id,
-        duration_sec: durationSec,
-        exercises_count: sessionToSave.exercises.length,
-        completed_sets: sessionToSave.sets.map((exerciseSets, i) => ({
-          exercise: sessionToSave.exercises[i]?.name,
-          sets_completed: exerciseSets.filter(set => set.completed).length,
-          total_sets: exerciseSets.length,
-          completion_percentage: `${Math.round((exerciseSets.filter(set => set.completed).length / exerciseSets.length) * 100)}%`
-        }))
-      });
+      // console.log('WorkoutContext - Completed session details:', {
+      //   id: stored.id,
+      //   session_date: sessionToSave.session_date,
+      //   split_id: sessionToSave.split_id,
+      //   user_id: sessionToSave.user_id,
+      //   duration_sec: durationSec,
+      //   exercises_count: sessionToSave.exercises.length,
+      //   completed_sets: sessionToSave.sets.map((exerciseSets, i) => ({
+      //     exercise: sessionToSave.exercises[i]?.name,
+      //     sets_completed: exerciseSets.filter(set => set.completed).length,
+      //     total_sets: exerciseSets.length,
+      //     completion_percentage: `${Math.round((exerciseSets.filter(set => set.completed).length / exerciseSets.length) * 100)}%`
+      //   }))
+      // });
       
       // Show success toast
       Toast.show({
@@ -212,6 +197,14 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setIsSessionSaved(false);
     }
   }, [currentWorkoutSession, addWorkoutSession, isSessionSaved]);
+
+  // Function to discard the current workout without saving
+  const discardWorkout = useCallback(() => {
+    console.log('WorkoutContext - Discarding current workout');
+    setIsWorkoutActive(false);
+    setCurrentWorkoutSession(null);
+    setIsSessionSaved(false); // Ensure this is reset too
+  }, []);
 
   const addSet = useCallback((exerciseIndex: number) => {
     if (!currentWorkoutSession) return;
@@ -280,17 +273,18 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [isWorkoutActive, currentWorkoutSession, isSessionSaved]);
 
+  const value = {
+    isWorkoutActive,
+    currentWorkoutSession,
+    startWorkout,
+    endWorkout,
+    discardWorkout,
+    updateSet,
+    addSet
+  };
+
   return (
-    <WorkoutContext.Provider
-      value={{
-        isWorkoutActive,
-        currentWorkoutSession,
-        startWorkout,
-        endWorkout,
-        updateSet,
-        addSet
-      }}
-    >
+    <WorkoutContext.Provider value={value}>
       {children}
     </WorkoutContext.Provider>
   );

@@ -41,11 +41,11 @@ const ActiveWorkoutModalContainer = () => {
 
   // Added callback to handle the modal closing without saving
   const handleModalClose = () => {
-    console.log('App - Modal closed via onClose callback');
+    // console.log('App - Modal closed via onClose callback');
     
     // Only call endWorkout if not already closing from an endWorkout call
     if (isWorkoutActive && !isClosingFromSave) {
-      console.log('App - Modal closed externally, calling endWorkout to cleanup');
+      // console.log('App - Modal closed externally, calling endWorkout to cleanup');
       endWorkout();
     } else {
       console.log('App - Modal already closing from save operation, skipping duplicate endWorkout call');

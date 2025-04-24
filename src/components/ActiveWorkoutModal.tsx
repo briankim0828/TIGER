@@ -2,7 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { StyleSheet, ScrollView, View, TextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider, Icon } from 'native-base';
+import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider, Icon, AlertDialog, useToast } from 'native-base';
 import { Exercise } from '../types';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,8 +20,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onSave
 }) => {
-  // Access the updateSet function from WorkoutContext
-  const { updateSet, currentWorkoutSession, addSet, endWorkout } = useWorkout();
+  // Use the new discardWorkout function from context
+  const { updateSet, currentWorkoutSession, addSet, endWorkout, discardWorkout } = useWorkout();
+  const toast = useToast();
   
   // Log props when component mounts or props change
   useEffect(() => {
@@ -38,30 +39,35 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (currentWorkoutSession && isVisible) {
       console.log('ActiveWorkoutModal - Current workout session:', {
         session_date: currentWorkoutSession.session_date,
-        split_id: currentWorkoutSession.split_id,
-        user_id: currentWorkoutSession.user_id,
+        // split_id: currentWorkoutSession.split_id,
+        // user_id: currentWorkoutSession.user_id,
         exercises_count: currentWorkoutSession.exercises.length,
-        sets_status: currentWorkoutSession.sets.map((exerciseSets, i) => ({
-          exercise: currentWorkoutSession.exercises[i]?.name,
-          sets: exerciseSets.map(set => ({
-            id: set.id,
-            weight: set.weight,
-            reps: set.reps,
-            completed: set.completed
-          }))
+        exercises: currentWorkoutSession.exercises.map(ex => ({          
+          name: ex.name,      
         }))
+        // sets_status: currentWorkoutSession.sets.map((exerciseSets, i) => ({
+        //   exercise: currentWorkoutSession.exercises[i]?.name,
+        //   sets: exerciseSets.map(set => ({
+        //     id: set.id,
+        //     weight: set.weight,
+        //     reps: set.reps,
+        //     completed: set.completed
+        //   }))
+        // }))
       });
     }
   }, [isVisible, exercises, currentWorkoutSession]);
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const cancelRef = useRef(null); // Ref for AlertDialog cancel button
   
   // State
   const [workoutTimer, setWorkoutTimer] = useState(0);
   const [currentExercises, setCurrentExercises] = useState<Exercise[]>([]);
   const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
+  const [isDiscardAlertOpen, setIsDiscardAlertOpen] = useState(false); // New state for discard alert
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
@@ -74,7 +80,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     //   setCurrentExercises(exercises);
     // }
 
-    console.log('ActiveWorkoutModal - Setting current exercises:', JSON.stringify(exercises, null, 2));
+    // console.log('ActiveWorkoutModal - Setting current exercises:', JSON.stringify(exercises, null, 2));
     setCurrentExercises(exercises);
   }, [exercises]);
   
@@ -132,7 +138,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const handleSheetChanges = useCallback((index: number) => {
     // If sheet is closed, call onClose
     if (index === -1) {
-      console.log('ActiveWorkoutModal - Sheet closed, calling onClose');
+      // console.log('ActiveWorkoutModal - Sheet closed, calling onClose');
       onClose();
     }
   }, [onClose]);
@@ -278,7 +284,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     console.log(`ActiveWorkoutModal - Adding set for exercise ${exerciseIndex}`);
     addSet(exerciseIndex);
   }, [addSet]);
-  
+
+  // Function to handle the actual discard action using the context function
+  const handleConfirmDiscard = useCallback(() => {
+    console.log('ActiveWorkoutModal - Confirming discard');
+    setIsDiscardAlertOpen(false); // Close the alert
+    discardWorkout(); // Call the context function to discard the workout
+    bottomSheetRef.current?.close(); // Close the modal
+    toast.show({
+      title: "Workout Discarded",
+      placement: "top",
+      duration: 2000
+    });
+  }, [discardWorkout, onClose, toast]);
+
+  // Function to open the discard confirmation dialog
+  const openDiscardAlert = () => {
+    setIsDiscardAlertOpen(true);
+  };
+
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
       <BottomSheet
@@ -504,35 +528,36 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     px={6}
                     borderRadius="lg"
                     borderWidth={1.5}
-                  borderColor="red.500"
-                  flex={1}
-                  alignItems="center"
-                  justifyContent="center"
-                  _pressed={{ opacity: 0.8 }}
-                >
-                  <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
-                    Discard Workout
-                  </Text>
-                </Pressable>
+                    borderColor="red.500"
+                    flex={1}
+                    alignItems="center"
+                    justifyContent="center"
+                    _pressed={{ opacity: 0.8 }}
+                    onPress={openDiscardAlert}
+                  >
+                    <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
+                      Discard Workout
+                    </Text>
+                  </Pressable>
               
-                <Pressable
-                  bg={isEndingWorkout ? "gray.500" : "red.500"}
-                  py={3}
-                  px={6}
-                  borderRadius="lg"
-                  onPress={handleEndWorkout}
-                  _pressed={{ opacity: 0.8 }}
-                  flex={1}
-                  alignItems="center"
-                  justifyContent="center"
-                  opacity={isEndingWorkout ? 0.7 : 1}
-                  disabled={isEndingWorkout}
-                >
-                  <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
-                    {isEndingWorkout ? "Saving..." : "End Workout"}
-                  </Text>
-                </Pressable>
-              </HStack>
+                  <Pressable
+                    bg={isEndingWorkout ? "gray.500" : "red.500"}
+                    py={3}
+                    px={6}
+                    borderRadius="lg"
+                    onPress={handleEndWorkout}
+                    _pressed={{ opacity: 0.8 }}
+                    flex={1}
+                    alignItems="center"
+                    justifyContent="center"
+                    opacity={isEndingWorkout ? 0.7 : 1}
+                    disabled={isEndingWorkout}
+                  >
+                    <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                      {isEndingWorkout ? "Saving..." : "Finish Workout"}
+                    </Text>
+                  </Pressable>
+                </HStack>
               </Box>
             </ScrollView>
             
@@ -591,6 +616,39 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </Box>
         </BottomSheetView>
       </BottomSheet>
+
+      {/* Discard Confirmation Alert Dialog */}
+      <AlertDialog
+        leastDestructiveRef={cancelRef}
+        isOpen={isDiscardAlertOpen}
+        onClose={() => setIsDiscardAlertOpen(false)}
+      >
+        <AlertDialog.Content>
+          {/* <AlertDialog.CloseButton /> */}
+          <AlertDialog.Header style={{ alignItems: 'center' }}>Discard Workout</AlertDialog.Header>
+          <AlertDialog.Body>
+            Are you sure you want to discard this workout?
+          </AlertDialog.Body>
+          <AlertDialog.Footer>
+            <Button.Group space={2} justifyContent="center" width="100%">
+              <Button
+                variant="unstyled"
+                colorScheme="white"
+                onPress={() => setIsDiscardAlertOpen(false)}
+                ref={cancelRef}
+                flex={1}
+                bg="#2A2E38"
+                _text={{ color: "white" }}
+              >
+                Cancel
+              </Button>
+              <Button colorScheme="danger" onPress={handleConfirmDiscard} >
+                Discard Workout
+              </Button>
+            </Button.Group>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
     </GestureHandlerRootView>
   );
 };

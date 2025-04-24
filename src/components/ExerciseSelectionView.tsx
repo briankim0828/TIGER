@@ -20,21 +20,20 @@ import {
   Split,
 } from "../types";
 import { useData } from "../contexts/DataContext";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { CommonActions } from "@react-navigation/native";
 
+// Ensure this type matches the one in SplitDetailScreen
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  SplitDetail: { split: Split };
-  ExerciseSelection: undefined;
+  SplitDetail: { split: Split; newlyAddedExercises?: Exercise[] };
+  ExerciseSelection: { splitId: string };
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
-
-interface ExerciseSelectionViewProps {
-  onClose?: () => void;
-  onAddExercise?: (exercises: Exercise[]) => void;
-}
+// Define RouteProp for ExerciseSelection
+type ExerciseSelectionRouteProp = RouteProp<WorkoutStackParamList, 'ExerciseSelection'>;
 
 // Icon mapping for body parts
 const BODY_PART_ICONS: Record<string, any> = {
@@ -49,7 +48,8 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = () => {
   const navigation = useNavigation<NavigationProp>();
-  const router: any = useRoute();
+  const route = useRoute<ExerciseSelectionRouteProp>(); // Use the specific route prop
+  const { splitId } = route.params; // Get splitId from params
 
   const onClose = () => {
     navigation.goBack();
@@ -122,18 +122,50 @@ const ExerciseSelectionView = () => {
       if (prev.some((e) => e.id === exercise.id)) {
         return prev.filter((e) => e.id !== exercise.id);
       }
-      // Otherwise add it to the end of the array
+      // Otherwise add the full Exercise object
       return [...prev, exercise];
     });
   };
 
   const handleAddExercises = () => {
     if (selectedExercises.length > 0) {
-      router?.params?.onAddExercise?.(selectedExercises);
-      navigation.goBack();
-      // Reset selections
-      setSelectedBodyPart(null);
-      setSelectedExercises([]);
+      console.log(`ExerciseSelectionView - Adding ${selectedExercises.length} exercises.`);
+      // Navigate back to SplitDetail and merge the new exercises into its params
+      // Ensure we provide the original split data along with the new exercises
+      // We navigate *back* to the previous screen implicitly when using navigate({ merge: true })
+      // to a screen already in the stack, but we must provide the necessary non-optional params.
+      // Since we don't have the full 'split' object here easily, we might need to rethink.
+      // ALTERNATIVE: Use navigation.setParams on the *previous* screen (SplitDetail).
+      // Let's try the setParams approach first, assuming we can get the previous route key.
+      // navigation.getParent()?.setParams({ newlyAddedExercises: selectedExercises }); // Might work depending on nav structure
+      // Simpler: Just navigate back and let the SplitDetailScreen's useEffect handle it.
+      // The previous approach *should* work if SplitDetailScreen is still mounted.
+
+      // Let's stick to the navigate with merge, but we need the original Split object.
+      // This implies we might need to pass the original Split object *to* ExerciseSelection,
+      // or fetch it again, which isn't ideal.
+
+      // REVISED PLAN: Use setParams on the previous route.
+      // Find the route key for SplitDetail (this is brittle)
+      const routes = navigation.getState()?.routes;
+      const splitDetailRoute = routes?.[routes.length - 2]; // Assumes SplitDetail is screen before this one
+
+      if (splitDetailRoute && splitDetailRoute.key) {
+        navigation.dispatch({
+          ...CommonActions.setParams({ newlyAddedExercises: selectedExercises }),
+          source: splitDetailRoute.key,
+        });
+        navigation.goBack();
+      } else {
+        // Fallback or error handling if route isn't found
+        console.error("Could not find SplitDetail route to set params");
+        // As a fallback, try the potentially broken navigate (might error if split is missing)
+        navigation.navigate({
+          name: "SplitDetail",
+          params: { newlyAddedExercises: selectedExercises } as any, // Cast to avoid TS error, knowing 'split' is missing
+          merge: true,
+        });
+      }
     }
   };
 

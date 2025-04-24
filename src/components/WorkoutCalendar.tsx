@@ -115,22 +115,23 @@ const DayCell = React.memo(
           h={10}
           alignItems="center"
           justifyContent="center"
-          bg={todayHighlight ? "#6B8EF2" : "transparent"}
+          bg={hasWorkout ? "green.500" : todayHighlight ? "transparent" : "transparent"}
           borderRadius="md"
           borderWidth={borderWidth}
-          // borderColor="#4169E1"
           borderColor="rgba(255, 255, 255, 0.8)"
           position="relative"
         >
-          <Box
-            position="absolute"
-            top={0}
-            left={0}
-            right={0}
-            h="1"
-            bg={colorStrip}
-            borderTopRadius="lg"
-          />
+          {!hasWorkout && (
+            <Box
+              position="absolute"
+              top={0}
+              left={0}
+              right={0}
+              h="1"
+              bg={colorStrip}
+              borderTopRadius="lg"
+            />
+          )}
           <Text
             fontSize="sm"
             color={
@@ -140,17 +141,6 @@ const DayCell = React.memo(
           >
             {day}
           </Text>
-          {hasWorkout && (
-            <Box
-              w={1.5}
-              h={1.5}
-              borderRadius="full"
-              bg={workoutCompleted ? "#60C1EF" : "#6B8EF2"}
-              position="absolute"
-              bottom={1}
-              opacity={isFutureDay ? 0.5 : 1}
-            />
-          )}
         </Box>
       </Pressable>
     );
@@ -259,20 +249,10 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
       const workout = getWorkoutForDate(dateStr);
       const split = getSplitForDate(dayOfWeek as WeekDay);
       
-      console.log('[DEBUG] Selected Cell Info:', {
-        date: dateStr,
-        day: day,
-        month: month + 1, // Adding 1 for human-readable month
-        year,
-        dayOfWeek,
-        workout: workout !== undefined ? { completed: workout } : 'No workout',
-        split: split ? { 
-          id: split.id,
-          name: split.name,
-          color: split.color,
-          exercisesCount: split.exercises.length
-        } : 'No split assigned'
-      });
+      // console.log('[DEBUG] Selected Cell Info:', {
+      //   date: dateStr,
+      //   dayOfWeek,
+      // });
 
       // Call the onDayPress callback if provided
       if (onDayPress) {
@@ -368,13 +348,14 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   }, [month, year, selectedDate, todayInfo, getWorkoutForDate, getSplitForDate, handleDayPress]);
 
   return (
-    <Box bg="#1E2028" px={2} pt={4}>
+    <Box bg="#1E2028" px={0.5} pt={4}>
       <VStack space={1} p={2} borderRadius="lg">
         <Text
           fontSize="lg"
           fontWeight="bold"
           mb={1}
           color={monthData.isFutureMonth ? "gray.500" : "white"}
+          pl={3}
         >
           {new Date(year, month).toLocaleString("default", {
             month: "long",

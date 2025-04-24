@@ -1,27 +1,27 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Box, Text, VStack, HStack, Avatar, ScrollView, Pressable, Spinner, Button, IconButton, useToast, AlertDialog } from 'native-base';
 import { MaterialIcons } from '@expo/vector-icons';
-import { supabase } from '../utils/supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { decode } from 'base64-arraybuffer';
 import { useData } from '../contexts/DataContext';
+import {
+  UserProfile,
+  getCurrentUser,
+  signOutUser,
+  fetchUserProfileFromSupabase,
+  updateUserProfileAvatar,
+  getAvatarPublicUrl,
+  uploadAvatar,
+  fetchUserWorkoutStats,
+  deleteWorkoutSessions
+} from '../supabase/supabaseProfile';
 
 type WorkoutTab = {
   id: number;
   title: string;
   icon: keyof typeof MaterialIcons.glyphMap;
 };
-
-// Interface for profile data from profiles table
-interface UserProfile {
-  user_id: string;
-  email: string;
-  display_name: string;
-  avatar_id: string | null;
-  updated_at: string;
-}
 
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -34,7 +34,6 @@ const ProfileScreen: React.FC = () => {
     totalWorkouts: 0,
     hoursTrained: 0
   });
-  // Store cached avatar URL to prevent flickering
   const [cachedAvatarUrl, setCachedAvatarUrl] = useState<string | null>(null);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const cancelRef = React.useRef(null);
@@ -48,53 +47,32 @@ const ProfileScreen: React.FC = () => {
   ];
 
   const fetchUserData = async () => {
+    setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
+      const currentUser = await getCurrentUser();
+      setUser(currentUser);
     } catch (error) {
       console.error('Error fetching user:', error);
+      // Handle error appropriately, maybe show a toast
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch user profile with memoization to reduce redundant fetches
   const fetchUserProfile = useCallback(async () => {
     if (!user) return;
     
     try {
-      console.log('Fetching user profile for:', user.id);
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-        
-      if (error) {
-        console.error('Error fetching user profile:', error);
-        return;
-      }
+      const profileData = await fetchUserProfileFromSupabase(user.id);
+      setUserProfile(profileData);
       
-      if (data) {
-        console.log('Profile data retrieved:', data);
-        setUserProfile(data as UserProfile);
-        
-        // Update cached avatar URL when profile changes
-        if (data.avatar_id) {
-          const { data: { publicUrl } } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(data.avatar_id);
-            
-          // Add timestamp as cache buster
-          const timestamp = new Date().getTime();
-          const avatarUrl = `${publicUrl}?t=${timestamp}`;
-          setCachedAvatarUrl(avatarUrl);
-        }
-      } else {
-        console.log('No profile found for user');
+      if (profileData?.avatar_id) {
+        const avatarUrl = getAvatarPublicUrl(profileData.avatar_id);
+        setCachedAvatarUrl(avatarUrl);
       }
     } catch (error) {
-      console.error('Exception fetching user profile:', error);
+      // Error is logged within fetchUserProfileFromSupabase
+      // Handle UI feedback if needed
     }
   }, [user]);
 
@@ -109,66 +87,53 @@ const ProfileScreen: React.FC = () => {
     }
   }, [user, fetchUserProfile]);
 
-  // Only compute the avatar URL when userProfile or cachedAvatarUrl changes
   const avatarUrl = useMemo(() => {
-    // If we have a cached URL, use it
     if (cachedAvatarUrl) {
       return cachedAvatarUrl;
     }
     
-    // Generate default avatar if no profile or avatar_id
-    if (!userProfile?.avatar_id) {
-      const initials = userProfile?.display_name?.charAt(0) || 
-                      user?.email?.charAt(0)?.toUpperCase() || 
-                      '?';
-      const color = '6B8EF2'; // Brand blue color in hex (without #)
-      return `https://ui-avatars.com/api/?name=${initials}&background=${color}&color=fff&size=256&bold=true`;
+    if (userProfile?.avatar_id) {
+      const url = getAvatarPublicUrl(userProfile.avatar_id);
+      if (url) {
+          setTimeout(() => setCachedAvatarUrl(url), 0);
+          return url;
+      }
     }
     
-    // Generate URL from Supabase storage with cache busting
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(userProfile.avatar_id);
-      
-    // Add cache busting and save to cached state
-    const url = `${publicUrl}?t=${new Date().getTime()}`;
-    // Update the cache in the next tick to avoid render issues
-    setTimeout(() => setCachedAvatarUrl(url), 0);
-    return url;
+    const initials = userProfile?.display_name?.charAt(0) || 
+                    user?.email?.charAt(0)?.toUpperCase() || 
+                    '?';
+    const color = '6B8EF2'; // Brand blue color
+    return `https://ui-avatars.com/api/?name=${initials}&background=${color}&color=fff&size=256&bold=true`;
+
   }, [userProfile, cachedAvatarUrl, user]);
 
   const fetchUserStats = async () => {
+    if (!user) return;
     try {
-      // Fetch workout sessions from your storage service
-      const { data: sessions } = await supabase
-        .from('workout_sessions')
-        .select('*')
-        .eq('user_id', user?.id);
-
-      if (sessions) {
-        setStats({
-          totalWorkouts: sessions.length,
-          hoursTrained: sessions.reduce((acc, session) => acc + (session.duration || 0), 0)
-        });
+      const userStats = await fetchUserWorkoutStats(user.id);
+      if (userStats) {
+        setStats(userStats);
       }
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      // Error logged within fetchUserWorkoutStats
+      console.error('Error fetching stats on component level:', error);
     }
   };
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await signOutUser();
       if (error) throw error;
-      // Navigation will be handled by the auth state change listener in App.tsx
+      // Auth state change listener in App.tsx will handle navigation
     } catch (error) {
-      console.error('Error logging out:', error);
+      // Error logged within signOutUser
+      toast.show({ title: "Logout Error", description: "Failed to log out.", placement: "top" });
     }
   };
 
   const pickImage = async () => {
     try {
-      // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         toast.show({
@@ -180,9 +145,8 @@ const ProfileScreen: React.FC = () => {
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: 'images',
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.5,
@@ -204,87 +168,28 @@ const ProfileScreen: React.FC = () => {
   };
 
   const uploadImage = async (imageAsset: ImagePicker.ImagePickerAsset) => {
-    if (!user) return;
+    if (!user || !imageAsset.base64) return;
     
     try {
       setUploading(true);
       
-      // Generate a completely unique filename to avoid any caching issues
-      const fileExt = imageAsset.uri.split('.').pop();
-      const timestamp = Date.now();
-      const filePath = `${user.id}_${timestamp}.${fileExt}`;
+      const uploadResult = await uploadAvatar(user.id, imageAsset.uri, imageAsset.base64);
       
-      console.log('Image selected:', {
-        uri: imageAsset.uri,
-        width: imageAsset.width,
-        height: imageAsset.height,
-        type: imageAsset.type,
-        fileSize: imageAsset.fileSize,
-      });
-      
-      // Convert base64 to ArrayBuffer
-      const base64Data = imageAsset.base64;
-      if (!base64Data) throw new Error('No base64 data found');
-      
-      // Check the first few characters of base64 to confirm it's an image
-      console.log('Base64 data prefix:', base64Data.substring(0, 30) + '...');
-      
-      const arrayBuffer = decode(base64Data);
-      console.log('ArrayBuffer created with byte length:', arrayBuffer.byteLength);
-      
-      console.log('Creating new file at path:', filePath);
-      
-      // Always use upload with a unique path to avoid any caching or replacement issues
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, arrayBuffer, {
-          contentType: `image/${fileExt}`,
-          cacheControl: 'no-cache, no-store, must-revalidate'
-        });
-      
-      if (uploadError) {
-        console.error('Upload error details:', uploadError);
-        throw uploadError;
+      if (!uploadResult) {
+        throw new Error("Avatar upload failed");
       }
       
-      console.log('Upload success:', uploadData);
+      const { filePath, publicUrl } = uploadResult;
       
-      // Get public URL with cache busting
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath);
+      setCachedAvatarUrl(publicUrl);
       
-      // Add strong cache busting
-      const cacheBustedUrl = `${publicUrl}?t=${timestamp}&nocache=${Math.random()}`;
-      console.log('New avatar URL with cache busting:', cacheBustedUrl);
+      const updatedProfile = await updateUserProfileAvatar(user.id, filePath);
       
-      // Update cached avatar immediately to prevent flickering
-      setCachedAvatarUrl(cacheBustedUrl);
-      
-      // Update the profiles table instead of user metadata
-      if (!userProfile) {
-        console.error('Cannot update avatar: user profile not found');
-        throw new Error('User profile not found');
+      if (!updatedProfile) {
+        console.error('Failed to update profile after avatar upload');
+        throw new Error('Failed to update profile');
       }
       
-      const { data: updatedProfile, error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ 
-          avatar_id: filePath,  // Store the file path (not the full URL)
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', user.id)
-        .select()
-        .single();
-      
-      if (profileUpdateError) {
-        console.error('Profile update error:', profileUpdateError);
-        throw profileUpdateError;
-      }
-      
-      console.log('Profile updated with new avatar_id:', updatedProfile);
-      
-      // Update the local state with the updated profile
       setUserProfile(updatedProfile);
       
       toast.show({
@@ -306,51 +211,33 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  // Add function to handle data clearing with confirmation
   const handleClearAllData = async () => {
     try {
       console.log('[DEBUG] Clearing workout sessions data');
       
-      // Get the current user ID
-      const { data: currentUser } = await supabase.auth.getUser();
-      if (!currentUser?.user?.id) {
+      if (!user?.id) {
         throw new Error('No authenticated user found');
       }
       
-      // Delete workout sessions from Supabase
-      const { error } = await supabase
-        .from('workout_sessions')
-        .delete()
-        .eq('user_id', currentUser.user.id);
+      const { error: deleteError } = await deleteWorkoutSessions(user.id);
         
-      if (error) {
-        console.error('Error deleting workout sessions from Supabase:', error);
-        throw error;
+      if (deleteError) {
+        console.error('Error deleting workout sessions:', deleteError);
+        throw deleteError;
       }
       
-      // Also clear workout sessions from local storage/AsyncStorage
       try {
-        // Import AsyncStorage directly
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        // Clear only workout sessions from AsyncStorage
         await AsyncStorage.removeItem('workout_sessions');
         console.log('[DEBUG] Successfully cleared local workout session data');
       } catch (localError) {
         console.error('Error clearing local workout sessions:', localError);
-        // Continue even if local clear fails
       }
       
-      // Refresh app state through DataContext
       await refreshData();
-      
-      // Refresh stats after deletion
-      setStats({
-        totalWorkouts: 0,
-        hoursTrained: 0
-      });
+      setStats({ totalWorkouts: 0, hoursTrained: 0 });
       
       setIsAlertOpen(false);
-      
       toast.show({
         title: "Workout Data Cleared",
         description: "All workout session history has been removed",
@@ -366,6 +253,7 @@ const ProfileScreen: React.FC = () => {
         placement: "top",
         duration: 3000
       });
+      setIsAlertOpen(false);
     }
   };
 
@@ -381,13 +269,12 @@ const ProfileScreen: React.FC = () => {
     <Box flex={1} bg="#1E2028">
       <ScrollView>
         <VStack space={6} p={4}>
-          {/* Profile Header */}
           <VStack space={4} alignItems="center" pt={4}>
             <Box position="relative">
               <Avatar
                 size="2xl"
                 source={{
-                  uri: avatarUrl
+                  uri: avatarUrl || undefined
                 }}
               />
               <IconButton
@@ -397,8 +284,6 @@ const ProfileScreen: React.FC = () => {
                 right={0}
                 bg="#1254a1"
                 rounded="full"
-                // borderWidth={1}
-                // borderColor="white"
                 size="sm"
                 onPress={pickImage}
                 isDisabled={uploading}
@@ -415,50 +300,78 @@ const ProfileScreen: React.FC = () => {
             </VStack>
           </VStack>
 
-          {/* Workout Tabs */}
           <VStack space={4}>
-            <Text color="white" fontSize="xl" fontWeight="bold">
+            {/* <Text color="white" fontSize="xl" fontWeight="bold">
+              Statistics
+            </Text> */}
+            {/* <HStack space={4} flexWrap="wrap" justifyContent="center">
+              <Box bg="#2A2D36" p={4} rounded="lg" width="45%" alignItems="center">
+                <Text color="gray.400" fontSize="sm" textAlign="center">Total Workouts</Text>
+                <Text color="white" fontSize="xl" fontWeight="bold" textAlign="center">{stats.totalWorkouts}</Text>
+              </Box>
+              <Box bg="#2A2D36" p={4} rounded="lg" width="45%" alignItems="center">
+                <Text color="gray.400" fontSize="sm" textAlign="center">Hours Trained</Text>
+                <Text color="white" fontSize="xl" fontWeight="bold" textAlign="center">{stats.hoursTrained}</Text>
+              </Box>
+            </HStack> */}
+            <HStack space={4} flexWrap="wrap" justifyContent="center">
+              <Box bg="transparent" p={4} rounded="lg" width="45%" alignItems="center">
+                <Text color="white" fontSize="3xl" fontWeight="bold" textAlign="center">{stats.totalWorkouts}</Text>
+                <Text color="gray.400" fontSize="sm" textAlign="center">Total Workouts</Text>
+              </Box>
+              <Box bg="transparent" p={4} rounded="lg" width="45%" alignItems="center">
+                <Text color="white" fontSize="3xl" fontWeight="bold" textAlign="center">{stats.hoursTrained}</Text>
+                <Text color="gray.400" fontSize="sm" textAlign="center">Hours Trained</Text>
+              </Box>
+            </HStack>
+          </VStack>
+
+          <VStack space={4}>
+            <Text color="white" fontSize="xl" fontWeight="bold" pl={3}>
               My Fitness
             </Text>
-            <HStack space={4} flexWrap="wrap">
-              {workoutTabs.map((tab) => (
-                <Pressable
-                  key={tab.id}
-                  bg="#2A2D36"
-                  p={4}
-                  rounded="lg"
-                  width="45%"
-                  mb={4}
-                >
-                  <VStack space={2} alignItems="center">
-                    <MaterialIcons name={tab.icon} size={24} color="#fff" />
-                    <Text color="white" fontSize="md">
-                      {tab.title}
-                    </Text>
-                  </VStack>
-                </Pressable>
-              ))}
-            </HStack>
+            <VStack space={4}>
+              <HStack space={4} justifyContent="center">
+                {workoutTabs.slice(0, 2).map((tab) => (
+                  <Pressable
+                    key={tab.id}
+                    bg="#2A2D36"
+                    p={4}
+                    rounded="lg"
+                    width="47%"
+                    alignItems="center"
+                  >
+                    <VStack space={2} alignItems="center">
+                      <MaterialIcons name={tab.icon} size={24} color="#fff" />
+                      <Text color="white" fontSize="md">
+                        {tab.title}
+                      </Text>
+                    </VStack>
+                  </Pressable>
+                ))}
+              </HStack>
+              <HStack space={4} justifyContent="center">
+                {workoutTabs.slice(2, 4).map((tab) => (
+                  <Pressable
+                    key={tab.id}
+                    bg="#2A2D36"
+                    p={4}
+                    rounded="lg"
+                    width="47%"
+                    alignItems="center"
+                  >
+                    <VStack space={2} alignItems="center">
+                      <MaterialIcons name={tab.icon} size={24} color="#fff" />
+                      <Text color="white" fontSize="md">
+                        {tab.title}
+                      </Text>
+                    </VStack>
+                  </Pressable>
+                ))}
+              </HStack>
+            </VStack>
           </VStack>
 
-          {/* Stats Section */}
-          <VStack space={4}>
-            <Text color="white" fontSize="xl" fontWeight="bold">
-              Statistics
-            </Text>
-            <HStack space={4} flexWrap="wrap">
-              <Box bg="#2A2D36" p={4} rounded="lg" width="45%">
-                <Text color="gray.400" fontSize="sm">Total Workouts</Text>
-                <Text color="white" fontSize="xl" fontWeight="bold">{stats.totalWorkouts}</Text>
-              </Box>
-              <Box bg="#2A2D36" p={4} rounded="lg" width="45%">
-                <Text color="gray.400" fontSize="sm">Hours Trained</Text>
-                <Text color="white" fontSize="xl" fontWeight="bold">{stats.hoursTrained}</Text>
-              </Box>
-            </HStack>
-          </VStack>
-
-          {/* Logout Button */}
           <Button
             bg="#FF4B4B"
             _pressed={{ bg: "#E63939" }}
@@ -468,7 +381,6 @@ const ProfileScreen: React.FC = () => {
             Logout
           </Button>
 
-          {/* Add a "Developer Options" section */}
           <Box mt={6} p={4} bg="#262A35" borderRadius="lg">
             <Text fontSize="xl" color="white" fontWeight="bold" mb={4}>
               Developer Options
@@ -490,7 +402,6 @@ const ProfileScreen: React.FC = () => {
         </VStack>
       </ScrollView>
       
-      {/* Confirmation dialog */}
       <AlertDialog 
         leastDestructiveRef={cancelRef} 
         isOpen={isAlertOpen} 

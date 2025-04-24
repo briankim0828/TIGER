@@ -13,6 +13,7 @@ import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ScrollView, StyleSheet } from "react-native";
 import SessionSummaryModal from "../components/SessionSummaryModal";
+import { Split, Exercise, WorkoutDay } from '../types';
 
 interface WorkoutSession {
   date: string;
@@ -20,7 +21,7 @@ interface WorkoutSession {
 }
 
 const ProgressScreen: React.FC = () => {
-  const { splits, workoutSessions, workoutDays, loading: dataLoading } = useData();
+  const { splits, workoutSessions, loading: dataLoading } = useData();
   const { startWorkout } = useWorkout();
 
   const today = new Date();
@@ -39,15 +40,15 @@ const ProgressScreen: React.FC = () => {
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
   const [showSessionSummary, setShowSessionSummary] = useState(false);
 
-  // Add refs for caching
   const isInitialLoadRef = useRef(true);
   const processedDataRef = useRef<{
     workouts: WorkoutSession[];
+    workoutDays: WorkoutDay[];
   }>({
     workouts: [],
+    workoutDays: [],
   });
 
-  // Get today's date string in the same format as the calendar
   const todayString = useMemo(() => {
     return `${currentYear}-${String(currentMonth + 1).padStart(
       2,
@@ -55,112 +56,76 @@ const ProgressScreen: React.FC = () => {
     )}-${String(today.getDate()).padStart(2, "0")}`;
   }, [currentYear, currentMonth, today]);
 
-  // Check if selected date is in the future
   const isFutureDate = useMemo(() => {
     if (!selectedDate) return false;
     return selectedDate > todayString;
   }, [selectedDate, todayString]);
 
-  // Check if selected date is today
   const isToday = useMemo(() => {
     return selectedDate === todayString;
   }, [selectedDate, todayString]);
 
-  // Initial load - should only happen once when app starts
-  useEffect(() => {
-    const initialLoad = async () => {
-      if (!isInitialLoadRef.current) return;
-
-      setLoading(true);
-      try {
-        if (workoutDays) {
-          const formattedWorkouts = workoutDays.map((session) => ({
-            date: session.date,
-            completed: session.completed,
-          }));
-          setWorkouts(formattedWorkouts);
-          processedDataRef.current.workouts = formattedWorkouts;
-        } else {
-          setWorkouts([]);
-          processedDataRef.current.workouts = [];
-        }
-
-        // Increment the calendar key to force a complete re-render
-        setCalendarKey((prev) => prev + 1);
-      } catch (error) {
-        console.error("Error on initial load:", error);
-      } finally {
-        setLoading(false);
-        setIsInitialLoad(false);
-        isInitialLoadRef.current = false;
-      }
-    };
-
-    initialLoad();
-  }, [workoutDays]);
-
-  // Update when data changes
-  useFocusEffect(
-    useCallback(() => {
-      // Skip if it's the initial load
-      if (isInitialLoadRef.current) return;
-
-      setLoading(true);
-      try {
-        if (workoutDays) {
-          const formattedWorkouts = workoutDays.map((session) => ({
-            date: session.date,
-            completed: session.completed,
-          }));
-          setWorkouts(formattedWorkouts);
-          processedDataRef.current.workouts = formattedWorkouts;
-        } else {
-          setWorkouts([]);
-          processedDataRef.current.workouts = [];
-        }
-
-        // Increment the calendar key to force a complete re-render
-        setCalendarKey((prev) => prev + 1);
-      } catch (error) {
-        console.error("Error updating data:", error);
-      } finally {
-        setLoading(false);
-      }
-    }, [workoutDays])
-  );
-
-  // Get the day of week from the selected date
   const getDayOfWeek = useCallback((dateString: string | null) => {
     if (!dateString) return null;
-    
     const date = new Date(dateString);
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return days[date.getDay()];
   }, []);
 
+  const scheduledSplit = useMemo(() => {
+    const dayOfWeek = getDayOfWeek(selectedDate);
+    if (!dayOfWeek) return null;
+    return splits.find(split => split.days.includes(dayOfWeek)) || null;
+  }, [selectedDate, splits, getDayOfWeek]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const processData = async () => {
+        const formattedWorkouts = workoutSessions.map((session) => ({
+          date: session.date,
+          completed: session.completed,
+        }));
+        processedDataRef.current.workouts = formattedWorkouts;
+        processedDataRef.current.workoutDays = workoutSessions.map(session => ({
+          date: session.date,
+          completed: session.completed,
+          splitId: session.splitId || undefined
+        }));
+
+        setWorkouts(formattedWorkouts);
+
+        if (isInitialLoadRef.current) {
+          setIsInitialLoad(false);
+          isInitialLoadRef.current = false;
+        }
+        setLoading(false);
+        setCalendarKey((prev) => prev + 1);
+      };
+
+      if (!dataLoading) {
+        processData();
+      }
+    }, [dataLoading, workoutSessions])
+  );
+
   const handleDayPress = useCallback(
     (date: string) => {
-      // If pressing the same date again, do nothing
       if (date === selectedDate) {
         return;
       }
       
-      // Find the workout session for this date
       const workoutSession = workoutSessions.find(session => session.date === date);
+      const dayOfWeek = getDayOfWeek(date);
+      const currentSplit = dayOfWeek ? splits.find(split => split.days.includes(dayOfWeek)) : null;
       
-      // Debug log with detailed information about selected date
       console.log('[DEBUG] Selected Date Info:', {
         date,
-        isToday: date === todayString,
-        isFuture: date > todayString,
-        dayOfWeek: getDayOfWeek(date),
+        split: currentSplit?.name,
         workoutSession: workoutSession 
           ? {
-              id: workoutSession.id,
               date: workoutSession.date,
               startTime: workoutSession.startTime,
               durationSec: workoutSession.durationSec,
-              splitId: workoutSession.splitId,
               exercisesCount: workoutSession.exercises.length,
               totalSets: workoutSession.sets.flat().length,
               completed: workoutSession.completed
@@ -170,55 +135,43 @@ const ProgressScreen: React.FC = () => {
       
       setSelectedDate(date);
     },
-    [selectedDate, todayString, getDayOfWeek, workoutSessions]
+    [selectedDate, workoutSessions, getDayOfWeek, splits]
   );
 
   const handleWorkoutPress = useCallback(() => {
-    setShowSessionSummary(true);
-  }, []);
+    if (scheduledSplit) {
+      setShowSessionSummary(true);
+    } else {
+      console.log('No split scheduled for this day');
+    }
+  }, [scheduledSplit]);
 
   const handleCloseSummary = useCallback(() => {
     setShowSessionSummary(false);
   }, []);
 
-  // Find the split scheduled for the selected day
-  const getScheduledSplit = useCallback((dayOfWeek: string | null) => {
-    if (!dayOfWeek) return null;
-    
-    return splits.find(split => split.days.includes(dayOfWeek)) || null;
-  }, [splits]);
-
-  // Get the scheduled split for the selected date
-  const scheduledSplit = useMemo(() => {
-    const dayOfWeek = getDayOfWeek(selectedDate || todayString);
-    return getScheduledSplit(dayOfWeek) || null;
-  }, [selectedDate, todayString, getDayOfWeek, getScheduledSplit]);
-
-  const handleStartWorkout = useCallback(() => {
-    if (scheduledSplit) {
-      console.log('ProgressScreen - Starting workout with split:', {
-        splitId: scheduledSplit.id,
-        splitName: scheduledSplit.name,
-        exercise_count: scheduledSplit.exercises.length
-      });
-      
-      // Convert split exercises to Exercise objects with sets
-      const exercisesWithSets = scheduledSplit.exercises.map(ex => ({
-        ...ex,
-        splitIds: [scheduledSplit.id],
-      }));
-      
-      // Start the workout with these exercises and pass the split ID
-      startWorkout(exercisesWithSets, scheduledSplit.id);
+  const handleStartWorkout = useCallback(async () => {
+    if (!scheduledSplit || !selectedDate) {
+      console.error("Cannot start workout: Missing split or selected date.");
+      return;
     }
-  }, [scheduledSplit, startWorkout]);
+    
+    const exercisesForWorkout: Exercise[] = scheduledSplit.exercises.map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      bodyPart: ex.bodyPart,
+      splitIds: [scheduledSplit.id],
+      sets: [],
+    }));
+
+    await startWorkout(exercisesForWorkout, selectedDate, scheduledSplit.id);
+    setShowSessionSummary(false);
+  }, [scheduledSplit, selectedDate, startWorkout]);
 
   if (loading || dataLoading) {
     return (
       <Box flex={1} justifyContent="center" alignItems="center" bg="#1E2028">
-        <Text color="white" fontSize="md">
-          Loading calendar...
-        </Text>
+        <Text color="white">Loading Progress...</Text>
       </Box>
     );
   }
@@ -231,7 +184,6 @@ const ProgressScreen: React.FC = () => {
             My Progress
           </Text>
 
-          {/* calendar component */}
           <WorkoutCalendar
             key={`calendar-${calendarKey}`}
             month={currentMonth}
@@ -241,7 +193,6 @@ const ProgressScreen: React.FC = () => {
             onDayPress={handleDayPress}
           />
 
-          {/* button - now positioned below calendar */}
           <Box px={4} py={1} pt={5}>
             <Pressable
               bg="#6B8EF2"
@@ -271,7 +222,6 @@ const ProgressScreen: React.FC = () => {
         </Box>
       </ScrollView>
       
-      {/* Move SessionSummaryModal outside of ScrollView to position at bottom of screen */}
       {showSessionSummary && (
         <SessionSummaryModal
           selectedDate={selectedDate}
@@ -284,12 +234,12 @@ const ProgressScreen: React.FC = () => {
   );
 };
 
-export default ProgressScreen;
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: "#1E2028",
   },
 });
+
+export default ProgressScreen;
 
