@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
 import "react-native-gesture-handler";
+import React, { useEffect, useState } from "react";
 import { NavigationContainer, useNavigation } from "@react-navigation/native";
 import {
   createNativeStackNavigator,
@@ -20,7 +20,12 @@ import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
-import { TouchableWithoutFeedback, Keyboard, View, StyleSheet } from "react-native";
+import { TouchableWithoutFeedback, Keyboard, View, StyleSheet, LogBox } from "react-native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
+
+// Ignore specific warning about text strings
+LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component.']);
 
 // Active Workout Modal Component
 const ActiveWorkoutModalContainer = () => {
@@ -84,6 +89,7 @@ type RootStackParamList = {
   Progress: undefined;
   Profile: undefined;
   Login: undefined;
+  ExerciseSelectionModalScreen: undefined;
 };
 
 type TabType = "workout" | "progress" | "profile";
@@ -175,9 +181,18 @@ const NavigationWrapper = () => {
           }}
           initialRouteName="Progress"
         >
-          <Stack.Screen name="Workout" component={WorkoutMain} />
-          <Stack.Screen name="Progress" component={ProgressScreen} />
-          <Stack.Screen name="Profile" component={ProfileScreen} />
+          <Stack.Group>
+            <Stack.Screen name="Workout" component={WorkoutMain} />
+            <Stack.Screen name="Progress" component={ProgressScreen} />
+            <Stack.Screen name="Profile" component={ProfileScreen} />
+          </Stack.Group>
+
+          <Stack.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
+            <Stack.Screen
+              name="ExerciseSelectionModalScreen"
+              component={ExerciseSelectionView}
+            />
+          </Stack.Group>
         </Stack.Navigator>
       </Box>
       
@@ -215,28 +230,30 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <NativeBaseProvider>
-        <DataProvider>
-          <WorkoutProvider>
-            <SafeAreaView 
-              style={{ flex: 0, backgroundColor: "#1E2028" }}
-              edges={["top"]}
-            />
-            <SafeAreaView
-              style={{ flex: 1, backgroundColor: "#18191c" }}
-              edges={[ "left", "right", "bottom"]}
-            >
-              <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
-              <NavigationContainer>
-                <DismissKeyboardWrapper>
-                  {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
-                </DismissKeyboardWrapper>
-              </NavigationContainer>
-            </SafeAreaView>
-          </WorkoutProvider>
-        </DataProvider>
-      </NativeBaseProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <NativeBaseProvider>
+          <DataProvider>
+            <WorkoutProvider>
+              <SafeAreaView 
+                style={{ flex: 0, backgroundColor: "#1E2028" }}
+                edges={["top"]}
+              />
+              <SafeAreaView
+                style={{ flex: 1, backgroundColor: "#18191c" }}
+                edges={[ "left", "right", "bottom"]}
+              >
+                <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
+                <NavigationContainer>
+                  <DismissKeyboardWrapper>
+                    {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
+                  </DismissKeyboardWrapper>
+                </NavigationContainer>
+              </SafeAreaView>
+            </WorkoutProvider>
+          </DataProvider>
+        </NativeBaseProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

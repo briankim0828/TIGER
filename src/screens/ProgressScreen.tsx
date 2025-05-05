@@ -89,7 +89,7 @@ const ProgressScreen: React.FC = () => {
         processedDataRef.current.workoutDays = workoutSessions.map(session => ({
           date: session.date,
           completed: session.completed,
-          splitId: session.splitId || undefined
+          splitId: session.splitName || undefined
         }));
 
         setWorkouts(formattedWorkouts);
@@ -164,7 +164,7 @@ const ProgressScreen: React.FC = () => {
       sets: [],
     }));
 
-    await startWorkout(exercisesForWorkout, selectedDate, scheduledSplit.id);
+    await startWorkout(exercisesForWorkout, selectedDate, scheduledSplit.name);
     setShowSessionSummary(false);
   }, [scheduledSplit, selectedDate, startWorkout]);
 

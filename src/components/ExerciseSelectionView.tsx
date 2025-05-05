@@ -20,20 +20,21 @@ import {
   Split,
 } from "../types";
 import { useData } from "../contexts/DataContext";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CommonActions } from "@react-navigation/native";
+import { useWorkout } from "../contexts/WorkoutContext";
 
-// Ensure this type matches the one in SplitDetailScreen
+// Define the navigation param list potentially used by this screen OR the screens it navigates to
+// This might need adjustment based on your full navigation structure
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
   SplitDetail: { split: Split; newlyAddedExercises?: Exercise[] };
-  ExerciseSelection: { splitId: string };
+  ExerciseSelectionModalScreen: undefined; // Ensure this matches App.tsx
+  // Add other routes as needed
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
-// Define RouteProp for ExerciseSelection
-type ExerciseSelectionRouteProp = RouteProp<WorkoutStackParamList, 'ExerciseSelection'>;
 
 // Icon mapping for body parts
 const BODY_PART_ICONS: Record<string, any> = {
@@ -48,8 +49,6 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = () => {
   const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<ExerciseSelectionRouteProp>(); // Use the specific route prop
-  const { splitId } = route.params; // Get splitId from params
 
   const onClose = () => {
     navigation.goBack();
@@ -62,54 +61,75 @@ const ExerciseSelectionView = () => {
     Record<string, Exercise[]>
   >({});
 
+  const { addExercisesToCurrentSession } = useWorkout();
+
   // Prepare exercises by body part for the selection view
   useEffect(() => {
-    // Group exercises by body part
-    const groupedExercises: Record<string, Exercise[]> = {};
+    const finalExercisesByBodyPart: Record<string, Exercise[]> = {};
 
-    // First initialize with all default exercises
+    // 1. Initialize with the latest defaults from types/index.ts
     BODY_PARTS.forEach((bodyPart) => {
-      const defaultExercises = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(
-        (ex) => ({
-          ...ex,
-          splitIds: [],
-        })
-      );
-      groupedExercises[bodyPart] = [...defaultExercises];
+        finalExercisesByBodyPart[bodyPart] = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(ex => ({
+            ...ex, // Start with default properties (name, bodyPart, id)
+            splitIds: [], // Initialize splitIds for the Exercise type
+        }));
     });
 
-    // Then, add or update exercises from the data store
-    if (allExercises.length > 0) {
-      allExercises.forEach((exercise) => {
-        if (!groupedExercises[exercise.bodyPart]) {
-          groupedExercises[exercise.bodyPart] = [];
-        }
-        
-        // Check if this exercise already exists in the group
-        const existingIndex = groupedExercises[exercise.bodyPart].findIndex(
-          ex => ex.id === exercise.id
-        );
-        
-        if (existingIndex >= 0) {
-          // Update existing exercise
-          groupedExercises[exercise.bodyPart][existingIndex] = exercise;
-        } else {
-          // Add new exercise
-          groupedExercises[exercise.bodyPart].push(exercise);
-        }
-      });
+    // 2. Process exercises from DataContext (allExercises)
+    // These might be custom exercises or contain updates (like splitIds) for defaults
+    if (allExercises && allExercises.length > 0) {
+        allExercises.forEach((exerciseFromContext) => {
+            const { bodyPart, id } = exerciseFromContext;
+
+            // Ensure body part group exists (might be a custom exercise for a standard body part)
+            if (!finalExercisesByBodyPart[bodyPart]) {
+                finalExercisesByBodyPart[bodyPart] = []; 
+            }
+
+            // Check if this exercise (by ID) exists in the current default list for this body part
+            const defaultIndex = finalExercisesByBodyPart[bodyPart].findIndex(ex => ex.id === id);
+
+            if (defaultIndex !== -1) {
+                // It's a default exercise. Update it with data from context (like splitIds).
+                // Crucially, keep the name and bodyPart from the DEFAULT list.
+                finalExercisesByBodyPart[bodyPart][defaultIndex] = {
+                    ...exerciseFromContext, // Get properties like splitIds from context
+                    name: finalExercisesByBodyPart[bodyPart][defaultIndex].name, // Ensure default name is used
+                    bodyPart: finalExercisesByBodyPart[bodyPart][defaultIndex].bodyPart, // Ensure default body part is used
+                    id: finalExercisesByBodyPart[bodyPart][defaultIndex].id, // Ensure default id is used
+                };
+            } else {
+                // It's not in the defaults, likely a user-created exercise. Add it.
+                // Check if it was already added in this loop to prevent duplicates if allExercises has repeats
+                if (!finalExercisesByBodyPart[bodyPart].some(ex => ex.id === id)) {
+                    finalExercisesByBodyPart[bodyPart].push(exerciseFromContext);
+                }
+            }
+        });
     }
 
-    // Log the exercises to debug
-    console.log('ExerciseSelectionView - Initialized exercises:', 
-      Object.keys(groupedExercises).map(bodyPart => ({
-        bodyPart,
-        count: groupedExercises[bodyPart].length,
-        exercises: groupedExercises[bodyPart].map(ex => ex.name)
+    // Optional: Ensure exercises within each body part list are unique by ID one last time
+    for (const bodyPart in finalExercisesByBodyPart) {
+        const uniqueExercises: Exercise[] = [];
+        const seenIds = new Set<string>();
+        for (const exercise of finalExercisesByBodyPart[bodyPart]) {
+            if (!seenIds.has(exercise.id)) {
+                uniqueExercises.push(exercise);
+                seenIds.add(exercise.id);
+            }
+        }
+        finalExercisesByBodyPart[bodyPart] = uniqueExercises;
+    }
+
+    console.log('ExerciseSelectionView - Final combined exercises:', 
+      Object.keys(finalExercisesByBodyPart).map(bp => ({
+        bodyPart: bp,
+        count: finalExercisesByBodyPart[bp].length,
+        exercises: finalExercisesByBodyPart[bp].map(ex => `${ex.name} (ID: ${ex.id})`) // Log with ID for clarity
       }))
     );
 
-    setExercisesByBodyPart(groupedExercises);
+    setExercisesByBodyPart(finalExercisesByBodyPart);
   }, [allExercises]);
 
   const handleBodyPartSelect = (bodyPart: string) => {
@@ -129,43 +149,11 @@ const ExerciseSelectionView = () => {
 
   const handleAddExercises = () => {
     if (selectedExercises.length > 0) {
-      console.log(`ExerciseSelectionView - Adding ${selectedExercises.length} exercises.`);
-      // Navigate back to SplitDetail and merge the new exercises into its params
-      // Ensure we provide the original split data along with the new exercises
-      // We navigate *back* to the previous screen implicitly when using navigate({ merge: true })
-      // to a screen already in the stack, but we must provide the necessary non-optional params.
-      // Since we don't have the full 'split' object here easily, we might need to rethink.
-      // ALTERNATIVE: Use navigation.setParams on the *previous* screen (SplitDetail).
-      // Let's try the setParams approach first, assuming we can get the previous route key.
-      // navigation.getParent()?.setParams({ newlyAddedExercises: selectedExercises }); // Might work depending on nav structure
-      // Simpler: Just navigate back and let the SplitDetailScreen's useEffect handle it.
-      // The previous approach *should* work if SplitDetailScreen is still mounted.
-
-      // Let's stick to the navigate with merge, but we need the original Split object.
-      // This implies we might need to pass the original Split object *to* ExerciseSelection,
-      // or fetch it again, which isn't ideal.
-
-      // REVISED PLAN: Use setParams on the previous route.
-      // Find the route key for SplitDetail (this is brittle)
-      const routes = navigation.getState()?.routes;
-      const splitDetailRoute = routes?.[routes.length - 2]; // Assumes SplitDetail is screen before this one
-
-      if (splitDetailRoute && splitDetailRoute.key) {
-        navigation.dispatch({
-          ...CommonActions.setParams({ newlyAddedExercises: selectedExercises }),
-          source: splitDetailRoute.key,
-        });
-        navigation.goBack();
-      } else {
-        // Fallback or error handling if route isn't found
-        console.error("Could not find SplitDetail route to set params");
-        // As a fallback, try the potentially broken navigate (might error if split is missing)
-        navigation.navigate({
-          name: "SplitDetail",
-          params: { newlyAddedExercises: selectedExercises } as any, // Cast to avoid TS error, knowing 'split' is missing
-          merge: true,
-        });
-      }
+      console.log(`ExerciseSelectionView - Adding ${selectedExercises.length} exercises via context.`);
+      // Call the context function directly
+      addExercisesToCurrentSession(selectedExercises);
+      // Navigate back to the previous screen (ActiveWorkoutModal)
+      navigation.goBack();
     }
   };
 

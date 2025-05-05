@@ -11,7 +11,7 @@ export function toStoredSession(live: LiveWorkoutSession): StoredWorkoutSession 
   return {
     id: uuidv4(),
     date: live.session_date,
-    splitId: live.split_id,
+    splitName: live.split_name,
     userId: live.user_id,
     sets: live.sets,
     startTime: live.start_time,
@@ -41,21 +41,13 @@ function formatTimestamp(isoTimestamp: string): string {
  * Saves a workout session to the Supabase database
  */
 export async function saveSessionToSupabase(session: StoredWorkoutSession): Promise<void> {
-  // Validate the split_id is a proper UUID, set to null if not
-  let splitId = session.splitId;
-  if (splitId && !isUuid(splitId)) {
-    console.warn(`Split ID "${splitId}" is not a valid UUID, setting to null for Supabase compatibility`);
-    splitId = null;
-  }
-
-  // Ensure we have a valid ID for the session
   const sessionId = session.id || uuidv4();
 
   try {
     console.log('[DEBUG] Saving session to Supabase:', { 
       id: sessionId,
       date: session.date, 
-      splitId,
+      splitName: session.splitName,
       exercises: session.exercises.length
     });
     
@@ -65,7 +57,7 @@ export async function saveSessionToSupabase(session: StoredWorkoutSession): Prom
         id: sessionId,
         user_id: session.userId,
         session_date: session.date,
-        split_id: splitId,
+        split_name: session.splitName,
         sets: session.sets,
         start_time: formatTimestamp(session.startTime),
         duration_sec: session.durationSec
@@ -119,7 +111,7 @@ export async function fetchSessionsFromSupabase(): Promise<StoredWorkoutSession[
       id: item.id,
       userId: item.user_id,
       date: item.session_date,
-      splitId: item.split_id,
+      splitName: item.split_name,
       sets: item.sets,
       startTime: item.start_time,
       durationSec: item.duration_sec,

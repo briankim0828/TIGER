@@ -5,15 +5,17 @@ import { toStoredSession, saveSessionToSupabase } from '../supabase/supabaseWork
 import { dataService } from '../services/data';
 import { useData } from './DataContext';
 import { Toast } from 'native-base';
+import { v4 as uuidv4 } from 'uuid';
 
 interface WorkoutContextType {
   isWorkoutActive: boolean;
   currentWorkoutSession: LiveWorkoutSession | null;
-  startWorkout: (exercises: Exercise[], selectedDate: string, splitId?: string | null) => Promise<void>;
+  startWorkout: (exercises: Exercise[], selectedDate: string, splitName?: string | null) => Promise<void>;
   endWorkout: () => Promise<void>;
   discardWorkout: () => void;
   updateSet: (exerciseIndex: number, setIndex: number, updatedSet: Partial<Set>) => void;
   addSet: (exerciseIndex: number) => void;
+  addExercisesToCurrentSession: (exercisesToAdd: Exercise[]) => void;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
@@ -24,7 +26,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isSessionSaved, setIsSessionSaved] = useState(false);
   const { addWorkoutSession } = useData();
 
-  const startWorkout = useCallback(async (exercises: Exercise[], selectedDate: string, splitId: string | null = null) => {
+  const startWorkout = useCallback(async (exercises: Exercise[], selectedDate: string, splitName: string | null = null) => {
     setIsSessionSaved(false);
 
     const dateString = selectedDate;
@@ -35,7 +37,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const allSets: Set[][] = exercises.map((exercise) => {
       if (!exercise.sets || exercise.sets.length === 0) {
         return Array(1).fill(null).map((_, setIndex) => ({
-          id: `${dateForId}-1-${splitId || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
+          id: `${dateForId}-1-${splitName || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
           weight: 0,
           reps: 0,
           completed: false
@@ -43,7 +45,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } else {
         return exercise.sets.map((set, setIndex) => ({
           ...set,
-          id: `${dateForId}-1-${splitId || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
+          id: `${dateForId}-1-${splitName || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${setIndex + 1}`,
           completed: false
         }));
       }
@@ -54,7 +56,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newWorkoutSession: LiveWorkoutSession = {
       user_id: user?.user?.id || 'current-user',
       session_date: dateString,
-      split_id: splitId,
+      split_name: splitName,
       sets: allSets,
       start_time: new Date().toISOString(),
       duration_sec: 0,
@@ -64,19 +66,14 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }))
     };
 
-    console.log('WorkoutContext - New workout session initialized:', {
-      user_id: newWorkoutSession.user_id,
-      session_date: newWorkoutSession.session_date,
-      split_id: newWorkoutSession.split_id,
-      exercises_count: newWorkoutSession.exercises.length,
-      sets_count: newWorkoutSession.sets.reduce((acc, curr) => acc + curr.length, 0),
-      start_time: newWorkoutSession.start_time
+    console.log('WorkoutContext - Created new workout session:', {
+      date: newWorkoutSession.session_date,
+      split_name: newWorkoutSession.split_name,
+      exercises: newWorkoutSession.exercises.length
     });
 
     setCurrentWorkoutSession(newWorkoutSession);
     setIsWorkoutActive(true);
-    console.log("workout is active")
-
   }, []);
 
   const updateSet = useCallback((exerciseIndex: number, setIndex: number, updatedSet: Partial<Set>) => {
@@ -225,7 +222,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const today = new Date();
       const dateString = today.toISOString().split('T')[0].replace(/-/g, '');
       const lastSetIndex = prevSession.sets[exerciseIndex].length;
-      const newSetId = `${dateString}-1-${prevSession.split_id || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${lastSetIndex + 1}`;
+      const newSetId = `${dateString}-1-${prevSession.split_name || 'custom'}-${exercise.name.toLowerCase().replace(/\s+/g, '-')}-${lastSetIndex + 1}`;
       
       // Create the new set
       const newSet: Set = {
@@ -255,6 +252,67 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [currentWorkoutSession]);
 
+  const addExercisesToCurrentSession = useCallback((exercisesToAdd: Exercise[]) => {
+    setCurrentWorkoutSession(prevSession => {
+      if (!prevSession) return null;
+
+      console.log('WorkoutContext - Adding exercises to current session:', exercisesToAdd.map(ex => ex.name));
+
+      const newExercisesForSession: Exercise[] = [];
+      const newSetArraysForSession: Set[][] = [];
+
+      // Get necessary info for the ID schema from the current session
+      const dateForId = prevSession.session_date.replace(/-/g, '');
+      const splitNameForId = prevSession.split_name || 'custom';
+
+      exercisesToAdd.forEach(exercise => {
+        // Check if exercise already exists in the session
+        const alreadyExists = prevSession.exercises.some(ex => ex.id === exercise.id);
+        if (!alreadyExists) {
+          // Construct the set ID based on the schema
+          const exerciseNameForId = exercise.name.toLowerCase().replace(/\s+/g, '-');
+          const initialSetIndex = 1; // This is the first set for this exercise
+          const newSetId = `${dateForId}-1-${splitNameForId}-${exerciseNameForId}-${initialSetIndex}`;
+
+          // Initialize one default set for the new exercise using the schema ID
+          const defaultSet: Set = {
+            id: newSetId, // Use the constructed ID
+            weight: 0,
+            reps: 0,
+            completed: false,
+          };
+          const initialSetsForExercise = [defaultSet];
+          newSetArraysForSession.push(initialSetsForExercise);
+
+          // Add the exercise itself, including the reference to its sets
+          newExercisesForSession.push({
+            ...exercise,
+            sets: initialSetsForExercise, // Add sets to the exercise object
+          });
+        } else {
+          console.log(`WorkoutContext - Exercise "${exercise.name}" already in session, skipping.`);
+        }
+      });
+
+      if (newExercisesForSession.length === 0) {
+          console.log('WorkoutContext - No new exercises to add.');
+          return prevSession; // No changes if all selected exercises already exist
+      }
+
+      // Combine existing and new exercises/sets
+      const updatedExercises = [...prevSession.exercises, ...newExercisesForSession];
+      const updatedSets = [...prevSession.sets, ...newSetArraysForSession];
+
+      console.log('WorkoutContext - Session updated with new exercises.');
+
+      return {
+        ...prevSession,
+        exercises: updatedExercises,
+        sets: updatedSets,
+      };
+    });
+  }, []);
+
   // Reset flags on component mount/unmount
   React.useEffect(() => {
     return () => {
@@ -280,7 +338,8 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
     endWorkout,
     discardWorkout,
     updateSet,
-    addSet
+    addSet,
+    addExercisesToCurrentSession,
   };
 
   return (

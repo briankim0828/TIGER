@@ -13,4 +13,5 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       persistSession: true,
       detectSessionInUrl: false, // disable this in mobile apps
     },
+    realtime: undefined,
   });

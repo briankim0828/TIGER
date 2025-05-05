@@ -55,7 +55,7 @@ export type EditMode = 'none' | 'program' | 'splits';
 export interface LiveWorkoutSession {
   user_id: string;                // Supabase UID
   session_date: string;           // ISO YYYY-MM-DD
-  split_id: string | null;
+  split_name: string | null;      // Split name instead of ID
   start_time: string;             // ISO timestamp
   duration_sec: number;           // 0 until finished
   sets: Set[][];                  // array-of-arrays per exercise
@@ -66,7 +66,7 @@ export interface LiveWorkoutSession {
 export interface StoredWorkoutSession {
   id?: string;                    // uuid (optional before insert)
   date: string;                   // ISO YYYY-MM-DD
-  splitId: string | null;
+  splitName: string | null;       // Split name instead of ID
   userId: string;
   sets: Set[][];
   startTime: string;
@@ -104,12 +104,13 @@ export type WeekDay = typeof WEEKDAYS[number];
 export const DEFAULT_EXERCISES_BY_BODY_PART: Record<string, Omit<Exercise, 'splitIds'>[]> = {
   'Chest': [
     { id: 'chest-1', name: 'Flat Bench Press', bodyPart: 'Chest' },
-    { id: 'chest-2', name: 'Incline Dumbbell Press', bodyPart: 'Chest' },
-    { id: 'chest-3', name: 'Decline Bench Press', bodyPart: 'Chest' },
-    { id: 'chest-4', name: 'Chest Flyes', bodyPart: 'Chest' },
-    { id: 'chest-5', name: 'Push-Ups', bodyPart: 'Chest' },
-    { id: 'chest-6', name: 'Cable Flyes', bodyPart: 'Chest' },
-    { id: 'chest-7', name: 'Dips', bodyPart: 'Chest' }
+    { id: 'chest-2', name: 'Incline Bench Press', bodyPart: 'Chest' },
+    { id: 'chest-3', name: 'Incline Dumbbell Press', bodyPart: 'Chest' },
+    { id: 'chest-4', name: 'Decline Bench Press', bodyPart: 'Chest' },
+    { id: 'chest-5', name: 'Dips', bodyPart: 'Chest' },
+    { id: 'chest-6', name: 'Machine Chest Flyes', bodyPart: 'Chest' },
+    { id: 'chest-7', name: 'Cable Chest Flyes', bodyPart: 'Chest' },
+    { id: 'chest-8', name: 'Push-Ups', bodyPart: 'Chest' },
   ],
   'Back': [
     { id: 'back-1', name: 'Barbell Row', bodyPart: 'Back' },
@@ -117,7 +118,10 @@ export const DEFAULT_EXERCISES_BY_BODY_PART: Record<string, Omit<Exercise, 'spli
     { id: 'back-3', name: 'Lat Pulldowns', bodyPart: 'Back' },
     { id: 'back-4', name: 'Deadlift', bodyPart: 'Back' },
     { id: 'back-5', name: 'Face Pulls', bodyPart: 'Back' },
-    { id: 'back-6', name: 'Cable Row', bodyPart: 'Back' }
+    { id: 'back-6', name: 'Cable Row', bodyPart: 'Back' },
+    { id: 'back-7', name: 'Lat Pullovers', bodyPart: 'Back' },
+    { id: 'back-8', name: 'Bent Over Rows', bodyPart: 'Back' },
+    { id: 'back-9', name: 'Chest Supported DB Rows', bodyPart: 'Back' },
   ],
   'Legs': [
     { id: 'legs-1', name: 'Squats', bodyPart: 'Legs' },
@@ -136,10 +140,10 @@ export const DEFAULT_EXERCISES_BY_BODY_PART: Record<string, Omit<Exercise, 'spli
     { id: 'arms-6', name: 'Tricep Extensions', bodyPart: 'Arms' }
   ],
   'Shoulders': [
-    { id: 'shoulders-1', name: 'Dumbbell Press', bodyPart: 'Shoulders' },
+    { id: 'shoulders-1', name: 'Dumbbell Shoulder Press', bodyPart: 'Shoulders' },
     { id: 'shoulders-2', name: 'Lateral Raises', bodyPart: 'Shoulders' },
     { id: 'shoulders-3', name: 'Front Raises', bodyPart: 'Shoulders' },
-    { id: 'shoulders-4', name: 'Barbell Press', bodyPart: 'Shoulders' },
+    { id: 'shoulders-4', name: 'Barbell Shoulder Press', bodyPart: 'Shoulders' },
     { id: 'shoulders-5', name: 'Shrugs', bodyPart: 'Shoulders' },
     { id: 'shoulders-6', name: 'Reverse Flyes', bodyPart: 'Shoulders' }
   ],

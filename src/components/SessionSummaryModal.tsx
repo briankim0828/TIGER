@@ -72,7 +72,8 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   useEffect(() => {
     const timer = setTimeout(() => {
       if (bottomSheetRef.current) {
-        bottomSheetRef.current.snapToIndex(1);
+        // bottomSheetRef.current.snapToIndex(1);
+        bottomSheetRef.current.expand();
       }
     }, 300);
     

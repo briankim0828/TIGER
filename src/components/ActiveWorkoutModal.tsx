@@ -5,7 +5,21 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider, Icon, AlertDialog, useToast } from 'native-base';
 import { Exercise } from '../types';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { Ionicons } from '@expo/vector-icons';
+import { Entypo, Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// Define your root stack param list if not already done globally
+// Make sure this matches your actual navigation setup
+type RootStackParamList = {
+  // ... include other screens from your root stack
+  MainTabs: undefined; // Example
+  ExerciseSelectionModalScreen: undefined; // Add this line
+  // If ExerciseSelectionView needs params like splitName:
+  // ExerciseSelectionModalScreen: { splitName: string | null };
+};
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
@@ -20,6 +34,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onSave
 }) => {
+  const navigation = useNavigation<NavigationProp>();
   // Use the new discardWorkout function from context
   const { updateSet, currentWorkoutSession, addSet, endWorkout, discardWorkout } = useWorkout();
   const toast = useToast();
@@ -303,6 +318,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     setIsDiscardAlertOpen(true);
   };
 
+  const handleAddExercisePress = () => {
+    console.log('ActiveWorkoutModal - Navigating to Exercise Selection');
+    // Navigate to the modal screen that hosts ExerciseSelectionView
+    navigation.navigate('ExerciseSelectionModalScreen');
+    // If passing params:
+    // navigation.navigate('ExerciseSelectionModalScreen', { splitName: currentWorkoutSession?.split_name || null });
+  };
+
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
       <BottomSheet
@@ -348,14 +371,32 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           p={4} 
                           borderRadius="lg"
                           borderColor="#6B8EF2"
+                          // borderWidth={1}
                         >
-                          <HStack space={2} alignItems="flex-end">
+                          <HStack space={2} alignItems="center">
                             <Text color="white" fontSize="md" fontWeight="bold">
                               {exercise.name}
                             </Text>
                             <Text color="gray.400" fontSize="md" opacity={0.7}>
                               {exercise.bodyPart}
                             </Text>
+                            <HStack ml="auto" space={3} alignItems="center">
+                              <Icon as={Entypo} name="menu" color="gray.400" size="xl"/>
+                              <Pressable
+                                width="32px"
+                                height="32px"
+                                borderRadius="lg"
+                                bg={(exercise.sets && exercise.sets.filter(set => set.completed).length > 0) ? "green.500" : "gray.700"}
+                                justifyContent="center"
+                                alignItems="center"
+                                onPress={() => toggleExerciseExpansion(exercise.id)}
+                                _pressed={{ opacity: 0.7 }}
+                              >
+                                <Text color="white" fontSize="sm" fontWeight="bold">
+                                  {(exercise.sets && exercise.sets.filter(set => set.completed).length) || 0}
+                                </Text>
+                              </Pressable>
+                            </HStack>
                           </HStack>
                           
                           {/* Sets for this exercise */}
@@ -374,7 +415,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 </HStack>
                               </HStack> */}
 
-                              <HStack justifyContent="space-between" alignItems="center" mb={1} p={1}>
+                              <HStack justifyContent="space-between" alignItems="center" mb={1}>
                                 <Text color="rgba(255, 255, 255, 0.8)" width="60px" fontSize="xs">Set</Text>
                                 <HStack space={2} flex={1} justifyContent="flex-end">
                                   <Text color="rgba(255, 255, 255, 0.8)" width="70px" fontSize="xs" textAlign="center">Weight</Text>
@@ -391,7 +432,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                   key={set.id}
                                   backgroundColor={set.completed ? "rgba(72, 170, 90, 0.35)" : "transparent"}
                                   borderRadius="lg"
-                                  px={1}
+                                  // px={1}
                                   py={1}
                                 >
           
@@ -453,8 +494,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                         />
                                       </View>
                                       <Pressable
-                                        width="35px"
-                                        height="35px"
+                                        width="32px"
+                                        height="32px"
                                         borderRadius="lg"
                                         bg={set.completed ? "green.500" : "gray.700"}
                                         justifyContent="center"
@@ -514,6 +555,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     alignItems="center"
                     justifyContent="center"
                     _pressed={{ opacity: 0.8 }}
+                    onPress={handleAddExercisePress}
                   >
                     <Text color="white" fontSize="md" fontWeight="bold">
                       Add Exercise
@@ -532,7 +574,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     flex={1}
                     alignItems="center"
                     justifyContent="center"
-                    _pressed={{ opacity: 0.8 }}
+                    _pressed={{ opacity: 0.6 }}
                     onPress={openDiscardAlert}
                   >
                     <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
@@ -546,7 +588,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     px={6}
                     borderRadius="lg"
                     onPress={handleEndWorkout}
-                    _pressed={{ opacity: 0.8 }}
+                    _pressed={{ opacity: 0.6 }}
                     flex={1}
                     alignItems="center"
                     justifyContent="center"
@@ -617,14 +659,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         </BottomSheetView>
       </BottomSheet>
 
-      {/* Discard Confirmation Alert Dialog */}
+      {/* Discard Confirmation Alert Dialog - Temporarily Commented Out for Debugging */}
+      {/*
       <AlertDialog
         leastDestructiveRef={cancelRef}
         isOpen={isDiscardAlertOpen}
         onClose={() => setIsDiscardAlertOpen(false)}
       >
         <AlertDialog.Content>
-          {/* <AlertDialog.CloseButton /> */}
           <AlertDialog.Header style={{ alignItems: 'center' }}>Discard Workout</AlertDialog.Header>
           <AlertDialog.Body>
             Are you sure you want to discard this workout?
@@ -649,6 +691,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </AlertDialog.Footer>
         </AlertDialog.Content>
       </AlertDialog>
+      */}
     </GestureHandlerRootView>
   );
 };
