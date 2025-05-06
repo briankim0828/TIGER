@@ -1,5 +1,5 @@
 import React from 'react';
-import { HStack, Pressable, Text, Box, VStack, Icon } from 'native-base';
+import { HStack, Pressable, Text, Box, VStack } from '@gluestack-ui/themed';
 import { AntDesign } from '@expo/vector-icons';
 
 interface BottomNavbarProps {
@@ -8,52 +8,55 @@ interface BottomNavbarProps {
 }
 
 const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange }) => {
+  const activeColor = '$primary500';
+  const inactiveColor = '$textLight400';
+  const activeHex = '#6B8EF2';
+  const inactiveHex = '#adb5bd';
+  const iconSize = 20;
+
   return (
-    <Box bg="#18191c" borderTopWidth={1} borderColor="gray.800">
-      <HStack px={4} space={8} justifyContent="space-around" alignItems="center"pt={4} pb={1}>
-        <Pressable onPress={() => onTabChange('workout')}>
-          <VStack alignItems="center" space={1}>
-            <Icon 
-              as={AntDesign} 
+    <Box bg="$backgroundDark950" borderTopWidth={1} borderColor="$borderDark800">
+      <HStack px="$4" space="2xl" justifyContent="space-around" alignItems="center" pt="$4" pb="$1">
+        <Pressable onPress={() => onTabChange('workout')} accessibilityRole="button" accessibilityLabel="Workout Tab">
+          <VStack alignItems="center" space="xs">
+            <AntDesign 
               name="appstore-o" 
-              color={selectedTab === 'workout' ? '#6B8EF2' : 'gray.400'} 
-              size="md"
+              color={selectedTab === 'workout' ? activeHex : inactiveHex} 
+              size={iconSize}
             />
             <Text
-              color={selectedTab === 'workout' ? '#6B8EF2' : 'gray.400'}
-              fontSize="xs"
+              color={selectedTab === 'workout' ? activeColor : inactiveColor}
+              fontSize="$xs"
             >
               Workout
             </Text>
           </VStack>
         </Pressable>
-        <Pressable onPress={() => onTabChange('progress')}>
-          <VStack alignItems="center" space={1}>
-            <Icon 
-              as={AntDesign} 
+        <Pressable onPress={() => onTabChange('progress')} accessibilityRole="button" accessibilityLabel="Progress Tab">
+          <VStack alignItems="center" space="xs">
+            <AntDesign 
               name="calendar" 
-              color={selectedTab === 'progress' ? '#6B8EF2' : 'gray.400'} 
-              size="md"
+              color={selectedTab === 'progress' ? activeHex : inactiveHex} 
+              size={iconSize}
             />
             <Text
-              color={selectedTab === 'progress' ? '#6B8EF2' : 'gray.400'}
-              fontSize="xs"
+              color={selectedTab === 'progress' ? activeColor : inactiveColor}
+              fontSize="$xs"
             >
               Progress
             </Text>
           </VStack>
         </Pressable>
-        <Pressable onPress={() => onTabChange('profile')}>
-          <VStack alignItems="center" space={1}>
-            <Icon 
-              as={AntDesign} 
+        <Pressable onPress={() => onTabChange('profile')} accessibilityRole="button" accessibilityLabel="Profile Tab">
+          <VStack alignItems="center" space="xs">
+            <AntDesign 
               name="user" 
-              color={selectedTab === 'profile' ? '#6B8EF2' : 'gray.400'} 
-              size="md"
+              color={selectedTab === 'profile' ? activeHex : inactiveHex} 
+              size={iconSize}
             />
             <Text
-              color={selectedTab === 'profile' ? '#6B8EF2' : 'gray.400'}
-              fontSize="xs"
+              color={selectedTab === 'profile' ? activeColor : inactiveColor}
+              fontSize="$xs"
             >
               Profile
             </Text>

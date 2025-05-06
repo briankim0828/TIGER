@@ -1,5 +1,17 @@
 import React, { useState } from "react";
-import { Box, VStack, Button, useToast, Center, Heading } from "native-base";
+import {
+  Box,
+  VStack,
+  Button,
+  ButtonText,
+  useToast,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  Center,
+  Heading,
+  Text,
+} from "@gluestack-ui/themed";
 import { supabase } from "../utils/supabaseClient";
 import { StyleSheet, TextInput } from "react-native";
 import { parseFontSize } from "../../helper/fontsize";
@@ -20,11 +32,17 @@ const LoginScreen = () => {
     try {
       let result;
       if (isSignUp) {
-        // Validate display name is provided for signup
         if (!displayName.trim()) {
           toast.show({
-            description: "Please provide a display name",
             placement: "top",
+            render: ({ id }) => (
+              <Toast nativeID={id} action="warning" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Input Required</ToastTitle>
+                  <ToastDescription>Please provide a display name</ToastDescription>
+                </VStack>
+              </Toast>
+            ),
           });
           return;
         }
@@ -44,13 +62,11 @@ const LoginScreen = () => {
           throw new Error("User ID not found after signup");
         }
         
-        // Add user to the users table
         console.log("Inserting into users table with ID:", userId);
         const { data: userData, error: usersError } = await supabase
           .from("users")
           .insert({ id: userId, email: result.data.user?.email });
         
-        // It might return an empty error object even on success
         console.log("Users table response:", { data: userData, error: usersError });
           
         if (usersError && Object.keys(usersError).length > 0) {
@@ -58,7 +74,6 @@ const LoginScreen = () => {
           throw usersError;
         }
         
-        // Add user to the profiles table
         console.log("Inserting into profiles table with display name:", displayName);
         const { data: profileData, error: profileError } = await supabase
           .from("profiles")
@@ -90,25 +105,37 @@ const LoginScreen = () => {
       }
 
       toast.show({
-        description: isSignUp
-          ? "Signup successful!"
-          : "Signed in successfully!",
         placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>{isSignUp ? "Signup Successful!" : "Signed In Successfully!"}</ToastTitle>
+            </VStack>
+          </Toast>
+        ),
       });
     } catch (error) {
       toast.show({
-        description:
-          error instanceof Error ? error.message : "Authentication failed",
         placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Authentication Failed</ToastTitle>
+              <ToastDescription>
+                {error instanceof Error ? error.message : "An unknown error occurred"}
+              </ToastDescription>
+            </VStack>
+          </Toast>
+        ),
       });
     }
   };
 
   return (
-    <Box flex={1} bg="#1E2028" safeArea mt={-20}>
-      <Center flex={1} px={4}>
-        <VStack space={5} w="100%">
-          <Heading color="white" size="xl" mb={8}>
+    <Box flex={1} bg="$backgroundDark900" pt={20} testID="login-screen-box">
+      <Center flex={1} px="$4">
+        <VStack space="md" w="100%">
+          <Heading color="$textLight50" size="2xl" mb="$8" textAlign="center">
             {isSignUp ? "Create Account" : "Welcome Back"}
           </Heading>
 
@@ -119,6 +146,7 @@ const LoginScreen = () => {
             style={styles.input}
             placeholderTextColor="gray"
             autoCapitalize="none"
+            keyboardType="email-address"
           />
 
           <TextInput
@@ -141,25 +169,29 @@ const LoginScreen = () => {
           )}
 
           <Button
-            bg="#6B8EF2"
+            size="lg"
+            variant="solid"
+            action="primary"
             onPress={handleAuth}
-            _pressed={{ bg: "#5A7DE0" }}
+            bg="$primary500"
+            $pressed={{ bg: "$primary600" }}
           >
-            {isSignUp ? "Sign Up" : "Sign In"}
+            <ButtonText>{isSignUp ? "Sign Up" : "Sign In"}</ButtonText>
           </Button>
 
           <Button
-            variant="ghost"
+            size="lg"
+            variant="link"
             onPress={() => {
               setIsSignUp(!isSignUp);
-              // Clear display name when toggling to prevent confusion
               if (!isSignUp) setDisplayName("");
             }}
-            _text={{ color: "#6B8EF2" }}
           >
-            {isSignUp
-              ? "Already have an account? Sign In"
-              : "Need an account? Sign Up"}
+            <ButtonText color="$primary500">
+              {isSignUp
+                ? "Already have an account? Sign In"
+                : "Need an account? Sign Up"}
+            </ButtonText>
           </Button>
         </VStack>
       </Center>
@@ -177,5 +209,7 @@ const styles = StyleSheet.create({
     borderColor: "white",
     borderRadius: 7,
     padding: 15,
+    backgroundColor: "#2A2E38",
+    marginBottom: 10,
   },
 });

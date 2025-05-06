@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { Box, Text, Pressable } from "native-base";
+import { Box, Text, Pressable } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import { useFocusEffect } from "@react-navigation/native";
 import { useData } from "../contexts/DataContext";
@@ -170,8 +170,8 @@ const ProgressScreen: React.FC = () => {
 
   if (loading || dataLoading) {
     return (
-      <Box flex={1} justifyContent="center" alignItems="center" bg="#1E2028">
-        <Text color="white">Loading Progress...</Text>
+      <Box flex={1} justifyContent="center" alignItems="center" bg="$backgroundDark900">
+        <Text color="$textLight50">Loading Progress...</Text>
       </Box>
     );
   }
@@ -179,8 +179,8 @@ const ProgressScreen: React.FC = () => {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ScrollView style={{ flex: 1, backgroundColor: "#1E2028" }}>
-        <Box flex={1}>
-          <Text color="white" fontSize="2xl" fontWeight="bold" pl={4}>
+        <Box flex={1} py="$4">
+          <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold" pl="$4" mb="$4">
             My Progress
           </Text>
 
@@ -193,23 +193,23 @@ const ProgressScreen: React.FC = () => {
             onDayPress={handleDayPress}
           />
 
-          <Box px={4} py={1} pt={5}>
+          <Box px="$4" py="$1" pt="$5">
             <Pressable
-              bg="#6B8EF2"
-              py={4}
-              px={6}
-              borderRadius="xl"
+              bg="$primary500"
+              py="$4"
+              px="$6"
+              borderRadius="$xl"
               onPress={handleWorkoutPress}
-              _pressed={{ opacity: 0.8 }}
+              $pressed={{ opacity: 0.8 }}
               opacity={isFutureDate ? 0.65 : 1}
               disabled={isFutureDate}
+              accessibilityRole="button"
             >
               <Text
-                color="white"
-                fontSize="lg"
-                fontWeight="bold"
+                color="$textLight50"
+                fontSize="$lg"
+                fontWeight="$bold"
                 textAlign="center"
-                p={0.1}
               >
                 {isFutureDate
                   ? "Not Yet..."

@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { Box, VStack, HStack, Text, Pressable } from "native-base";
+import { Box, VStack, HStack, Text, Pressable } from "@gluestack-ui/themed";
 import {
   Platform,
   UIManager,
@@ -104,22 +104,23 @@ const DayCell = React.memo(
   }) => {
     // Empty cell render is very cheap
     if (day === 0) {
-      return <Box flex={1} h={10} />;
+      return <Box flex={1} h={40} />;
     }
 
     const borderWidth = isSelected ? 1.5 : 0;
 
     return (
-      <Pressable flex={1} onPress={onPress} opacity={isFutureDay ? 0.5 : 1}>
+      <Pressable flex={1} onPress={onPress} opacity={isFutureDay ? 0.5 : 1} accessibilityRole="button">
         <Box
-          h={10}
+          h={40}
           alignItems="center"
           justifyContent="center"
-          bg={hasWorkout ? "green.500" : todayHighlight ? "transparent" : "transparent"}
-          borderRadius="md"
+          bg={hasWorkout ? "$green500" : todayHighlight ? "transparent" : "transparent"}
+          borderRadius="$md"
           borderWidth={borderWidth}
-          borderColor="rgba(255, 255, 255, 0.8)"
+          borderColor={isSelected ? "$borderLight300" : "transparent"}
           position="relative"
+          $pressed={{ bg: "$coolGray700" }}
         >
           {!hasWorkout && (
             <Box
@@ -127,17 +128,18 @@ const DayCell = React.memo(
               top={0}
               left={0}
               right={0}
-              h="1"
+              h={4}
               bg={colorStrip}
-              borderTopRadius="lg"
+              borderTopLeftRadius="$lg"
+              borderTopRightRadius="$lg"
             />
           )}
           <Text
-            fontSize="sm"
+            fontSize="$sm"
             color={
-              isFutureDay ? "gray.500" : todayHighlight ? "white" : "gray.100"
+              isFutureDay ? "$textLight500" : todayHighlight ? "$textLight50" : "$textLight100"
             }
-            fontWeight={todayHighlight ? "bold" : "normal"}
+            fontWeight={todayHighlight ? "$bold" : "$normal"}
           >
             {day}
           </Text>
@@ -162,10 +164,10 @@ const DayCell = React.memo(
 // Memoized day of week header - never changes
 const DaysHeader = React.memo(
   () => (
-    <HStack space={2} justifyContent="space-between" mb={1}>
+    <HStack space="sm" justifyContent="space-between" mb="$1">
       {DAYS_OF_WEEK.map((day) => (
         <Box key={day} flex={1} alignItems="center">
-          <Text fontSize="2xs" color="gray.400">
+          <Text fontSize="$2xs" color="$textLight400">
             {day}
           </Text>
         </Box>
@@ -348,14 +350,14 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   }, [month, year, selectedDate, todayInfo, getWorkoutForDate, getSplitForDate, handleDayPress]);
 
   return (
-    <Box bg="#1E2028" px={0.5} pt={4}>
-      <VStack space={1} p={2} borderRadius="lg">
+    <Box bg="$backgroundDark900" px="$1" pt="$4">
+      <VStack space="xs" p="$2" borderRadius="$lg">
         <Text
-          fontSize="lg"
-          fontWeight="bold"
-          mb={1}
-          color={monthData.isFutureMonth ? "gray.500" : "white"}
-          pl={3}
+          fontSize="$lg"
+          fontWeight="$bold"
+          mb="$1"
+          color={monthData.isFutureMonth ? "$textLight500" : "$textLight50"}
+          pl="$3"
         >
           {new Date(year, month).toLocaleString("default", {
             month: "long",
@@ -368,7 +370,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
         {monthData.weeks.map((week, weekIndex) => (
           <HStack
             key={`week-${year}-${month}-${weekIndex}`}
-            space={2}
+            space="sm"
           >
             {week.map((dayValue, dayIndex) => {
               if (dayValue === null) {
@@ -376,7 +378,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
                   <Box
                     key={`empty-${weekIndex}-${dayIndex}`}
                     flex={1}
-                    h={10}
+                    h={40}
                   />
                 );
               }

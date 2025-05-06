@@ -1,11 +1,31 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Box, Text, Pressable, HStack, VStack, Input, Button, Divider, Icon, AlertDialog, useToast } from 'native-base';
-import { Exercise } from '../types';
+import {
+  Box,
+  Text,
+  Pressable,
+  HStack,
+  VStack,
+  Input,
+  InputField,
+  Button,
+  ButtonText,
+  ButtonIcon,
+  Divider,
+  useToast,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  CloseIcon,
+  Heading,
+  CheckCircleIcon,
+  CircleIcon,
+} from '@gluestack-ui/themed';
+import { Exercise, Set } from '../types';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { Entypo, Ionicons } from '@expo/vector-icons';
+import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -86,7 +106,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
-  const snapPoints = ['10%', '100%'];
+  const snapPoints = useMemo(() => ['10%', '100%'], []);
   
   // Initialize with exercises
   useEffect(() => {
@@ -107,7 +127,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       } else if (!isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.close();
       }
-    }, 300);
+    }, 100);
     
     return () => clearTimeout(timer);
   }, [isVisible]);
@@ -184,12 +204,34 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       
       // After successful save, close the modal
       bottomSheetRef.current?.close();
+      toast.show({
+        placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Workout Saved</ToastTitle>
+              <ToastDescription>Your workout session has been saved successfully.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
     } catch (error) {
       console.error('Error ending workout:', error);
       // Reset the flag if there was an error
       setIsEndingWorkout(false);
+      toast.show({
+        placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Save Error</ToastTitle>
+              <ToastDescription>Could not save your workout. Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
     }
-  }, [endWorkout, onSave, isEndingWorkout]);
+  }, [endWorkout, onSave, isEndingWorkout, toast]);
   
   // Format timer as MM:SS
   const formatTimer = (seconds: number) => {
@@ -232,10 +274,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       currentExercises.forEach((exercise, exerciseIndex) => {
         if (exercise.sets) {
           exercise.sets.forEach((set, setIndex) => {
-            const key = `${exerciseIndex}-${setIndex}`;
+            const key = `${exercise.id}-${set.id || setIndex}`;
             newValues[key] = {
-              weight: set.weight > 0 ? set.weight.toString() : '',
-              reps: set.reps > 0 ? set.reps.toString() : ''
+              weight: set.weight > 0 ? String(set.weight) : '',
+              reps: set.reps > 0 ? String(set.reps) : ''
             };
           });
         }
@@ -246,59 +288,74 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [currentExercises]);
 
   // Handle weight input change locally (no update to context)
-  const handleWeightInputChange = useCallback((exerciseIndex: number, setIndex: number, text: string) => {
-    const key = `${exerciseIndex}-${setIndex}`;
+  const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weight' | 'reps', value: string) => {
     setLocalInputValues(prev => ({
       ...prev,
-      [key]: {
-        ...prev[key],
-        weight: text
+      [setKey]: {
+        ...prev[setKey],
+        [field]: value
       }
     }));
   }, []);
 
   // Handle reps input change locally (no update to context)
-  const handleRepsInputChange = useCallback((exerciseIndex: number, setIndex: number, text: string) => {
-    const key = `${exerciseIndex}-${setIndex}`;
-    setLocalInputValues(prev => ({
-      ...prev,
-      [key]: {
-        ...prev[key],
-        reps: text
-      }
-    }));
-  }, []);
+  const handleSetFieldBlur = useCallback((exerciseId: string, setIndex: number, field: 'weight' | 'reps') => {
+    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
+    if (exerciseIndex === -1) return;
 
-  // Handle weight change when editing is complete
-  const handleWeightEditComplete = useCallback((exerciseIndex: number, setIndex: number) => {
-    const key = `${exerciseIndex}-${setIndex}`;
-    const value = localInputValues[key]?.weight || '';
-    const weightValue = parseFloat(value) || 0;
-    console.log(`ActiveWorkoutModal - Weight updated for exercise ${exerciseIndex}, set ${setIndex}: ${weightValue}`);
-    updateSet(exerciseIndex, setIndex, { weight: weightValue });
-  }, [localInputValues, updateSet]);
+    const exercise = currentExercises[exerciseIndex];
+    if (!exercise || !exercise.sets || !exercise.sets[setIndex]) return;
 
-  // Handle reps change when editing is complete
-  const handleRepsEditComplete = useCallback((exerciseIndex: number, setIndex: number) => {
-    const key = `${exerciseIndex}-${setIndex}`;
-    const value = localInputValues[key]?.reps || '';
-    const repsValue = parseInt(value) || 0;
-    console.log(`ActiveWorkoutModal - Reps updated for exercise ${exerciseIndex}, set ${setIndex}: ${repsValue}`);
-    updateSet(exerciseIndex, setIndex, { reps: repsValue });
-  }, [localInputValues, updateSet]);
+    const setKey = `${exerciseId}-${exercise.sets[setIndex].id || setIndex}`;
+    const numericValue = parseFloat(localInputValues[setKey]?.[field] || '0');
+    
+    if (isNaN(numericValue) && (localInputValues[setKey]?.[field]?.trim() !== '')) {
+        toast.show({
+            placement: "top",
+            render: ({ id }) => (
+              <Toast nativeID={id} action="error" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Invalid Input</ToastTitle>
+                  <ToastDescription>Please enter a valid number for {field}.</ToastDescription>
+                </VStack>
+              </Toast>
+            ),
+        });
+        return;
+    }
+    
+    const originalSetValue = exercise.sets[setIndex][field];
+    const currentValue = localInputValues[setKey]?.[field] || '';
+    
+    if (currentValue.trim() === '' && originalSetValue !== 0) {
+        updateSet(exerciseIndex, setIndex, { [field]: 0 });
+    } else if (!isNaN(numericValue) && numericValue !== originalSetValue) {
+        updateSet(exerciseIndex, setIndex, { [field]: numericValue });
+    }
+  }, [currentExercises, localInputValues, updateSet, toast]);
 
   // Handle set completion toggle
-  const handleSetCompletion = useCallback((exerciseIndex: number, setIndex: number, completed: boolean) => {
-    const newCompletedStatus = !completed;
-    console.log(`ActiveWorkoutModal - Set completion toggled for exercise ${exerciseIndex}, set ${setIndex}: ${newCompletedStatus}`);
-    updateSet(exerciseIndex, setIndex, { completed: newCompletedStatus });
-  }, [updateSet]);
+  const handleToggleSetCompletion = useCallback((exerciseId: string, setIndex: number) => {
+    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
+    if (exerciseIndex === -1) return;
+
+    const exercise = currentExercises[exerciseIndex];
+    if (exercise && exercise.sets && exercise.sets[setIndex]) {
+      const currentSet = exercise.sets[setIndex];
+      updateSet(exerciseIndex, setIndex, { completed: !currentSet.completed });
+    }
+  }, [currentExercises, updateSet]);
   
   // Handle Add Set button click
-  const handleAddSet = useCallback((exerciseIndex: number) => {
-    console.log(`ActiveWorkoutModal - Adding set for exercise ${exerciseIndex}`);
-    addSet(exerciseIndex);
-  }, [addSet]);
+  const handleAddNewSet = useCallback((exerciseId: string) => {
+    console.log(`ActiveWorkoutModal - Adding set for exercise ${exerciseId}`);
+    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
+    if (exerciseIndex !== -1) {
+        addSet(exerciseIndex); // Use exerciseIndex (number)
+    } else {
+        console.error("Could not find exercise to add set to:", exerciseId);
+    }
+  }, [addSet, currentExercises]); // Added currentExercises dependency
 
   // Function to handle the actual discard action using the context function
   const handleConfirmDiscard = useCallback(() => {
@@ -307,11 +364,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     discardWorkout(); // Call the context function to discard the workout
     bottomSheetRef.current?.close(); // Close the modal
     toast.show({
-      title: "Workout Discarded",
       placement: "top",
-      duration: 2000
+      render: ({ id }) => (
+        <Toast nativeID={id} action="info" variant="accent">
+          <VStack space="xs">
+            <ToastTitle>Workout Discarded</ToastTitle>
+          </VStack>
+        </Toast>
+      ),
     });
-  }, [discardWorkout, onClose, toast]);
+  }, [discardWorkout, toast]);
 
   // Function to open the discard confirmation dialog
   const openDiscardAlert = () => {
@@ -320,217 +382,133 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const handleAddExercisePress = () => {
     console.log('ActiveWorkoutModal - Navigating to Exercise Selection');
-    // Navigate to the modal screen that hosts ExerciseSelectionView
     navigation.navigate('ExerciseSelectionModalScreen');
-    // If passing params:
-    // navigation.navigate('ExerciseSelectionModalScreen', { splitName: currentWorkoutSession?.split_name || null });
+  };
+
+  const renderHeader = () => (
+    <Box
+      bg="$backgroundDark900"
+      px="$4"
+      py="$3"
+      borderTopLeftRadius="$lg"
+      borderTopRightRadius="$lg"
+      borderColor="$borderDark700"
+      borderBottomWidth={1}
+    >
+      <HStack justifyContent="space-between" alignItems="center">
+        <Pressable onPress={openDiscardAlert} p="$2">
+          <Ionicons name="close-outline" size={30} color="#adb5bd" />
+        </Pressable>
+        <VStack alignItems="center">
+          <Text color="$textLight50" fontWeight="$bold" fontSize="$lg">
+            Active Workout
+          </Text>
+          <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
+            {formatTimer(workoutTimer)}
+          </Text>
+        </VStack>
+        <Button variant="link" onPress={handleEndWorkout} p="$2">
+          <ButtonText color="$primary400" fontWeight="$semibold" fontSize="$md">Save</ButtonText>
+        </Button>
+      </HStack>
+    </Box>
+  );
+
+  const renderSetRow = (set: Set | undefined, exerciseId: string, setIndex: number, exerciseIndexProp: number) => {
+    // Check for undefined set
+    if (!set) {
+      console.warn(`renderSetRow called with undefined set for exerciseId: ${exerciseId}, setIndex: ${setIndex}`);
+      return null; 
+    }
+    
+    const setKey = `${exerciseId}-${set.id || setIndex}`;
+    const localValue = localInputValues[setKey] || { weight: '', reps: '' };
+
+    return (
+      <HStack key={set.id || setIndex} alignItems="center" space="sm" my="$1" px="$1">
+        <Pressable onPress={() => handleToggleSetCompletion(exerciseId, setIndex)} p="$2">
+          <MaterialCommunityIcons
+            name={set.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+            size={24}
+            color={set.completed ? "#22c55e" : "#71717a"}
+          />
+        </Pressable>
+        <Text w="$10" textAlign="center" color="$textLight400" fontWeight="$medium">Set {setIndex + 1}</Text>
+        <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+          <InputField
+            placeholder="Weight"
+            value={localValue.weight}
+            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weight', text)}
+            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weight')}
+            keyboardType="numeric"
+            color="$textLight50"
+            placeholderTextColor="$textLight600"
+            textAlign="center"
+          />
+        </Input>
+        <Text color="$textLight400" px="$1">x</Text>
+        <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+          <InputField
+            placeholder="Reps"
+            value={localValue.reps}
+            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'reps', text)}
+            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'reps')}
+            keyboardType="numeric"
+            color="$textLight50"
+            placeholderTextColor="$textLight600"
+            textAlign="center"
+          />
+        </Input>
+      </HStack>
+    );
   };
 
   return (
-    <GestureHandlerRootView style={styles.rootContainer}>
+    <GestureHandlerRootView style={styles.rootContainer} pointerEvents="box-none">
       <BottomSheet
         ref={bottomSheetRef}
         onChange={handleSheetChanges}
-        enablePanDownToClose={false}
+        enablePanDownToClose={true}
         index={isVisible ? 1 : -1}
         snapPoints={snapPoints}
-        handleIndicatorStyle={{
-          backgroundColor: 'white',
-          width: 40,
-          height: 4,
-        }}
-        backgroundStyle={{
-          backgroundColor: '#2A2E38',
-        }}
+        handleComponent={renderHeader}
+        backgroundStyle={styles.bottomSheetBackground}
       >
         <BottomSheetView style={styles.contentContainer}>
-          <HStack justifyContent="space-between" alignItems="center" px={4}>
-                <Text color="white" fontSize="xl" fontWeight="bold">
-                  Workout in Progress
-                </Text>
-                <Text color="white" fontSize="lg">
-                  {formatTimer(workoutTimer)}
-                </Text>
-          </HStack>
-          
           <Box flex={1} width="100%" display="flex">
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
               <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
                 
                 {/* Exercise list with sets */}
-                <VStack space={1} width="100%">
+                <VStack space="sm" width="100%">
                   {currentExercises.map((exercise, exerciseIndex) => (
                     <Box key={exercise.id}>
                       <Pressable 
                         onPress={() => toggleExerciseExpansion(exercise.id)}
-                        // borderWidth={1}
-                        // borderColor="red"
                       >
                         <Box 
                           bg={"transparent"} 
-                          p={4} 
-                          borderRadius="lg"
-                          borderColor="#6B8EF2"
-                          // borderWidth={1}
+                          p="$4" 
+                          borderRadius="$lg"
                         >
-                          <HStack space={2} alignItems="center">
-                            <Text color="white" fontSize="md" fontWeight="bold">
+                          <HStack space="md" alignItems="center">
+                            <Text color="$textLight50" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
                               {exercise.name}
                             </Text>
-                            <Text color="gray.400" fontSize="md" opacity={0.7}>
-                              {exercise.bodyPart}
-                            </Text>
-                            <HStack ml="auto" space={3} alignItems="center">
-                              <Icon as={Entypo} name="menu" color="gray.400" size="xl"/>
-                              <Pressable
-                                width="32px"
-                                height="32px"
-                                borderRadius="lg"
-                                bg={(exercise.sets && exercise.sets.filter(set => set.completed).length > 0) ? "green.500" : "gray.700"}
-                                justifyContent="center"
-                                alignItems="center"
-                                onPress={() => toggleExerciseExpansion(exercise.id)}
-                                _pressed={{ opacity: 0.7 }}
-                              >
-                                <Text color="white" fontSize="sm" fontWeight="bold">
-                                  {(exercise.sets && exercise.sets.filter(set => set.completed).length) || 0}
-                                </Text>
-                              </Pressable>
-                            </HStack>
+                            <Ionicons
+                              name={expandedExercises[exercise.id] ? "chevron-up-outline" : "chevron-down-outline"}
+                              size={20}
+                              color="#adb5bd"
+                            />
                           </HStack>
                           
-                          {/* Sets for this exercise */}
-                          {expandedExercises[exercise.id] && exercise.sets && (
-                            <VStack px={0} pt={2} space={1}>
-                              {/* Column headers */}
-                              {/* <HStack justifyContent="space-between" alignItems="center" mb={1} p={1}>
-                                <Text color="gray.400" width="60px" fontSize="xs">Set</Text>
-                                <HStack space={2} flex={1} justifyContent="flex-end">
-                                  <Text color="gray.400" width="70px" fontSize="xs" textAlign="center">Weight</Text>
-                                  <Text color="gray.400" width="70px" fontSize="xs" textAlign="center">Reps</Text>
-
-                                  <Box width="35px">
-                                    <Text color="gray.400" fontSize="xs" textAlign="center">Done</Text>
-                                  </Box>
-                                </HStack>
-                              </HStack> */}
-
-                              <HStack justifyContent="space-between" alignItems="center" mb={1}>
-                                <Text color="rgba(255, 255, 255, 0.8)" width="60px" fontSize="xs">Set</Text>
-                                <HStack space={2} flex={1} justifyContent="flex-end">
-                                  <Text color="rgba(255, 255, 255, 0.8)" width="70px" fontSize="xs" textAlign="center">Weight</Text>
-                                  <Text color="rgba(255, 255, 255, 0.8)" width="70px" fontSize="xs" textAlign="center">Reps</Text>
-
-                                  <Box width="35px">
-                                    <Text color="rgba(255, 255, 255, 0.8)" fontSize="xs" textAlign="center">Done</Text>
-                                  </Box>
-                                </HStack>
-                              </HStack>
-                              
-                              {exercise.sets.map((set, setIndex) => (
-                                <Box 
-                                  key={set.id}
-                                  backgroundColor={set.completed ? "rgba(72, 170, 90, 0.35)" : "transparent"}
-                                  borderRadius="lg"
-                                  // px={1}
-                                  py={1}
-                                >
-          
-                                  <HStack justifyContent="space-between" alignItems="center">
-                                    <Text color="white" width="60px" pl={1.5}>{setIndex + 1}</Text>
-                                    <HStack space={2} flex={1} justifyContent="flex-end">
-                                      <View style={{
-                                        width: 70,
-                                        height: 35,
-                                        // backgroundColor: '#3A3E48',
-                                        backgroundColor: 'transparent',
-                                        borderRadius: 4,
-                                        // borderColor: set.completed ? "transparent" : "rgba(255, 255, 255, 0.25)",
-                                        // borderWidth: 1,
-                                        paddingHorizontal: 8,
-                                        justifyContent: 'center'
-                                      }}>
-                                        <TextInput 
-                                          placeholder="Weight" 
-                                          placeholderTextColor="rgba(255, 255, 255, 0.25)"
-                                          keyboardType="numeric"
-                                          style={{
-                                            color: 'white',
-                                            height: 40,
-                                            fontSize: 14,
-                                            textAlign: 'center'
-                                          }}
-                                          value={localInputValues[`${exerciseIndex}-${setIndex}`]?.weight || ''}
-                                          onChangeText={(text) => handleWeightInputChange(exerciseIndex, setIndex, text)}
-                                          onEndEditing={() => handleWeightEditComplete(exerciseIndex, setIndex)}
-                                          onBlur={() => handleWeightEditComplete(exerciseIndex, setIndex)}
-                                        />
-                                      </View>
-                                      <View style={{
-                                        width: 70,
-                                        height: 35,
-                                        // backgroundColor: '#3A3E48',
-                                        // borderColor: set.completed ? "transparent" : "rgba(255, 255, 255, 0.25)",
-                                        // borderWidth: 1,
-                                        backgroundColor: 'transparent',
-                                        borderRadius: 4,
-                                        paddingHorizontal: 8,
-                                        justifyContent: 'center'
-                                      }}>
-                                        <TextInput 
-                                          placeholder="Reps" 
-                                          placeholderTextColor="rgba(255, 255, 255, 0.25)"
-                                          keyboardType="numeric"
-                                          style={{
-                                            color: 'white',
-                                            height: 40,
-                                            fontSize: 14,
-                                            textAlign: 'center'
-                                          }}
-                                          value={localInputValues[`${exerciseIndex}-${setIndex}`]?.reps || ''}
-                                          onChangeText={(text) => handleRepsInputChange(exerciseIndex, setIndex, text)}
-                                          onEndEditing={() => handleRepsEditComplete(exerciseIndex, setIndex)}
-                                          onBlur={() => handleRepsEditComplete(exerciseIndex, setIndex)}
-                                        />
-                                      </View>
-                                      <Pressable
-                                        width="32px"
-                                        height="32px"
-                                        borderRadius="lg"
-                                        bg={set.completed ? "green.500" : "gray.700"}
-                                        justifyContent="center"
-                                        alignItems="center"
-                                        onPress={() => handleSetCompletion(exerciseIndex, setIndex, set.completed)}
-                                        _pressed={{ opacity: 0.7 }}
-                                      >
-                                        <Icon 
-                                          as={Ionicons} 
-                                          name="checkmark" 
-                                          size="md" 
-                                          color="white" 
-                                        />
-                                      </Pressable>
-                                    </HStack>
-                                  </HStack>
-                                </Box>
-                              ))}
-                              
-                              <Pressable
-                                onPress={() => handleAddSet(exerciseIndex)}
-                                mt={1.5}
-                                py={2}
-                                px={4}
-                                borderRadius="md"
-                                borderWidth={1}
-                                borderColor="#6B8EF2"
-                                alignItems="center"
-                                justifyContent="center"
-                                _pressed={{ opacity: 0.8 }}
-                              >
-                                <Text color="#6B8EF2" fontSize="sm" fontWeight="bold">
-                                  Add Set
-                                </Text>
-                              </Pressable>
+                          {expandedExercises[exercise.id] && (
+                            <VStack mt="$3" space="md">
+                              {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, exerciseIndex))}
+                              <Button variant="outline" action="secondary" onPress={() => handleAddNewSet(exercise.id)} mt="$2" size="sm">
+                                <Ionicons name="add-outline" size={20} color="#6B8EF2" style={{ marginRight: 4 }} />
+                                <ButtonText>Add Set</ButtonText>
+                              </Button>
                             </VStack>
                           )}
                         </Box>
@@ -538,171 +516,71 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       
                       {/* Add divider after each exercise except the last one */}
                       {exerciseIndex < currentExercises.length - 1 && (
-                        <Divider bg="gray.700" thickness="1" my={1} opacity={1} width="95%" alignSelf="center" />
+                        <Divider bg="$borderDark700" h={1} my="$1" opacity={1} width="95%" alignSelf="center" />
                       )}
                     </Box>
                   ))}
                 </VStack>
                 
-                <Box mt={2} mb={2} px={2}>
-                  <Pressable
-                    bg="transparent"
-                    py={2}
-                    px={4}
-                    borderRadius="md"
-                    borderWidth={1}
-                    borderColor="gray.400"
-                    alignItems="center"
-                    justifyContent="center"
-                    _pressed={{ opacity: 0.8 }}
-                    onPress={handleAddExercisePress}
-                  >
-                    <Text color="white" fontSize="md" fontWeight="bold">
-                      Add Exercise
-                    </Text>
-                  </Pressable>
+                <Box mt="$2" mb="$2" px="$2">
+                  <Button variant="solid" action="primary" onPress={handleAddExercisePress} my="$4" size="lg">
+                    <Ionicons name="add-circle-outline" size={24} color="white" style={{ marginRight: 8 }}/>
+                    <ButtonText>Add Exercise</ButtonText>
+                  </Button>
                 </Box>
 
-                <HStack space={2} mt={4} px={2}>
+                <HStack space="md" mt="$4" px="$2">
                   <Pressable
                     bg="transparent"
-                    py={3}
-                    px={6}
-                    borderRadius="lg"
+                    py="$3"
+                    px="$6"
+                    borderRadius="$lg"
                     borderWidth={1.5}
-                    borderColor="red.500"
+                    borderColor="$red500"
                     flex={1}
                     alignItems="center"
                     justifyContent="center"
-                    _pressed={{ opacity: 0.6 }}
+                    $pressed={{ opacity: 0.6 }}
                     onPress={openDiscardAlert}
                   >
-                    <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
+                    <Text color="$red500" fontSize="$md" fontWeight="$bold" textAlign="center">
                       Discard Workout
                     </Text>
                   </Pressable>
               
                   <Pressable
-                    bg={isEndingWorkout ? "gray.500" : "red.500"}
-                    py={3}
-                    px={6}
-                    borderRadius="lg"
+                    bg={isEndingWorkout ? "$coolGray500" : "$red500"}
+                    py="$3"
+                    px="$6"
+                    borderRadius="$lg"
                     onPress={handleEndWorkout}
-                    _pressed={{ opacity: 0.6 }}
+                    $pressed={{ opacity: 0.6 }}
                     flex={1}
                     alignItems="center"
                     justifyContent="center"
                     opacity={isEndingWorkout ? 0.7 : 1}
                     disabled={isEndingWorkout}
                   >
-                    <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                    <Text color="$textLight50" fontSize="$md" fontWeight="$bold" textAlign="center">
                       {isEndingWorkout ? "Saving..." : "Finish Workout"}
                     </Text>
                   </Pressable>
                 </HStack>
               </Box>
             </ScrollView>
-            
-            {/* Fixed buttons at bottom
-            <Box 
-              position="absolute" 
-              bottom={0} 
-              left={0} 
-              right={0} 
-              bg="#2A2E38" 
-              p={2} 
-              pb={3}
-              // mb={2}
-              // borderWidth={1}
-              // borderColor="red"
-              // borderTopWidth={1}
-              // borderTopColor="gray.700"
-            >
-              <HStack space={2}>
-                <Pressable
-                  bg="transparent"
-                  py={3}
-                  px={6}
-                  borderRadius="lg"
-                  borderWidth={1.5}
-                  borderColor="red.500"
-                  flex={1}
-                  alignItems="center"
-                  justifyContent="center"
-                  _pressed={{ opacity: 0.8 }}
-                >
-                  <Text color="red.500" fontSize="md" fontWeight="bold" textAlign="center">
-                    Cancel Workout
-                  </Text>
-                </Pressable>
-              
-                <Pressable
-                  bg={isEndingWorkout ? "gray.500" : "red.500"}
-                  py={3}
-                  px={6}
-                  borderRadius="lg"
-                  onPress={handleEndWorkout}
-                  _pressed={{ opacity: 0.8 }}
-                  flex={1}
-                  alignItems="center"
-                  justifyContent="center"
-                  opacity={isEndingWorkout ? 0.7 : 1}
-                  disabled={isEndingWorkout}
-                >
-                  <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
-                    {isEndingWorkout ? "Saving..." : "End Workout"}
-                  </Text>
-                </Pressable>
-              </HStack>
-            </Box> */}
           </Box>
         </BottomSheetView>
       </BottomSheet>
-
-      {/* Discard Confirmation Alert Dialog - Temporarily Commented Out for Debugging */}
-      {/*
-      <AlertDialog
-        leastDestructiveRef={cancelRef}
-        isOpen={isDiscardAlertOpen}
-        onClose={() => setIsDiscardAlertOpen(false)}
-      >
-        <AlertDialog.Content>
-          <AlertDialog.Header style={{ alignItems: 'center' }}>Discard Workout</AlertDialog.Header>
-          <AlertDialog.Body>
-            Are you sure you want to discard this workout?
-          </AlertDialog.Body>
-          <AlertDialog.Footer>
-            <Button.Group space={2} justifyContent="center" width="100%">
-              <Button
-                variant="unstyled"
-                colorScheme="white"
-                onPress={() => setIsDiscardAlertOpen(false)}
-                ref={cancelRef}
-                flex={1}
-                bg="#2A2E38"
-                _text={{ color: "white" }}
-              >
-                Cancel
-              </Button>
-              <Button colorScheme="danger" onPress={handleConfirmDiscard} >
-                Discard Workout
-              </Button>
-            </Button.Group>
-          </AlertDialog.Footer>
-        </AlertDialog.Content>
-      </AlertDialog>
-      */}
     </GestureHandlerRootView>
   );
 };
 
 const styles = StyleSheet.create({
   rootContainer: {
-    flex: 1,
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 60,
+    bottom: 0,
     top: 0,
     zIndex: 100,
     pointerEvents: 'box-none',
@@ -711,6 +589,8 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     paddingBottom: 0,
+    backgroundColor: '#1E2028',
+    paddingHorizontal: 16,
   },
   scrollView: {
     flex: 1,
@@ -719,6 +599,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     width: '100%',
+  },
+  bottomSheetBackground: {
+    backgroundColor: '#2A2E38',
   },
 });
 

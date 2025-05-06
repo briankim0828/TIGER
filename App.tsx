@@ -5,7 +5,6 @@ import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
-import { NativeBaseProvider, Box, StatusBar, Text } from "native-base";
 import {
   SafeAreaProvider,
   SafeAreaView,
@@ -23,6 +22,9 @@ import { supabase } from "./src/utils/supabaseClient";
 import { TouchableWithoutFeedback, Keyboard, View, StyleSheet, LogBox } from "react-native";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
+import { GluestackUIProvider, Box, Text } from "@gluestack-ui/themed";
+import { config } from "./gluestack-ui.config";
+import { StatusBar } from "react-native";
 
 // Ignore specific warning about text strings
 LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component.']);
@@ -98,21 +100,25 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+// Define props for GlobalHeader
+interface GlobalHeaderProps {
+  title: string;
+}
+
 // Global header component
-const GlobalHeader = () => {
+const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const insets = useSafeAreaInsets();
   return (
     <Box
       bg="#1E2028"
-      pt={0.2}
+      // pt={insets.top} // Apply top padding using safe area insets
       px={4}
-      pb={2}
-      borderBottomWidth={0}
-      alignItems="center"
-      justifyContent="center"
+      pb={3}
+      // borderBottomWidth={1}
+      // borderBottomColor="#3a3f4b"
     >
-      <Text color="white" fontSize="24" fontWeight="bold">
-        PR.
+      <Text color="white" fontSize="$2xl" fontWeight="bold">
+        {title}
       </Text>
     </Box>
   );
@@ -122,7 +128,7 @@ const GlobalHeader = () => {
 const AuthNavigationWrapper = () => {
   return (
     <Box flex={1} bg="#1E2028">
-      <GlobalHeader />
+      <GlobalHeader title="PR." />
       <Box flex={1}>
         <Stack.Navigator
           screenOptions={{
@@ -171,7 +177,7 @@ const NavigationWrapper = () => {
 
   return (
     <Box flex={1} bg="#1E2028">
-      <GlobalHeader />
+      <GlobalHeader title="PR." />
       <Box flex={1}>
         <Stack.Navigator
           screenOptions={{
@@ -232,7 +238,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <NativeBaseProvider>
+        <GluestackUIProvider config={config}>
           <DataProvider>
             <WorkoutProvider>
               <SafeAreaView 
@@ -252,7 +258,7 @@ export default function App() {
               </SafeAreaView>
             </WorkoutProvider>
           </DataProvider>
-        </NativeBaseProvider>
+        </GluestackUIProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
