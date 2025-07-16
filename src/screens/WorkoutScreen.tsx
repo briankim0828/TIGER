@@ -7,7 +7,7 @@ import React, {
 import {
   Box,
   VStack,
-} from "native-base";
+} from "@gluestack-ui/themed";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,9 +23,9 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WorkoutStackParamList } from "./WorkoutMain";
 import { newUuid } from "../utils/ids";
 import { getUserSplitsFromSupabase, saveSplitsToSupabase } from "../supabase/supabaseSplits";
-import MySplits from "../components/MySplits";
-import MyExercises from "../components/MyExercises";
-import MyProgram from "../components/MyProgram";
+// import MySplits from "../components/MySplits";
+// import MyExercises from "../components/MyExercises";
+// import MyProgram from "../components/MyProgram";
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 type EditMode = "none" | "program" | "splits";
@@ -301,7 +301,7 @@ const WorkoutScreen = () => {
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <Box flex={1} bg="#1E2028" pt={0}>
+        <Box flex={1} backgroundColor="#1E2028" paddingTop={0}>
           <RNScrollView
             ref={scrollViewRef}
             style={{ flex: 1 }}
@@ -312,7 +312,8 @@ const WorkoutScreen = () => {
             onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
             scrollEventThrottle={16}
           >
-            <VStack space={3} p={3.5}>
+            <VStack space="md" p="$3.5">
+              {/* Temporarily commented out for migration
               <MyProgram
                 splits={splits}
                 editMode={editMode}
@@ -342,6 +343,7 @@ const WorkoutScreen = () => {
                 expandedExercises={expandedExercises}
                 onToggleExerciseExpansion={toggleExerciseExpansion}
               />
+              */}
             </VStack>
           </RNScrollView>
         </Box>
