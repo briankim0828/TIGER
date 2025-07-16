@@ -1,3 +1,6 @@
+// this component is not used at all - deprecated
+// replaced by BottomNavbar
+
 import React, { useEffect, useRef, useState } from 'react';
 import { HStack, Pressable, Text, Box } from 'native-base';
 import { Animated, LayoutChangeEvent, View } from 'react-native';
