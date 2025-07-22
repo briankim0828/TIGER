@@ -23,8 +23,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WorkoutStackParamList } from "./WorkoutMain";
 import { newUuid } from "../utils/ids";
 import { getUserSplitsFromSupabase, saveSplitsToSupabase } from "../supabase/supabaseSplits";
-// import MySplits from "../components/MySplits";
-// import MyExercises from "../components/MyExercises";
+import MySplits from "../components/MySplits";
+import MyExercises from "../components/MyExercises";
 import MyProgram from "../components/MyProgram";
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
@@ -321,7 +321,7 @@ const WorkoutScreen = () => {
                 onDaySelect={handleDaySelect}
                 onToggleEditMode={toggleProgramEditMode}
               />
-              {/* Temporarily commented out for migration
+              
               <MySplits
                 splits={splits}
                 editedSplits={editedSplits}
@@ -336,7 +336,7 @@ const WorkoutScreen = () => {
                 onToggleEditMode={toggleSplitsEditMode}
                 onFocusScroll={handleFocusScroll}
               />
-
+              {/* Temporarily commented out for migration
               <MyExercises
                 splits={splits}
                 editMode={editMode}

@@ -6,8 +6,8 @@ import {
   Pressable,
   VStack,
   Icon,
-  IconButton,
-} from "native-base";
+  ButtonIcon,
+} from "@gluestack-ui/themed";
 import {
   TextInput,
   Platform,
@@ -146,11 +146,13 @@ const SplitItem = React.memo(
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        bg="#2A2E38"
-        p={3}
-        pl={6} // Keep padding for the color bar space
-        borderRadius={12}
-        position="relative"
+        style={{
+          backgroundColor: "#2A2E38",
+          padding: 12,
+          paddingLeft: 24,
+          borderRadius: 12,
+          position: "relative",
+        }}
       >
         {/* Border for selection/edit state */}
         <Animated.View
@@ -176,11 +178,17 @@ const SplitItem = React.memo(
         />
         {/* Color bar */}
         <Box
-          position="absolute" top={0} left={0} bottom={0} w="3"
-          bg={split.color || "#3A3E48"}
-          borderTopLeftRadius={12}
-          borderBottomLeftRadius={12}
-          zIndex={1}
+          position="absolute"
+          style={{
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 12,
+            backgroundColor: split.color || "#3A3E48",
+            borderTopLeftRadius: 12,
+            borderBottomLeftRadius: 12,
+            zIndex: 1,
+          }}
           pointerEvents="none"
         />
 
@@ -188,8 +196,8 @@ const SplitItem = React.memo(
         <HStack justifyContent="space-between" alignItems="center">
           {isEditingThisSplit ? (
             // -- Editing View --
-            <HStack flex={1} space={2} alignItems="center">
-              <Box flex={1}>
+            <HStack style={{ flex: 1, gap: 8, alignItems: "center" }}>
+              <Box style={{ flex: 1 }}>
                 <TextInput
                   ref={textInputRef}
                   value={inputValue}
@@ -204,38 +212,42 @@ const SplitItem = React.memo(
                 />
               </Box>
               {/* Show exercise count while editing */}
-              <Text color="gray.400" fontSize="sm">
+              <Text style={{ color: "#A1A1AA", fontSize: 14 }}>
                 {split.exercises.length} exercises
               </Text>
-              <IconButton
-                icon={<Icon as={AntDesign} name="close" color="red.500" size="md" />}
+              <Pressable
                 onPress={onDelete}
-                variant="ghost"
-                size="sm"
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Increase touch area
-              />
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Icon as={AntDesign} name="close" color="#EF4444" size="md" />
+              </Pressable>
             </HStack>
           ) : (
             // -- Display View --
             <>
-              <Text color="white" fontSize="lg" fontWeight="bold" flex={1} numberOfLines={1} ellipsizeMode="tail">
+              <Text 
+                color="white" 
+                style={{ fontSize: 18, fontWeight: "bold", flex: 1 }}
+                numberOfLines={1} 
+                ellipsizeMode="tail"
+              >
                 {split.name}
               </Text>
-              <HStack alignItems="center" space={0}> {/* Use space={0} to control spacing with animations */}
+              <HStack alignItems="center"> {/* Use style for spacing with animations */}
                 <Animated.View style={contentShiftAnimatedStyle}>
-                  <HStack space={3} alignItems="center">
-                    <Text color="white" fontSize="sm">
+                  <HStack style={{ gap: 12, alignItems: "center" }}>
+                    <Text color="white" style={{ fontSize: 14 }}>
                       {split.exercises.length} exercises
                     </Text>
                     {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
                     <Animated.View style={arrowAnimatedStyle}>
-                      <Icon as={AntDesign} name="right" color="gray.400" size="sm" />
+                      <Icon as={AntDesign} name="right" color="#A1A1AA" size="sm" />
                     </Animated.View>
                   </HStack>
                 </Animated.View>
                 {/* Menu Icon (shown only in Splits mode when not editing this item) */}
                 <Animated.View style={[menuAnimatedStyle, { justifyContent: 'center', alignItems: 'center' }]} >
-                    <Icon as={Entypo} name="menu" color="gray.400" size="md" />
+                    <Icon as={Entypo} name="menu" color="#A1A1AA" size="md" />
                 </Animated.View>
               </HStack>
             </>
@@ -244,20 +256,22 @@ const SplitItem = React.memo(
 
         {/* Color Palette (shown only when editing this split) */}
         {isEditingThisSplit && (
-          <HStack space={2} mt={2} justifyContent="space-between">
+          <HStack style={{ gap: 8, marginTop: 8, justifyContent: "space-between" }}>
             {COLORS.map((color) => (
               <Pressable
                 key={color}
                 onPress={() => onColorSelect(color)}
-                flex={1}
+                style={{ flex: 1 }}
                 hitSlop={4}
               >
                 <Box
-                  bg={color}
-                  h="6"
-                  borderRadius="md"
-                  borderWidth={split.color === color ? 2 : 0}
-                  borderColor="white"
+                  style={{
+                    backgroundColor: color,
+                    height: 24,
+                    borderRadius: 6,
+                    borderWidth: split.color === color ? 2 : 0,
+                    borderColor: "white"
+                  }}
                 />
               </Pressable>
             ))}
@@ -305,18 +319,18 @@ const MySplits: React.FC<MySplitsProps> = ({
   const canAddMoreSplits = useMemo(() => (displaySplits?.length ?? 0) < MAX_SPLITS, [displaySplits]);
 
   return (
-    <VStack space={4} width="100%">
+    <VStack style={{ gap: 16, width: "100%" }}>
       {/* Splits List Section */}
-      <VStack space={4}> 
+      <VStack style={{ gap: 16 }}> 
         <HStack justifyContent="space-between" alignItems="center">
-          <Text color="white" fontSize="xl" fontWeight="bold">
+          <Text color="white" style={{ fontSize: 20, fontWeight: "bold" }}>
             My Splits
           </Text>
           {/* Show Splits Edit/Done only when not in Program Edit */}
           {editMode !== "program" && (
             <Pressable onPress={onToggleEditMode}>
-              <Box w="20" alignItems="flex-end">
-                <Text color="#6B8EF2" fontSize="14" fontWeight="bold">
+              <Box style={{ width: 80, alignItems: "flex-end" }}>
+                <Text color="#6B8EF2" style={{ fontSize: 14, fontWeight: "bold" }}>
                   {editMode === "splits" ? "Done" : "Edit"}
                 </Text>
               </Box>
@@ -324,9 +338,12 @@ const MySplits: React.FC<MySplitsProps> = ({
           )}
         </HStack>
 
-        <VStack space={2}>
+        <VStack style={{ gap: 8 }}>
           {(displaySplits?.length === 0 && editMode !== 'splits') ? (
-            <Text color="gray.400" fontSize="sm" textAlign="center" py={4}>
+            <Text 
+              color="#A1A1AA" 
+              style={{ fontSize: 14, textAlign: "center", paddingVertical: 16 }}
+            >
               No splits defined yet. Tap 'Edit' to add one.
             </Text>
           ) : (
@@ -350,19 +367,29 @@ const MySplits: React.FC<MySplitsProps> = ({
           {editMode === "splits" && (
             <Pressable
               onPress={onAddSplit}
-              bg="#1E2028" // Match theme background
-              p={2}
-              mt={2} // Add margin top
-              borderRadius="md"
-              borderWidth={1}
-              borderColor={canAddMoreSplits ? "#6B8EF2" : "gray.600"}
-              borderStyle="dashed"
-              opacity={canAddMoreSplits ? 1 : 0.5}
+              style={{
+                backgroundColor: "#1E2028",
+                padding: 8,
+                marginTop: 8,
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: canAddMoreSplits ? "#6B8EF2" : "#4B5563",
+                borderStyle: "dashed",
+                opacity: canAddMoreSplits ? 1 : 0.5,
+              }}
               disabled={!canAddMoreSplits}
             >
-              <HStack justifyContent="center" alignItems="center" space={2}>
-                <Icon as={AntDesign} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "gray.400"} size="sm" />
-                <Text color={canAddMoreSplits ? "#6B8EF2" : "gray.400"} fontSize="sm" fontWeight="bold">
+              <HStack justifyContent="center" alignItems="center" style={{ gap: 8 }}>
+                <Icon 
+                  as={AntDesign} 
+                  name="plus" 
+                  color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
+                  size="sm" 
+                />
+                <Text 
+                  color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
+                  style={{ fontSize: 14, fontWeight: "bold" }}
+                >
                   {canAddMoreSplits ? "Add Split" : `Maximum ${MAX_SPLITS} splits reached`}
                 </Text>
               </HStack>
