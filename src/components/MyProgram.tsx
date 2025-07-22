@@ -4,9 +4,9 @@ import {
   HStack,
   Text,
   VStack,
-  Icon,
   Pressable,
-} from "native-base";
+} from "@gluestack-ui/themed";
+import { Icon } from "@gluestack-ui/themed";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -74,21 +74,24 @@ const WeekdayItem = React.memo(
     }));
 
     return (
-      <Pressable onPress={onPress} flex={1} mx={0.5} disabled={!isEditing}>
-        <VStack space={1} alignItems="center">
+      <Pressable 
+        onPress={onPress} 
+        style={{ flex: 1, marginHorizontal: 2 }}
+        disabled={!isEditing}
+      >
+        <VStack space="xs" alignItems="center">
           <Text
-            color={isSelected ? "#6B8EF2" : "gray.400"}
-            fontSize="xs"
-            fontWeight="bold"
+            color={isSelected ? "#6B8EF2" : "#A1A1AA"}
+            style={{ fontSize: 12 }}
+            fontWeight="$bold"
           >
             {getAbbreviatedDay(day)}
           </Text>
           <Box
             bg="#2A2E38"
-            p={2}
-            borderRadius="lg"
-            w="full"
-            h="60px"
+            p="$2"
+            borderRadius="$lg"
+            style={{ width: '100%', height: 60 }}
             justifyContent="center"
             alignItems="center"
             position="relative"
@@ -96,24 +99,34 @@ const WeekdayItem = React.memo(
           >
             <Box
               position="absolute"
-              top={0} left={0} right={0} bottom={0}
-              borderRadius="lg"
-              borderWidth={isSelected ? 2 : 0}
-              borderColor="#6B8EF2"
+              style={{
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                borderRadius: 8,
+                borderWidth: isSelected ? 2 : 0,
+                borderColor: "#6B8EF2",
+              }}
               zIndex={2}
               pointerEvents="none"
             />
             <Box
               position="absolute"
-              top={0} left={0} right={0}
-              h="2"
-              bg={color}
-              borderTopRadius="lg"
+              style={{
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 8,
+                backgroundColor: color,
+                borderTopLeftRadius: 8,
+                borderTopRightRadius: 8,
+              }}
               zIndex={1}
               pointerEvents="none"
             />
             {daySplits.length > 0 ? (
-              <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+              <Text color="white" style={{ fontSize: 16 }} fontWeight="$bold" textAlign="center">
                 {getFirstLetter(daySplits[0].name)}
               </Text>
             ) : (
@@ -130,7 +143,7 @@ const WeekdayItem = React.memo(
             <Icon
               as={AntDesign}
               name="up"
-              color={isSelected ? "#6B8EF2" : "gray.400"}
+              color={isSelected ? "#6B8EF2" : "#A1A1AA"}
               size="xs"
             />
           </Animated.View>
@@ -158,19 +171,19 @@ const MyProgram: React.FC<MyProgramProps> = ({
   onToggleEditMode,
 }) => {
   return (
-    <VStack space={4} width="100%">
-      <HStack justifyContent="space-between" alignItems="center" width="full">
-        <Text color="white" fontSize="2xl" fontWeight="bold">
+    <VStack space="md" style={{ width: '100%' }}>
+      <HStack justifyContent="space-between" alignItems="center" style={{ width: '100%' }}>
+        <Text color="white" style={{ fontSize: 24 }} fontWeight="$bold">
           My Program
         </Text>
         {/* Only show Edit button when not in Splits mode */}
         {editMode !== "splits" && (
           <Pressable onPress={onToggleEditMode}>
-            <Box w="20">
+            <Box style={{ width: 80 }}>
               <Text
                 color="#6B8EF2"
-                fontSize="14"
-                fontWeight="bold"
+                style={{ fontSize: 14 }}
+                fontWeight="$bold"
                 textAlign="right"
               >
                 {editMode === "program" ? "Done" : "Edit"}
@@ -181,7 +194,7 @@ const MyProgram: React.FC<MyProgramProps> = ({
       </HStack>
 
       {/* Weekday Selector (only interactive in program mode) */}
-      <HStack justifyContent="space-between" mx={-0.5}>
+      <HStack justifyContent="space-between" style={{ marginHorizontal: -2 }}>
         {WEEKDAYS.map((day) => (
           <WeekdayItem
             key={day}

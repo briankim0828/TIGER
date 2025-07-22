@@ -25,7 +25,7 @@ import { newUuid } from "../utils/ids";
 import { getUserSplitsFromSupabase, saveSplitsToSupabase } from "../supabase/supabaseSplits";
 // import MySplits from "../components/MySplits";
 // import MyExercises from "../components/MyExercises";
-// import MyProgram from "../components/MyProgram";
+import MyProgram from "../components/MyProgram";
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 type EditMode = "none" | "program" | "splits";
@@ -313,7 +313,7 @@ const WorkoutScreen = () => {
             scrollEventThrottle={16}
           >
             <VStack space="md" p="$3.5">
-              {/* Temporarily commented out for migration
+              
               <MyProgram
                 splits={splits}
                 editMode={editMode}
@@ -321,7 +321,7 @@ const WorkoutScreen = () => {
                 onDaySelect={handleDaySelect}
                 onToggleEditMode={toggleProgramEditMode}
               />
-
+              {/* Temporarily commented out for migration
               <MySplits
                 splits={splits}
                 editedSplits={editedSplits}
