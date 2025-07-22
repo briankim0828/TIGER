@@ -6,9 +6,13 @@ import {
   VStack,
   Icon,
   Pressable,
-  Collapse,
-} from "native-base";
+} from "@gluestack-ui/themed";
 import { AntDesign } from "@expo/vector-icons";
+import Animated, { 
+  useAnimatedStyle, 
+  withTiming, 
+  useSharedValue 
+} from "react-native-reanimated";
 import { Exercise, Split, WEEKDAYS } from "../types";
 
 // Interface for body part section data used internally
@@ -63,59 +67,103 @@ const ExerciseItem = React.memo(
       }, {} as Record<string, boolean>);
     }, [exercise.splitIds, splits]);
 
+    const heightValue = useSharedValue(0);
+    const [contentHeight, setContentHeight] = React.useState(0);
+    
+    const animatedHeight = useAnimatedStyle(() => ({
+      height: heightValue.value,
+      overflow: 'hidden'
+    }));
+
+    React.useEffect(() => {
+      if (isExpanded && !isPressDisabled) {
+        heightValue.value = withTiming(contentHeight, { duration: 250 });
+      } else {
+        heightValue.value = withTiming(0, { duration: 250 });
+      }
+    }, [isExpanded, isPressDisabled, contentHeight]);
+
     return (
       <Pressable
         onPress={() => onToggle(exercise.id)}
-        bg="#1E2028" // Match theme background
-        p={1.5}
-        borderRadius="md"
-        position="relative"
-        disabled={isPressDisabled} // Disable press based on edit mode
-        opacity={isPressDisabled ? 0.6 : 1} // Dim when disabled
+        style={{
+          backgroundColor: "#1E2028",
+          padding: 6,
+          borderRadius: 6,
+          position: "relative",
+          opacity: isPressDisabled ? 0.6 : 1,
+        }}
+        disabled={isPressDisabled}
       >
         <HStack justifyContent="space-between" alignItems="center">
-          <HStack space={2} alignItems="center" flex={1}>
+          <HStack style={{ gap: 8, alignItems: "center", flex: 1 }}>
             <Icon
               as={AntDesign}
               name={isExpanded ? "down" : "right"}
-              color="gray.400"
+              color="#A1A1AA"
               size="sm"
             />
-            <Text color="white" fontSize="md">
+            <Text color="white" style={{ fontSize: 16 }}>
               {exercise.name}
             </Text>
           </HStack>
-          <HStack space={1}>
+          <HStack style={{ gap: 4 }}>
             {exercise.splitIds.map((splitId) => (
               <Box
                 key={splitId}
-                w="2"
-                h="6"
-                bg={splitColors[splitId]}
-                borderRadius="full"
+                style={{
+                  width: 8,
+                  height: 24,
+                  backgroundColor: splitColors[splitId],
+                  borderRadius: 9999,
+                }}
               />
             ))}
           </HStack>
         </HStack>
 
-        <Collapse isOpen={isExpanded && !isPressDisabled} duration={250}>
-          <Box mt={2} pt={2} borderTopWidth={1} borderColor="gray.700">
-            <HStack space={2} flexWrap="wrap" justifyContent="space-between">
-              {WEEKDAYS.map((day) => (
-                <Text
-                  key={day}
-                  color={dayAssignments[day] ? "#6B8EF2" : "gray.400"}
-                  fontSize="xs" // Smaller font size for days
-                  flex={1}
-                  textAlign="center"
-                  fontWeight={dayAssignments[day] ? "bold" : "normal"}
-                >
-                  {day.slice(0, 3)} {/* Abbreviate day */} 
-                </Text>
-              ))}
-            </HStack>
+        <Animated.View style={[animatedHeight]}>
+          <Box
+            style={{
+              position: 'absolute',
+              width: '100%',
+              opacity: isExpanded ? 1 : 0,
+            }}
+            onLayout={(event) => {
+              const height = event.nativeEvent.layout.height;
+              if (height > 0) {
+                setContentHeight(height + 8); // Add padding to account for margins
+              }
+            }}
+          >
+            <Box
+              style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTopWidth: 1,
+                borderColor: "#374151",
+                paddingBottom: 0,
+              }}
+            >
+              <HStack style={{ gap: 8, flexWrap: "wrap", justifyContent: "space-between" }}>
+                {WEEKDAYS.map((day) => (
+                  <Text
+                    key={day}
+                    color={dayAssignments[day] ? "#6B8EF2" : "#A1A1AA"}
+                    style={{ 
+                      fontSize: 12,
+                      flex: 1,
+                      textAlign: "center",
+                      fontWeight: dayAssignments[day] ? "bold" : "normal"
+                    }}
+                  >
+                    {day.slice(0, 3)}
+                  </Text>
+                ))}
+              </HStack>
+            </Box>
           </Box>
-        </Collapse>
+        </Animated.View>
       </Pressable>
     );
   }
@@ -141,11 +189,11 @@ const BodyPartSection = React.memo(
   }) => {
     return (
       // <Box mt={isFirstItem ? 0 : 1}> {/* Adjust margin */} 
-      <Box mt={-5}> {/* Adjust margin */} 
-        <Text color="gray.400" fontSize="sm" mb={2}>
+      <Box style={{ marginTop: -20 }}>
+        <Text color="#A1A1AA" style={{ fontSize: 14, marginBottom: 8 }}>
           {bodyPart}
         </Text>
-        <VStack space={2}>
+        <VStack style={{ gap: 1 }}>
           {exercises.map((exercise) => (
             <ExerciseItem
               key={exercise.id}
@@ -175,7 +223,7 @@ const OptimizedExerciseList = React.memo(
       return null;
     }
     return (
-      <VStack space={7} width="100%">
+      <VStack style={{ gap: 34, width: "100%" }}>
         {data.map((item, index) => (
           <React.Fragment key={item.id}>
             {renderItem({ item, index })}
@@ -296,16 +344,23 @@ const MyExercises: React.FC<MyExercisesProps> = ({
   );
 
   return (
-    <VStack space={4} width="100%" mt={2}> {/* Add margin top */}
+    <VStack style={{ gap: 30, width: "100%", marginTop: 8 }}>
       <HStack justifyContent="space-between" alignItems="center">
-        <Text color="white" fontSize="xl" fontWeight="bold">
+        <Text color="white" style={{ fontSize: 20, fontWeight: "bold" }}>
           My Exercises
         </Text>
         {/* Optional: Add an Edit button here if needed in the future */}
       </HStack>
 
       {bodyPartSections.length === 0 ? (
-        <Text color="gray.400" fontSize="sm" textAlign="center" py={4}>
+        <Text 
+          color="#A1A1AA" 
+          style={{ 
+            fontSize: 14, 
+            textAlign: "center", 
+            paddingVertical: 16 
+          }}
+        >
           No exercises added yet. Add exercises within a split.
         </Text>
       ) : (

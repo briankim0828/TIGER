@@ -336,14 +336,14 @@ const WorkoutScreen = () => {
                 onToggleEditMode={toggleSplitsEditMode}
                 onFocusScroll={handleFocusScroll}
               />
-              {/* Temporarily commented out for migration
+             
               <MyExercises
                 splits={splits}
                 editMode={editMode}
                 expandedExercises={expandedExercises}
                 onToggleExerciseExpansion={toggleExerciseExpansion}
               />
-              */}
+             
             </VStack>
           </RNScrollView>
         </Box>
