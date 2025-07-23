@@ -4,11 +4,12 @@ import {
   HStack,
   Text,
   Icon,
-  IconButton,
+  Button,
+  ButtonIcon,
   VStack,
   Pressable,
   ScrollView,
-} from "native-base";
+} from "@gluestack-ui/themed";
 import { AntDesign } from "@expo/vector-icons";
 import { Split, Exercise, Set } from "../types";
 import { ScrollView as RNScrollView } from "react-native";
@@ -147,21 +148,25 @@ const SplitDetailScreen = () => {
 
   const addExerciseButton = (
     <Pressable
-      w="100%"
+      width="$full"
       borderStyle="dashed"
-      borderWidth={1}
+      borderWidth="$1"
       borderColor="#6B8EF2"
-      bg="transparent"
-      borderRadius="lg"
-      py={2}
-      _pressed={{ opacity: 0.7 }}
+      backgroundColor="transparent"
+      borderRadius="$lg"
+      py="$2"
+      sx={{
+        ":pressed": {
+          opacity: 0.7
+        }
+      }}
       onPress={() => {
         navigation.navigate("ExerciseSelection", { splitId: split.id });
       }}
     >
-      <HStack space={2} justifyContent="center" alignItems="center">
+      <HStack space="sm" justifyContent="center" alignItems="center">
         <Icon as={AntDesign} name="plus" color="#6B8EF2" size="sm" />
-        <Text color="#6B8EF2" fontSize="md">
+        <Text color="#6B8EF2" fontSize="$md">
           Add Exercise
         </Text>
       </HStack>
@@ -169,30 +174,30 @@ const SplitDetailScreen = () => {
   );
 
   return (
-    <Box flex={1} bg="#1E2028">
+    <Box flex={1} backgroundColor="#1E2028">
       <Box flex={1}>
-        <HStack justifyContent="space-between" alignItems="center" p={4}>
-          <HStack space={2} alignItems="center">
-            <IconButton
-              icon={<Icon as={AntDesign} name="left" color="white" />}
+        <HStack justifyContent="space-between" alignItems="center" p="$4">
+          <HStack space="md" alignItems="center">
+            <Button
+              variant="link"
               onPress={() => navigation.goBack()}
-              variant="ghost"
-            />
-            <Text color="white" fontSize="xl" fontWeight="bold">
+            >
+              <ButtonIcon as={AntDesign} name="left" color="$white" />
+            </Button>
+            <Text color="$white" fontSize="$xl" fontWeight="$bold">
               {split.name}
             </Text>
           </HStack>
-          <IconButton
-            icon={
-              <Icon
-                as={AntDesign}
-                name={isEditing ? "check" : "edit"}
-                color="white"
-              />
-            }
+          <Button
+            variant="link"
             onPress={() => setIsEditing(!isEditing)}
-            variant="ghost"
-          />
+          >
+            <ButtonIcon
+              as={AntDesign}
+              name={isEditing ? "check" : "edit"}
+              color="white"
+            />
+          </Button>
         </HStack>
 
         <ScrollView
@@ -200,50 +205,47 @@ const SplitDetailScreen = () => {
           flex={1}
           showsVerticalScrollIndicator={false}
         >
-          <VStack space={4} p={3}>
+          <VStack space="lg" p="$3">
             {exercises.length > 0 ? (
-              <VStack space={3}>
+              <VStack space="md">
                 {exercises.map((exercise, index) => (
                   <Box
                     key={exercise.id}
-                    bg="transparent"
-                    p={3}
-                    borderRadius="lg"
-                    borderWidth={1}
-                    borderColor="gray.700"
+                    backgroundColor="transparent"
+                    p="$3"
+                    borderRadius="$lg"
+                    borderWidth="$1"
+                    borderColor="rgba(255, 255, 255, 0.5)"
                   >
                     <HStack justifyContent="space-between" alignItems="center">
-                      <HStack space={3} alignItems="center" flex={1}>
+                      <HStack space="md" alignItems="center" flex={1}>
                         <Box
-                          w="3"
-                          h="full"
-                          bg={splitColor}
+                          width="$3"
+                          height="$full"
+                          backgroundColor={splitColor}
                           position="absolute"
-                          left={0}
-                          borderRadius="md"
+                          left="$0"
+                          borderRadius="$md"
                         />
-                        <Text color="gray.400" fontSize="sm" ml={4}>
+                        <Text color="rgba(255, 255, 255, 0.5)" fontSize="$sm" ml="$4">
                           {index + 1}
                         </Text>
-                        <Text color="white" fontSize="md">
+                        <Text color="$white" fontSize="$md">
                           {exercise.name}
                         </Text>
                       </HStack>
                       {isEditing && (
-                        <IconButton
-                          icon={
-                            <Icon
-                              as={AntDesign}
-                              name="close"
-                              color="gray.400"
-                            />
-                          }
+                        <Button
+                          variant="link"
                           onPress={() => handleRemoveExercise(index)}
-                          variant="ghost"
-                          _pressed={{ opacity: 0.7 }}
-                          size="md"
-                          p={0}
-                        />
+                          sx={{ p: 0 }}
+                        >
+                          <ButtonIcon
+                            as={AntDesign}
+                            name="close"
+                            color="$gray400"
+                          />
+                        </Button>
                       )}
                     </HStack>
                   </Box>
@@ -253,17 +255,17 @@ const SplitDetailScreen = () => {
               </VStack>
             ) : (
               <Box
-                bg="transparent"
-                borderRadius="lg"
-                p={3}
-                borderWidth={1}
-                borderColor="gray.700"
+                backgroundColor="transparent"
+                borderRadius="$lg"
+                p="$3"
+                borderWidth="$1"
+                borderColor="$gray700"
               >
-                <VStack space={5} alignItems="center">
-                  <Text color="gray.400" fontSize="lg">
+                <VStack space="xl" alignItems="center">
+                  <Text color="$gray400" fontSize="$lg">
                     Add exercises to {split.name} day
                   </Text>
-                  {isEditing && <Box w="100%">{addExerciseButton}</Box>}
+                  {isEditing && <Box width="$full">{addExerciseButton}</Box>}
                 </VStack>
               </Box>
             )}

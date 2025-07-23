@@ -7,11 +7,12 @@ import {
   Text,
   Pressable,
   Button,
+  ButtonIcon,
+  ButtonText,
   ScrollView,
   Icon,
   Divider,
-  IconButton,
-} from "native-base";
+} from "@gluestack-ui/themed";
 import { AntDesign, MaterialIcons, Feather } from "@expo/vector-icons";
 import {
   Exercise,
@@ -162,45 +163,49 @@ const ExerciseSelectionView = () => {
   };
 
   return (
-    <Box bg="#232530" height="90%" borderRadius="2xl" shadow={9}>
+    <Box backgroundColor="#232530" height="90%" borderRadius="$2xl" shadowRadius="$9">
       {/* Header */}
-      <Box bg="#1A1C24" p={4} borderTopRadius="2xl">
-        <HStack alignItems="center" space={2}>
+      <Box backgroundColor="#1A1C24" p="$4" borderTopRadius="$2xl">
+        <HStack alignItems="center" space="md">
           <Icon
             as={MaterialIcons}
             name="fitness-center"
             color="#6B8EF2"
             size="sm"
           />
-          <Text color="white" fontSize="lg" fontWeight="bold">
+          <Text color="$white" fontSize="$lg" fontWeight="$bold">
             Select Exercises
           </Text>
         </HStack>
       </Box>
 
       {/* Content */}
-      <Box flex={1} borderBottomRadius="2xl" overflow="hidden">
-        <HStack space={0} h="full">
+      <Box flex={1} borderBottomRadius="$2xl" overflow="hidden">
+        <HStack space="$0" height="$full">
           {/* Body Parts - 30% */}
-          <Box w="30%" bg="#1A1C24">
+          <Box width="30%" backgroundColor="#1A1C24">
             <ScrollView showsVerticalScrollIndicator={false}>
               {BODY_PARTS.map((bodyPart) => (
                 <Pressable
                   key={bodyPart}
                   onPress={() => handleBodyPartSelect(bodyPart)}
-                  py={4}
-                  px={3}
-                  bg={
+                  py="$4"
+                  px="$3"
+                  backgroundColor={
                     selectedBodyPart === bodyPart
                       ? "rgba(107, 142, 242, 0.1)"
                       : "transparent"
                   }
-                  _pressed={{ bg: "rgba(107, 142, 242, 0.05)" }}
+                  sx={{
+                    ":pressed": {
+                      backgroundColor: "rgba(107, 142, 242, 0.05)"
+                    }
+                  }}
                 >
                   <Text
-                    color={selectedBodyPart === bodyPart ? "white" : "gray.400"}
+                    color={selectedBodyPart === bodyPart ? "$white" : "$gray400"}
                     fontWeight={
-                      selectedBodyPart === bodyPart ? "semibold" : "normal"
+                      selectedBodyPart === bodyPart ? "$semibold" : "$normal"
                     }
                   >
                     {bodyPart}
@@ -209,19 +214,23 @@ const ExerciseSelectionView = () => {
               ))}
               <Pressable
                 onPress={() => handleBodyPartSelect('My Exercises')}
-                py={4}
-                px={3}
-                bg={
+                py="$4"
+                px="$3"
+                backgroundColor={
                   selectedBodyPart === 'My Exercises'
                     ? "rgba(107, 142, 242, 0.1)"
                     : "transparent"
                 }
-                _pressed={{ bg: "rgba(107, 142, 242, 0.05)" }}
+                sx={{
+                  ":pressed": {
+                    backgroundColor: "rgba(107, 142, 242, 0.05)"
+                  }
+                }}
               >
                 <Text
-                  color={selectedBodyPart === 'My Exercises' ? "white" : "gray.400"}
+                  color={selectedBodyPart === 'My Exercises' ? "$white" : "$gray400"}
                   fontWeight={
-                    selectedBodyPart === 'My Exercises' ? "semibold" : "normal"
+                    selectedBodyPart === 'My Exercises' ? "$semibold" : "$normal"
                   }
                 >
                   My Exercises
@@ -232,36 +241,35 @@ const ExerciseSelectionView = () => {
           </Box>
 
           {/* Right Side VStack - 70% */}
-          <VStack w="70%" h="full" bg="#232530">
+          <VStack width="70%" height="$full" backgroundColor="#232530">
             {/* Selected Exercises Preview */}
             {selectedExercises.length > 0 && (
               <Box
-                bg="#1A1C24"
-                p={3}
-                borderBottomWidth={1}
-                borderColor="gray.700"
+                backgroundColor="#1A1C24"
+                p="$3"
+                borderBottomWidth="$1"
+                borderColor="$gray700"
               >
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-
-                  <HStack space={2}>
+                  <HStack space="sm">
                     {selectedExercises.map((exercise, index) => (
                       <Pressable
                         key={exercise.id}
                         onPress={() => handleExerciseSelect(exercise)}
-                        bg="rgba(107, 142, 242, 0.15)"
-                        px={3}
-                        py={1.5}
-                        borderRadius="full"
+                        backgroundColor="rgba(107, 142, 242, 0.15)"
+                        px="$3"
+                        py="$1.5"
+                        borderRadius="$full"
                         flexDirection="row"
                         alignItems="center"
                       >
-                        <Text color="white" fontSize="sm" mr={2}>
+                        <Text color="$white" fontSize="$sm" mr="$2">
                           {exercise.name}
                         </Text>
                         <Icon
                           as={AntDesign}
                           name="close"
-                          color="white"
+                          color="$white"
                           size="xs"
                         />
                       </Pressable>
@@ -273,36 +281,40 @@ const ExerciseSelectionView = () => {
 
             {/* Exercises List */}
             <Box flex={1}>
-              <ScrollView p={3} flex={1} showsVerticalScrollIndicator={false}>
+              <ScrollView p="$3" flex={1} showsVerticalScrollIndicator={false}>
                 {selectedBodyPart && exercisesByBodyPart[selectedBodyPart] ? (
                   exercisesByBodyPart[selectedBodyPart].map((exercise) => (
                     <Pressable
                       key={exercise.id}
                       onPress={() => handleExerciseSelect(exercise)}
-                      py={3}
-                      px={4}
-                      mb={2}
-                      bg={
+                      py="$3"
+                      px="$4"
+                      mb="$2"
+                      backgroundColor={
                         isExerciseSelected(exercise.id)
                           ? "rgba(107, 142, 242, 0.15)"
                           : "transparent"
                       }
-                      borderRadius="lg"
-                      _pressed={{ opacity: 0.7 }}
+                      borderRadius="$lg"
+                      sx={{
+                        ":pressed": {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HStack
                         justifyContent="space-between"
                         alignItems="center"
                       >
-                        <Text color="white" fontSize="md">
+                        <Text color="$white" fontSize="$md">
                           {exercise.name}
                         </Text>
                         {isExerciseSelected(exercise.id) && (
-                          <Center w={6} h={6} bg="#6B8EF2" borderRadius="full">
+                          <Center width="$6" height="$6" backgroundColor="#6B8EF2" borderRadius="$full">
                             <Icon
                               as={AntDesign}
                               name="check"
-                              color="white"
+                              color="$white"
                               size="xs"
                             />
                           </Center>
@@ -312,21 +324,21 @@ const ExerciseSelectionView = () => {
                   ))
                 ) : (
                   selectedBodyPart === 'My Exercises' ?
-                    <HStack space={2}>
-                      <Text color="white" fontSize="sm">
+                    <HStack space="md">
+                      <Text color="$white" fontSize="$sm">
                         My Exercises
                       </Text>
                     </HStack>
                     :
-                    <Center flex={1} p={4}>
+                    <Center flex={1} p="$4">
                       <Icon
                         as={MaterialIcons}
                         name="category"
-                        color="gray.500"
+                        color="$gray500"
                         size="xl"
-                        mb={2}
+                        mb="$2"
                       />
-                      <Text color="gray.400" textAlign="center">
+                      <Text color="$gray400" textAlign="center">
                         Select a body part to see available exercises
                       </Text>
                     </Center>
@@ -335,32 +347,32 @@ const ExerciseSelectionView = () => {
             </Box>
 
             {/* Buttons */}
-            <Box bg="#232530" p={3}>
-              <Divider bg="gray.700" mb={3} />
+            <Box backgroundColor="#232530" p="$3">
+              <Divider backgroundColor="$gray700" mb="$3" />
               <HStack justifyContent="space-between">
                 <Button
                   variant="outline"
-                  borderColor="gray.600"
-                  _text={{ color: "gray.400" }}
+                  borderColor="$gray600"
                   onPress={onClose || (() => navigation.goBack())}
                   flex={1}
-                  mr={2}
+                  mr="$2"
                 >
-                  Cancel
+                  <ButtonText color="$gray400">Cancel</ButtonText>
                 </Button>
                 <Button
-                  bg="#6B8EF2"
-                  _pressed={{ bg: "#5A7CD0" }}
-                  isDisabled={selectedExercises.length === 0}
+                  backgroundColor="#6B8EF2"
+                  sx={{
+                    ":pressed": {
+                      backgroundColor: "#5A7CD0"
+                    }
+                  }}
+                  disabled={selectedExercises.length === 0}
                   opacity={selectedExercises.length > 0 ? 1 : 0.5}
                   onPress={handleAddExercises}
                   flex={1}
-                  leftIcon={
-                    <Icon as={AntDesign} name="plus" color="white" size="sm" />
-                  }
-                  _text={{ fontSize: "sm" }}
                 >
-                  {`Add (${selectedExercises.length})`}
+                  <ButtonIcon as={AntDesign} name="plus" color="$white" size="sm" />
+                  <ButtonText fontSize="$sm">{`Add (${selectedExercises.length})`}</ButtonText>
                 </Button>
               </HStack>
             </Box>

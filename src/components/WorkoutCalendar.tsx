@@ -115,7 +115,7 @@ const DayCell = React.memo(
           h={40}
           alignItems="center"
           justifyContent="center"
-          bg={hasWorkout ? "$green500" : todayHighlight ? "transparent" : "transparent"}
+          bg={hasWorkout ? "$green500" : todayHighlight ? "rgba(0,0,0,0.2)" : "rgba(0,0,0,0.2)"}
           borderRadius="$md"
           borderWidth={borderWidth}
           borderColor={isSelected ? "$borderLight300" : "transparent"}
@@ -350,7 +350,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   }, [month, year, selectedDate, todayInfo, getWorkoutForDate, getSplitForDate, handleDayPress]);
 
   return (
-    <Box bg="$backgroundDark900" px="$1" pt="$4">
+    <Box bg="$1E2028" px="$1" pt="$4">
       <VStack space="xs" p="$2" borderRadius="$lg">
         <Text
           fontSize="$lg"
