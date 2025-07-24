@@ -66,7 +66,7 @@ const WeekdayItem = React.memo(
         // Keep position at 0 to avoid layout shift
         arrowTranslateY.value = 0;
       }
-    }, [isEditing, dayIndex, arrowOpacity, arrowTranslateY]);
+    }, [isEditing, dayIndex]); // Remove shared values from dependencies
 
     const arrowAnimatedStyle = useAnimatedStyle(() => ({
       opacity: arrowOpacity.value,
