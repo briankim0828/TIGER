@@ -404,7 +404,7 @@ const ProfileScreen: React.FC = () => {
 
 
   return (
-    <ScrollView bg="#232530" flex={1}>
+    <ScrollView bg="#1E2028" flex={1}>
       <VStack space="xl" alignItems="center" pt={8} pb={4}>
         <Pressable onPress={pickImage}>
           <Avatar size="large" bg="$primary500">

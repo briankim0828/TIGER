@@ -177,12 +177,14 @@ const NavigationWrapper = () => {
 
   return (
     <Box flex={1} bg="#1E2028">
+      <Box alignItems="center">
       <GlobalHeader title="PR." />
+      </Box>
       <Box flex={1}>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
-            animation: "fade",
+            animation: "slide_from_bottom",
             contentStyle: { backgroundColor: "#232530" },
           }}
           initialRouteName="Progress"
@@ -246,7 +248,7 @@ export default function App() {
                 edges={["top"]}
               />
               <SafeAreaView
-                style={{ flex: 1, backgroundColor: "#18191c" }}
+                style={{ flex: 1, backgroundColor: "#121213ff" }}
                 edges={[ "left", "right", "bottom"]}
               >
                 <StatusBar barStyle="light-content" backgroundColor="#1E2028" />

@@ -15,7 +15,7 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
   const iconSize = 20;
 
   return (
-    <Box bg="$backgroundDark950" borderTopWidth={1} borderColor="$borderDark800">
+    <Box bg="#121213ff" borderTopWidth={1} borderColor="$borderDark800">
       <HStack px="$4" space="2xl" justifyContent="space-around" alignItems="center" pt="$4" pb="$1">
         <Pressable onPress={() => onTabChange('workout')} accessibilityRole="button" accessibilityLabel="Workout Tab">
           <VStack alignItems="center" space="xs">
