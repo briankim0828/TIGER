@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Box, Text, Pressable, VStack, HStack } from 'native-base';
+import { Box, Text, Pressable, VStack, HStack } from '@gluestack-ui/themed';
 import { Split, Exercise } from '../types';
 
 interface SessionSummaryModalProps {
@@ -130,14 +130,14 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         }}
       >
         <BottomSheetView style={styles.contentContainer}>
-          <Box width="100%" px={3} pb={4} onLayout={onContentLayout}>
-            <Text color="white" fontSize="xl" fontWeight="bold" textAlign="center">
+          <Box width="100%" paddingHorizontal="$3" paddingBottom="$4" onLayout={onContentLayout}>
+            <Text color="$white" size="xl" fontWeight="$bold" textAlign="center">
               {scheduledSplit ? scheduledSplit.name : "No splits scheduled"}
             </Text>
          
             {scheduledSplit && (
-              <Box bg="transparent" p={2} borderRadius="lg" alignSelf="center">
-                <Text color="white" fontSize="lg" mb={2} >
+              <Box backgroundColor="transparent" padding="$2" borderRadius="$lg" alignSelf="center">
+                <Text color="$white" size="lg" marginBottom="$2">
                   {getDayOfWeek(selectedDate || new Date().toISOString().split('T')[0])}, {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                 </Text>
               </Box>
@@ -145,11 +145,11 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
             
             {/* Scheduled exercises preview */}
             {currentExercises.length > 0 && (
-              <Box bg="transparent" p={2} borderRadius="lg" mb={2} width="100%">
+              <Box backgroundColor="transparent" padding="$2" borderRadius="$lg" marginBottom="$2" width="100%">
                 <Box flexDirection="row" flexWrap="wrap">
                   {currentExercises.map((exercise, index) => (
-                    <Box key={exercise.id} width="50%" mb={2} pr={index % 2 === 0 ? 1 : 0} pl={index % 2 === 1 ? 1 : 0}>
-                      <Text color="white" fontSize="sm">
+                    <Box key={exercise.id} width="50%" marginBottom="$2" paddingRight={index % 2 === 0 ? '$1' : '$0'} paddingLeft={index % 2 === 1 ? '$1' : '$0'}>
+                      <Text color="$white" size="sm">
                         {index + 1}. {exercise.name}
                       </Text>
                     </Box>
@@ -157,31 +157,31 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                 </Box>
               </Box>
             )}
-            <HStack space={2}>
+            <HStack space="sm">
               <Pressable
-                mt={4}
-                bg="red.500"
-                py={3}
+                marginTop="$4"
+                backgroundColor="$red500"
+                paddingVertical="$3"
                 flex={1}
-                borderRadius="lg"
+                borderRadius="$lg"
                 onPress={handleCancelWorkout}
-                _pressed={{ opacity: 0.8 }}
+                style={({pressed}) => pressed ? {opacity: 0.8} : {}}
               >
-                <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">
                   Cancel
                 </Text>
               </Pressable>
 
               <Pressable
-                mt={4}
-                bg="#6B8EF2"
-                py={3}
+                marginTop="$4"
+                backgroundColor="#6B8EF2"
+                paddingVertical="$3"
                 flex={1}
-                borderRadius="lg"
+                borderRadius="$lg"
                 onPress={handleStartWorkout}
-                _pressed={{ opacity: 0.8 }}
+                style={({pressed}) => pressed ? {opacity: 0.8} : {}}
               >
-                <Text color="white" fontSize="md" fontWeight="bold" textAlign="center">
+                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">
                   Start Workout
                 </Text>
               </Pressable>

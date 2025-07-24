@@ -4,7 +4,7 @@ import { supabase } from "../utils/supabaseClient";
 import { toStoredSession, saveSessionToSupabase } from '../supabase/supabaseWorkout';
 import { dataService } from '../services/data';
 import { useData } from './DataContext';
-import { Toast } from 'native-base';
+import { useToast, Toast } from '@gluestack-ui/themed';
 import { v4 as uuidv4 } from 'uuid';
 
 interface WorkoutContextType {
@@ -25,6 +25,7 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [currentWorkoutSession, setCurrentWorkoutSession] = useState<LiveWorkoutSession | null>(null);
   const [isSessionSaved, setIsSessionSaved] = useState(false);
   const { addWorkoutSession } = useData();
+  const toast = useToast();
 
   const startWorkout = useCallback(async (exercises: Exercise[], selectedDate: string, splitName: string | null = null) => {
     setIsSessionSaved(false);
@@ -173,17 +174,25 @@ export const WorkoutProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // });
       
       // Show success toast
-      Toast.show({
-        title: "Workout Saved",
-        description: "Your workout has been saved successfully!",
+      toast.show({
+        render: () => (
+          <Toast>
+            <Toast.Title>Workout Saved</Toast.Title>
+            <Toast.Description>Your workout has been saved successfully!</Toast.Description>
+          </Toast>
+        ),
         duration: 3000
       });
     } catch (error) {
       console.error('Error saving workout:', error);
       
-      Toast.show({
-        title: "Error Saving Workout",
-        description: "There was an error saving your workout. Please try again.",
+      toast.show({
+        render: () => (
+          <Toast>
+            <Toast.Title>Error Saving Workout</Toast.Title>
+            <Toast.Description>There was an error saving your workout. Please try again.</Toast.Description>
+          </Toast>
+        ),
         duration: 3000
       });
     } finally {
