@@ -1,16 +1,18 @@
+// App.tsx
 import "react-native-gesture-handler";
 import React, { useEffect, useState } from "react";
-import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { NavigationContainer } from "@react-navigation/native";
 import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
+import type { NavigatorScreenParams } from "@react-navigation/native";
 import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { DataProvider, useData } from "./src/contexts/DataContext";
+import { DataProvider } from "./src/contexts/DataContext";
 import { WorkoutProvider, useWorkout } from "./src/contexts/WorkoutContext";
 import WorkoutMain from "./src/screens/WorkoutMain";
 import ProgressScreen from "./src/screens/ProgressScreen";
@@ -19,48 +21,53 @@ import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
-import { TouchableWithoutFeedback, Keyboard, View, StyleSheet, LogBox } from "react-native";
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  TouchableWithoutFeedback,
+  Keyboard,
+  View,
+  StyleSheet,
+  LogBox,
+} from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
 import { GluestackUIProvider, Box, Text } from "@gluestack-ui/themed";
 import { config } from "./gluestack-ui.config";
 import { StatusBar } from "react-native";
+import {
+  createMaterialTopTabNavigator,
+  MaterialTopTabBarProps,
+} from "@react-navigation/material-top-tabs";
 
 // Ignore specific warning about text strings
-LogBox.ignoreLogs(['Text strings must be rendered within a <Text> component.']);
+LogBox.ignoreLogs([
+  "Text strings must be rendered within a <Text> component.",
+]);
 
-// Active Workout Modal Component
+// -----------------------------
+// Active Workout Modal Container
+// -----------------------------
 const ActiveWorkoutModalContainer = () => {
   const { isWorkoutActive, currentWorkoutSession, endWorkout } = useWorkout();
-  
-  // Keep track of whether endWorkout is being called internally
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
 
-  // Custom wrapper for endWorkout to set the flag
   const handleEndWorkoutAndClose = async () => {
     setIsClosingFromSave(true);
     await endWorkout();
-    // Reset the flag after a short delay to handle any cleanup
-    setTimeout(() => {
-      setIsClosingFromSave(false);
-    }, 500);
+    setTimeout(() => setIsClosingFromSave(false), 500);
   };
 
-  // Added callback to handle the modal closing without saving
   const handleModalClose = () => {
-    // console.log('App - Modal closed via onClose callback');
-    
-    // Only call endWorkout if not already closing from an endWorkout call
     if (isWorkoutActive && !isClosingFromSave) {
-      // console.log('App - Modal closed externally, calling endWorkout to cleanup');
       endWorkout();
     } else {
-      console.log('App - Modal already closing from save operation, skipping duplicate endWorkout call');
+      console.log(
+        "App - Modal already closing from save operation, skipping duplicate endWorkout call"
+      );
     }
   };
 
   return (
-    <ActiveWorkoutModal 
+    <ActiveWorkoutModal
       isVisible={isWorkoutActive}
       exercises={currentWorkoutSession?.exercises || []}
       onClose={handleModalClose}
@@ -69,54 +76,58 @@ const ActiveWorkoutModalContainer = () => {
   );
 };
 
-// Create a wrapper component for keyboard dismissal
-const DismissKeyboardWrapper = ({ children }: { children: React.ReactNode }) => {
+// -----------------------------
+// Keyboard Dismiss Wrapper
+// -----------------------------
+const DismissKeyboardWrapper = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-      <View style={styles.container}>
-        {children}
-      </View>
+      <View style={styles.container}>{children}</View>
     </TouchableWithoutFeedback>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 });
 
-type RootStackParamList = {
+// -----------------------------
+// Types
+// -----------------------------
+type TabType = "workout" | "progress" | "profile";
+
+type MainTabParamList = {
   Workout: undefined;
   Progress: undefined;
   Profile: undefined;
+};
+
+type RootStackParamList = {
+  Main: NavigatorScreenParams<MainTabParamList>;
   Login: undefined;
   ExerciseSelectionModalScreen: undefined;
 };
 
-type TabType = "workout" | "progress" | "profile";
-
+// -----------------------------
+// Navigators
+// -----------------------------
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const Tab = createMaterialTopTabNavigator<MainTabParamList>();
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-// Define props for GlobalHeader
+// -----------------------------
+// Global Header
+// -----------------------------
 interface GlobalHeaderProps {
   title: string;
 }
-
-// Global header component
 const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const insets = useSafeAreaInsets();
   return (
-    <Box
-      bg="#1E2028"
-      // pt={insets.top} // Apply top padding using safe area insets
-      px={4}
-      pb={3}
-      // borderBottomWidth={1}
-      // borderBottomColor="#3a3f4b"
-    >
+    <Box bg="#1E2028" px={4} pb={3}>
       <Text color="white" fontSize="$2xl" fontWeight="bold">
         {title}
       </Text>
@@ -124,7 +135,9 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   );
 };
 
-// Navigation wrapper component to use navigation hook
+// -----------------------------
+// Auth (Login) wrapper
+// -----------------------------
 const AuthNavigationWrapper = () => {
   return (
     <Box flex={1} bg="#1E2028">
@@ -144,58 +157,78 @@ const AuthNavigationWrapper = () => {
   );
 };
 
-// Navigation wrapper component to use navigation hook
-const NavigationWrapper = () => {
-  const [selectedTab, setSelectedTab] = useState<TabType>("progress");
-  const navigation = useNavigation<NavigationProp>();
-  const { splits } = useData();
+// -----------------------------
+// Bottom tab-bar adapter
+// -----------------------------
+const tabRouteMap = {
+  workout: "Workout",
+  progress: "Progress",
+  profile: "Profile",
+} as const;
 
-  // Add debugging logs
-  React.useEffect(() => {
-    console.log("Current tab:", selectedTab);
-    // console.log("Data Storage State:", {
-    //   splits,
-    // });
-  }, [selectedTab]);
+const BottomTabBarAdapter = ({
+  state,
+  navigation,
+}: MaterialTopTabBarProps) => {
+  const routeName = state.routeNames[state.index] as keyof MainTabParamList;
+  const selectedTab = routeName.toLowerCase() as TabType;
 
-  const handleTabChange = (tab: TabType) => {
-    console.log("handleTabChange");
-    setSelectedTab(tab);
-    // Navigate to the corresponding screen
-    switch (tab) {
-      case "workout":
-        navigation.navigate("Workout");
-        break;
-      case "progress":
-        navigation.navigate("Progress");
-        break;
-      case "profile":
-        navigation.navigate("Profile");
-        break;
-    }
+  const onTabChange = (tab: TabType) => {
+    navigation.navigate(tabRouteMap[tab]);
   };
 
   return (
+    <BottomNavbar selectedTab={selectedTab} onTabChange={onTabChange} />
+  );
+};
+
+// -----------------------------
+// Main Tabs (Workout / Progress / Profile)
+// -----------------------------
+function MainTabs() {
+  return (
     <Box flex={1} bg="#1E2028">
       <Box alignItems="center">
-      <GlobalHeader title="PR." />
+        <GlobalHeader title="PR." />
       </Box>
+      <Box flex={1}>
+        <Tab.Navigator
+          initialRouteName="Progress"
+          tabBarPosition="bottom"
+          tabBar={(props) => <BottomTabBarAdapter {...props} />}
+          screenOptions={{
+            swipeEnabled: true, // left/right gestures + slide animation
+          }}
+        >
+          <Tab.Screen name="Workout" component={WorkoutMain} />
+          <Tab.Screen name="Progress" component={ProgressScreen} />
+          <Tab.Screen name="Profile" component={ProfileScreen} />
+        </Tab.Navigator>
+      </Box>
+
+      {/* Keep the active workout modal overlayed above tabs */}
+      <ActiveWorkoutModalContainer />
+    </Box>
+  );
+}
+
+// -----------------------------
+// App Shell (tabs + modal in a native-stack)
+// -----------------------------
+const NavigationWrapper = () => {
+  return (
+    <Box flex={1} bg="#1E2028">
       <Box flex={1}>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
-            animation: "slide_from_bottom",
             contentStyle: { backgroundColor: "#232530" },
           }}
-          initialRouteName="Progress"
         >
-          <Stack.Group>
-            <Stack.Screen name="Workout" component={WorkoutMain} />
-            <Stack.Screen name="Progress" component={ProgressScreen} />
-            <Stack.Screen name="Profile" component={ProfileScreen} />
-          </Stack.Group>
-
-          <Stack.Group screenOptions={{ presentation: 'modal', headerShown: false }}>
+          <Stack.Screen name="Main" component={MainTabs} />
+          <Stack.Group
+            screenOptions={{ presentation: "modal", headerShown: false }}
+          >
             <Stack.Screen
               name="ExerciseSelectionModalScreen"
               component={ExerciseSelectionView}
@@ -203,36 +236,34 @@ const NavigationWrapper = () => {
           </Stack.Group>
         </Stack.Navigator>
       </Box>
-      
-      {/* Active Workout Modal */}
-      <ActiveWorkoutModalContainer />
-
-      <BottomNavbar selectedTab={selectedTab} onTabChange={handleTabChange} />
     </Box>
   );
 };
 
+// -----------------------------
+// Root App
+// -----------------------------
 export default function App() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    // Check if the user is logged in on app load
     const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser(); // Using the new method
-      setUser(user); // Set user state
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUser(user);
     };
+    fetchUser();
 
-    fetchUser(); // Check on app load
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
 
-    // Listen for authentication state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null); // Update user state based on session
-    });
-
-    // Cleanup listener on unmount
     return () => {
-      if (authListener && authListener.subscription) {
-        authListener.subscription.unsubscribe(); // Proper cleanup
+      if (authListener && (authListener as any).subscription) {
+        (authListener as any).subscription.unsubscribe();
       }
     };
   }, []);
@@ -243,18 +274,22 @@ export default function App() {
         <GluestackUIProvider config={config}>
           <DataProvider>
             <WorkoutProvider>
-              <SafeAreaView 
+              <SafeAreaView
                 style={{ flex: 0, backgroundColor: "#1E2028" }}
                 edges={["top"]}
               />
               <SafeAreaView
                 style={{ flex: 1, backgroundColor: "#121213ff" }}
-                edges={[ "left", "right", "bottom"]}
+                edges={["left", "right", "bottom"]}
               >
                 <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
                 <NavigationContainer>
                   <DismissKeyboardWrapper>
-                    {user ? <NavigationWrapper /> : <AuthNavigationWrapper />}
+                    {user ? (
+                      <NavigationWrapper />
+                    ) : (
+                      <AuthNavigationWrapper />
+                    )}
                   </DismissKeyboardWrapper>
                 </NavigationContainer>
               </SafeAreaView>
