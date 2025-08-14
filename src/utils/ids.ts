@@ -1,10 +1,9 @@
-import 'react-native-get-random-values';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUID } from './uuid';
 
 // Create UUID that works in React Native environment
 export const newUuid = () => {
   try {
-    return uuidv4();
+    return generateUUID();
   } catch (error) {
     console.error('UUID generation error:', error);
     // Fallback for React Native environments without crypto.getRandomValues()

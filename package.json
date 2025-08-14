@@ -10,6 +10,7 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@electric-sql/react": "^1.0.7",
     "@expo/vector-icons": "^14.1.0",
     "@gluestack-style/react": "^1.0.57",
     "@gluestack-ui/config": "^1.1.20",
@@ -23,10 +24,13 @@
     "@shopify/flash-list": "1.7.6",
     "@supabase/supabase-js": "^2.49.4",
     "base64-arraybuffer": "^1.0.2",
+    "drizzle-orm": "^0.44.4",
+    "electric-sql": "^0.12.1",
     "expo": "^53.0.0",
     "expo-constants": "~17.1.5",
     "expo-image-picker": "~16.1.4",
     "expo-linear-gradient": "~14.1.4",
+    "expo-sqlite": "^15.2.14",
     "expo-status-bar": "~2.2.3",
     "native-base": "^3.4.28",
     "pg": "^8.14.1",
@@ -52,8 +56,10 @@
     "@react-native-community/cli": "^18.0.0",
     "@types/react": "~19.0.10",
     "@types/uuid": "^10.0.0",
+    "drizzle-kit": "^0.31.4",
     "patch-package": "^8.0.0",
     "postinstall-postinstall": "^2.1.0",
+    "tsx": "^4.20.4",
     "typescript": "~5.8.3"
   },
   "private": true
