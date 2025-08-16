@@ -14,6 +14,7 @@ import {
 } from "react-native-safe-area-context";
 import { DataProvider } from "./src/contexts/DataContext";
 import { WorkoutProvider, useWorkout } from "./src/contexts/WorkoutContext";
+import { ElectricProvider } from "./src/electric";
 import WorkoutMain from "./src/screens/WorkoutMain";
 import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
@@ -272,29 +273,31 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <GluestackUIProvider config={config}>
-          <DataProvider>
-            <WorkoutProvider>
-              <SafeAreaView
-                style={{ flex: 0, backgroundColor: "#1E2028" }}
-                edges={["top"]}
-              />
-              <SafeAreaView
-                style={{ flex: 1, backgroundColor: "#121213ff" }}
-                edges={["left", "right", "bottom"]}
-              >
-                <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
-                <NavigationContainer>
-                  <DismissKeyboardWrapper>
-                    {user ? (
-                      <NavigationWrapper />
-                    ) : (
-                      <AuthNavigationWrapper />
-                    )}
-                  </DismissKeyboardWrapper>
-                </NavigationContainer>
-              </SafeAreaView>
-            </WorkoutProvider>
-          </DataProvider>
+          <ElectricProvider>
+            <DataProvider>
+              <WorkoutProvider>
+                <SafeAreaView
+                  style={{ flex: 0, backgroundColor: "#1E2028" }}
+                  edges={["top"]}
+                />
+                <SafeAreaView
+                  style={{ flex: 1, backgroundColor: "#121213ff" }}
+                  edges={["left", "right", "bottom"]}
+                >
+                  <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
+                  <NavigationContainer>
+                    <DismissKeyboardWrapper>
+                      {user ? (
+                        <NavigationWrapper />
+                      ) : (
+                        <AuthNavigationWrapper />
+                      )}
+                    </DismissKeyboardWrapper>
+                  </NavigationContainer>
+                </SafeAreaView>
+              </WorkoutProvider>
+            </DataProvider>
+          </ElectricProvider>
         </GluestackUIProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
