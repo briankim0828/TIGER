@@ -1,5 +1,6 @@
 // Simple data access layer without complex schema dependencies
 import * as SQLite from 'expo-sqlite';
+import { newUuid } from '../../utils/ids';
 
 export class SimpleDataAccess {
   private db: SQLite.SQLiteDatabase;
@@ -118,7 +119,7 @@ export class SimpleDataAccess {
 
   async createSplit(data: { name: string; userId: string; color?: string }) {
     try {
-      const id = crypto.randomUUID();
+      const id = newUuid();
       await this.db.runAsync(
         'INSERT INTO splits (id, user_id, name, color) VALUES (?, ?, ?, ?)',
         [id, data.userId, data.name, data.color || '#4F46E5']
@@ -158,7 +159,7 @@ export class SimpleDataAccess {
 
   async createExercise(data: { name: string; kind?: string; modality?: string }) {
     try {
-      const id = crypto.randomUUID();
+      const id = newUuid();
       await this.db.runAsync(
         'INSERT INTO exercises (id, name, kind, modality) VALUES (?, ?, ?, ?)',
         [id, data.name, data.kind || 'strength', data.modality || 'other']
@@ -186,7 +187,7 @@ export class SimpleDataAccess {
 
   async createWorkoutSession(data: { userId: string; splitId?: string }) {
     try {
-      const id = crypto.randomUUID();
+      const id = newUuid();
       await this.db.runAsync(
         'INSERT INTO workout_sessions (id, user_id, split_id, state) VALUES (?, ?, ?, ?)',
         [id, data.userId, data.splitId || null, 'active']

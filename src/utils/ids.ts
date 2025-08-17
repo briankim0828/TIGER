@@ -1,15 +1,18 @@
-import { generateUUID } from './uuid';
+// UUID helpers consolidated here so we only have one source of truth.
+// Ensure cryptographically secure random values are available in React Native.
+import 'react-native-get-random-values';
+import { v4 as uuidv4 } from 'uuid';
 
-// Create UUID that works in React Native environment
-export const newUuid = () => {
+// Create UUID that works reliably in React Native + Expo
+export const newUuid = (): string => {
   try {
-    return generateUUID();
+    return uuidv4();
   } catch (error) {
     console.error('UUID generation error:', error);
-    // Fallback for React Native environments without crypto.getRandomValues()
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    // Fallback for environments without secure RNG (should be rare with the polyfill)
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = (Math.random() * 16) | 0;
+      const v = c === 'x' ? r : (r & 0x3) | 0x8;
       return v.toString(16);
     });
   }
