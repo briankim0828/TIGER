@@ -1,7 +1,7 @@
 // src/db/schema.ts
 import {
   pgTable, uuid, text, boolean, integer, timestamp, date, numeric, smallint,
-  pgEnum, index, unique, primaryKey
+  pgEnum, index, unique, primaryKey, type AnyPgColumn
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -45,6 +45,9 @@ export const exerciseCatalog = pgTable("exercise_catalog", {
   slug: text("slug").unique(),
   kind: exerciseKind("kind").notNull().default("strength"),
   modality: modality("modality").notNull().default("other"),
+  // UI grouping helper (parity with current SQLite Program Builder). Optional for now; can later
+  // be enforced via an enum or derived from taxonomy (exercise_muscles/muscle_groups).
+  bodyPart: text("body_part"),
   defaultRestSec: integer("default_rest_sec"),
   mediaThumbUrl: text("media_thumb_url"),
   mediaVideoUrl: text("media_video_url"),
@@ -60,7 +63,7 @@ export const exerciseCatalog = pgTable("exercise_catalog", {
 export const muscleGroups = pgTable("muscle_groups", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
-  parentId: uuid("parent_id").references(() => muscleGroups.id),
+  parentId: uuid("parent_id").references(((): AnyPgColumn => muscleGroups.id)),
 });
 
 export const exerciseMuscles = pgTable("exercise_muscles", {

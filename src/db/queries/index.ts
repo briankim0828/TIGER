@@ -2,6 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 import { useMemo } from 'react';
 import { SimpleDataAccess } from './simple';
+import { ProgramBuilderDataAccess } from './programBuilder.drizzle';
 
 // Hook to access database from the Electric context
 import { useElectric } from '../../electric';
@@ -14,9 +15,9 @@ export function useDatabase() {
   }
 
   // Memoize the data access wrapper to keep a stable reference across renders
-  const client = useMemo(() => new SimpleDataAccess(db), [db]);
+  const client = useMemo(() => new ProgramBuilderDataAccess(db), [db]);
   return client;
 }
 
 // Export the SimpleDataAccess class for direct use
-export { SimpleDataAccess };
+export { SimpleDataAccess, ProgramBuilderDataAccess };

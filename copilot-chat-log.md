@@ -252,6 +252,7 @@ function MyComponent() {
 }
 ```
 
+
 ## Next Steps:
 
 With Checkpoint 2 complete, the app now has:
@@ -422,3 +423,148 @@ function ProgramBuilderExample() {
 - Checkpoint 4
   - Refactor WorkoutContext to transactional operations on the DB (start/end workout, add/update sets) and wire Active Workout UI to read from the DB with refresh/live patterns.
   - Later, adopt Drizzle/Electric for generated types and live queries to remove the custom query layer.
+
+
+## 2025-08-23 - 2
+
+Checkpoint 3.5: Program Builder on Drizzle (SQLite) — COMPLETED ✅
+
+This incremental checkpoint moved the Program Builder dataflow from raw SQL strings to a typed Drizzle ORM layer on top of Expo SQLite, without changing UI code or method signatures. It keeps the refactor low‑risk and sets up a clean path to Electric live queries and cloud sync later.
+
+### What changed (code + dataflow)
+
+- Introduced a local sqlite‑oriented Drizzle schema
+  - File: `src/db/sqlite/schema.ts`
+  - Tables mirrored from current local SQLite: `exercises`, `splits`, `split_exercises`, `split_day_assignments`.
+  - Added a unique composite index on `split_day_assignments (user_id, weekday)` to support upserts (matches legacy UNIQUE constraint).
+
+- Swapped Program Builder’s data-access to Drizzle (reads + writes)
+  - File: `src/db/queries/programBuilder.drizzle.ts`
+  - Reads: `getAllExercises`, `getUserSplits`, `getUserSplitsWithExerciseCounts` (LEFT JOIN + COUNT), `getSplitExercises` (JOIN + ORDER), `getDayAssignments`.
+  - Writes: `createSplit`, `updateSplit`, `deleteSplit`, `setDayAssignment` (upsert by unique key), `addExercisesToSplit` (avoid duplicates + contiguous order), `removeExerciseFromSplit` (renormalize order), `reorderSplitExercises`, `createExercise`.
+  - Return shapes and method signatures preserved exactly, so UI/components didn’t change.
+
+- Hook now returns the Drizzle-backed class
+  - File: `src/db/queries/index.ts`
+  - `useDatabase()` memoizes and returns `new ProgramBuilderDataAccess(db)`.
+
+- Postgres schema alignment for future sync (earlier change)
+  - File: `src/db/schema.ts` (Drizzle Postgres schema)
+  - Added `bodyPart` to the exercise catalog so local grouping aligns with future cloud sync. Not used at runtime yet; current runtime is local SQLite.
+
+- Cleanup
+  - Removed an unused sqlite proxy client that referenced a missing package to avoid TS noise.
+
+### Conceptual impact
+
+- Low‑risk “internal swap”
+  - The UI stayed the same. We replaced the internals: raw SQL → Drizzle query builder and typed table objects.
+  - We kept the same API contract at the boundary (method names, args, return shapes) to avoid touching screens.
+
+- ORM boundary in place
+  - The data layer now has ORM semantics (select/join/insert/update/delete) with types inferred from the sqlite schema. This makes later adoption of Electric live queries and Postgres sync straightforward.
+
+- Behavior guarantees preserved
+  - Duplicate avoidance, deterministic ordering, and contiguous `order_pos` rules are implemented in Drizzle.
+  - Day assignments are true upserts via the unique composite index (user_id, weekday).
+
+- Migration posture
+  - DB init/seed logic still lives in the simple layer and Electric provider remains unchanged; this avoids destabilizing startup.
+  - Workout sessions still use the simple (raw SQL) layer; slated for a later slice.
+
+### How to apply this concept in future checkpoints
+
+- Keep the UI contract stable
+  - Swap implementation details behind the same function signatures. Callers don’t change; the risk stays low.
+
+- Migrate in slices
+  - Replace reads first (easy to validate), then writes (ensure idempotency and ordering), then remove the legacy path.
+
+- Enforce list integrity centrally
+  - Any list a user can reorder should have: contiguous indices, deterministic ordering, and idempotent add/remove.
+
+- Prefer upsert where uniqueness is intentional
+  - Back your upserts with real unique constraints (e.g., `(user_id, weekday)`), and use ORM conflict clauses.
+
+- Map snake_case ↔ camelCase at the boundary only
+  - Keep UI camelCase; handle DB naming in one place (data layer) to avoid leaks and repeated mapping.
+
+- Prepare for live queries early
+  - Design query functions so they can be wrapped by Electric live query hooks later without changing their signatures or shapes.
+
+### Next steps in the Dataflow Overhaul
+
+Short‑term
+- Migrate Workout Sessions to Drizzle
+  - Implement `getUserWorkoutSessions`, `createWorkoutSession`, `completeWorkoutSession` in a Drizzle data-access module, mirroring the behavior and shapes of the current simple layer.
+  - Preserve state transitions (active → completed) and timestamps; keep return types identical.
+
+- Indexes and small perf wins
+  - Consider adding indexes like `split_exercises(split_id)` if lists grow.
+  - Keep hydration costs low by deferring per‑split joins until needed.
+
+Medium‑term (pre‑Electric)
+- Centralize initialization/migrations
+  - Codify local sqlite migrations and ensure schema drift is handled safely across app upgrades.
+  - Generate and track drizzle migrations for Postgres (bodyPart already added) to prep for cloud.
+
+- Retire legacy SimpleDataAccess gradually
+  - Once workouts move to Drizzle and the app is stable, remove unused simple methods and keep only startup/seed pieces until Electric is wired.
+
+Electric & Sync (later slice)
+- Introduce Electric live queries
+  - Start with Active Workout (sessions + exercises + sets) to validate reactivity.
+  - Replace manual refetch/focus refresh with live updates.
+
+- Wire cloud sync
+  - Apply Drizzle migrations to Supabase; set RLS; electrify tables; verify offline edits sync correctly.
+
+Success criteria for this slice
+- Program Builder continues to work unchanged from the user’s perspective.
+- Data access code is typed, testable, and ready to host live queries.
+- No regressions in ordering, uniqueness, or upsert semantics.
+
+
+## Here’s where to start and why, mapped onto your plan.
+
+Where to begin the Drizzle/Electric swap
+- Add a new “Checkpoint 3.5 — Drizzle swap (types + queries) for Program Builder” before CP4.
+  - Low risk: swap internals under the already‑working CP3 UI without changing props/flows.
+  - Goal: Drizzle types and query builder in place; Electric comes after.
+
+Recommended sequence (from current state)
+1) Drizzle-only for Program Builder (CP3.5)
+- Freeze schema in code: mirror your current SQLite tables in schema.ts exactly (ids, created_at, body_part, split_day_assignments, split_exercises.order_pos).
+- Generate types: use Drizzle’s $inferSelect/$inferInsert; replace manual row types (SplitRow, ExerciseRow, SplitExerciseJoin) with generated ones. Keep UI types (ProgramSplit, ProgramSplitWithExercises) unchanged.
+- Replace reads first: re‑implement getAllExercises, getUserSplitsWithExerciseCounts, getSplitExercises using Drizzle’s query builder. Keep function signatures and return shapes identical.
+- Replace writes next: re‑implement add/remove/reorder split exercises and day assignments using Drizzle transactions; preserve avoidDuplicates + contiguous order_pos semantics.
+- Migrations: run Drizzle migrations locally without destructive changes (ensure they align with the already‑created tables; add no‑op/alter where needed).
+
+2) Workout refactor with Drizzle (CP4a)
+- Rewrite WorkoutContext to use Drizzle transactions for startWorkout/addSet/updateSet/endWorkout.
+- Keep the UI on pull‑based refresh temporarily (focus/post‑mutation refetch).
+
+3) Introduce Electric live queries where it matters most (CP4b)
+- Wire Electric provider and use live queries for Active Workout (current workout, its exercises, its sets) to get push‑based updates and offline behavior.
+- Leave Program Builder on refetch until stable.
+
+4) Optional: Move Program Builder to live queries (CP5)
+- Replace focus‑based refresh with live queries for splits and split_exercises if desired.
+
+5) Cloud sync (CP6)
+- Enable Electric replication to Supabase; apply Drizzle migrations in Supabase; configure RLS.
+
+Conceptual roles (big picture)
+- Drizzle: single source of truth for schema, generated types, and safe typed queries/transactions. Eliminates drift and manual row typings.
+- Electric: offline‑first replication + live queries (push updates). UI updates automatically when relevant rows change; no manual refetch needed.
+
+Current state vs later
+- Now: manual SQL + manual row types + pull‑based refresh; UI types separate and stable.
+- After CP3.5/CP4a: Drizzle types + ORM queries/transactions; same function signatures; UI unchanged.
+- After CP4b+: Electric live queries for reactive parts; optional Program Builder adoption; then cloud sync.
+
+Success criteria
+- No changes to component props/state.
+- Manual row types replaced by Drizzle’s generated types.
+- Behaviors preserved (created_at ASC ordering, avoidDuplicates, contiguous order_pos).
+- Active Workout gains live updates without manual refetch.
