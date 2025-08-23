@@ -14,25 +14,22 @@ import {
   Divider,
 } from "@gluestack-ui/themed";
 import { AntDesign, MaterialIcons, Feather } from "@expo/vector-icons";
-import {
-  Exercise,
-  BODY_PARTS,
-  DEFAULT_EXERCISES_BY_BODY_PART,
-  Split,
-} from "../types";
-import { useData } from "../contexts/DataContext";
+import { BODY_PARTS } from "../types";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CommonActions } from "@react-navigation/native";
-import { useWorkout } from "../contexts/WorkoutContext";
+import { useDatabase } from "../db/queries";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { ProgramSplit } from "../types/ui";
+import type { ExerciseRow } from "../db/queries/simple";
 
 // Define the navigation param list potentially used by this screen OR the screens it navigates to
 // This might need adjustment based on your full navigation structure
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  SplitDetail: { split: Split; newlyAddedExercises?: Exercise[] };
-  ExerciseSelectionModalScreen: undefined; // Ensure this matches App.tsx
-  // Add other routes as needed
+  SplitDetail: { split: ProgramSplit; newlyAddedExercises?: any[] };
+  ExerciseSelection: { splitId: string };
+  ExerciseSelectionModalScreen: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
@@ -50,94 +47,45 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = () => {
   const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<RouteProp<WorkoutStackParamList, 'ExerciseSelection'>>();
+  const splitId = route.params?.splitId;
+  const db = useDatabase();
 
   const onClose = () => {
     navigation.goBack();
   };
 
-  const { bodyPartSections, exercises: allExercises } = useData();
   const [selectedBodyPart, setSelectedBodyPart] = useState<string | null>(null);
-  const [selectedExercises, setSelectedExercises] = useState<Exercise[]>([]);
-  const [exercisesByBodyPart, setExercisesByBodyPart] = useState<
-    Record<string, Exercise[]>
-  >({});
-
-  const { addExercisesToCurrentSession } = useWorkout();
+  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]);
+  const [exercisesByBodyPart, setExercisesByBodyPart] = useState<Record<string, { id: string; name: string }[]>>({});
 
   // Prepare exercises by body part for the selection view
   useEffect(() => {
-    const finalExercisesByBodyPart: Record<string, Exercise[]> = {};
-
-    // 1. Initialize with the latest defaults from types/index.ts
-    BODY_PARTS.forEach((bodyPart) => {
-        finalExercisesByBodyPart[bodyPart] = DEFAULT_EXERCISES_BY_BODY_PART[bodyPart].map(ex => ({
-            ...ex, // Start with default properties (name, bodyPart, id)
-            splitIds: [], // Initialize splitIds for the Exercise type
-        }));
-    });
-
-    // 2. Process exercises from DataContext (allExercises)
-    // These might be custom exercises or contain updates (like splitIds) for defaults
-    if (allExercises && allExercises.length > 0) {
-        allExercises.forEach((exerciseFromContext) => {
-            const { bodyPart, id } = exerciseFromContext;
-
-            // Ensure body part group exists (might be a custom exercise for a standard body part)
-            if (!finalExercisesByBodyPart[bodyPart]) {
-                finalExercisesByBodyPart[bodyPart] = []; 
-            }
-
-            // Check if this exercise (by ID) exists in the current default list for this body part
-            const defaultIndex = finalExercisesByBodyPart[bodyPart].findIndex(ex => ex.id === id);
-
-            if (defaultIndex !== -1) {
-                // It's a default exercise. Update it with data from context (like splitIds).
-                // Crucially, keep the name and bodyPart from the DEFAULT list.
-                finalExercisesByBodyPart[bodyPart][defaultIndex] = {
-                    ...exerciseFromContext, // Get properties like splitIds from context
-                    name: finalExercisesByBodyPart[bodyPart][defaultIndex].name, // Ensure default name is used
-                    bodyPart: finalExercisesByBodyPart[bodyPart][defaultIndex].bodyPart, // Ensure default body part is used
-                    id: finalExercisesByBodyPart[bodyPart][defaultIndex].id, // Ensure default id is used
-                };
-            } else {
-                // It's not in the defaults, likely a user-created exercise. Add it.
-                // Check if it was already added in this loop to prevent duplicates if allExercises has repeats
-                if (!finalExercisesByBodyPart[bodyPart].some(ex => ex.id === id)) {
-                    finalExercisesByBodyPart[bodyPart].push(exerciseFromContext);
-                }
-            }
-        });
-    }
-
-    // Optional: Ensure exercises within each body part list are unique by ID one last time
-    for (const bodyPart in finalExercisesByBodyPart) {
-        const uniqueExercises: Exercise[] = [];
-        const seenIds = new Set<string>();
-        for (const exercise of finalExercisesByBodyPart[bodyPart]) {
-            if (!seenIds.has(exercise.id)) {
-                uniqueExercises.push(exercise);
-                seenIds.add(exercise.id);
-            }
+    let cancelled = false;
+    (async () => {
+      try {
+        // Load from DB catalog
+        const all: ExerciseRow[] = await db.getAllExercises();
+        const map: Record<string, { id: string; name: string }[]> = {};
+        BODY_PARTS.forEach(bp => { map[bp] = []; });
+        for (const ex of all) {
+          const bp = (ex.bodyPart || ex.modality || 'Other') ?? 'Other';
+          if (!map[bp]) map[bp] = [];
+          map[bp].push({ id: ex.id, name: ex.name });
         }
-        finalExercisesByBodyPart[bodyPart] = uniqueExercises;
-    }
-
-    console.log('ExerciseSelectionView - Final combined exercises:', 
-      Object.keys(finalExercisesByBodyPart).map(bp => ({
-        bodyPart: bp,
-        count: finalExercisesByBodyPart[bp].length,
-        exercises: finalExercisesByBodyPart[bp].map(ex => `${ex.name} (ID: ${ex.id})`) // Log with ID for clarity
-      }))
-    );
-
-    setExercisesByBodyPart(finalExercisesByBodyPart);
-  }, [allExercises]);
+        if (!cancelled) setExercisesByBodyPart(map);
+      } catch (e) {
+        console.error('ExerciseSelectionView: failed to load exercises', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [db]);
 
   const handleBodyPartSelect = (bodyPart: string) => {
     setSelectedBodyPart(bodyPart);
   };
 
-  const handleExerciseSelect = (exercise: Exercise) => {
+  const handleExerciseSelect = (exercise: { id: string; name: string }) => {
     setSelectedExercises((prev) => {
       // If exercise is already selected, remove it
       if (prev.some((e) => e.id === exercise.id)) {
@@ -149,13 +97,10 @@ const ExerciseSelectionView = () => {
   };
 
   const handleAddExercises = () => {
-    if (selectedExercises.length > 0) {
-      console.log(`ExerciseSelectionView - Adding ${selectedExercises.length} exercises via context.`);
-      // Call the context function directly
-      addExercisesToCurrentSession(selectedExercises);
-      // Navigate back to the previous screen (ActiveWorkoutModal)
-      navigation.goBack();
-    }
+    if (selectedExercises.length === 0 || !splitId) return;
+    db.addExercisesToSplit(splitId, selectedExercises.map(e => e.id), { avoidDuplicates: true })
+      .then(() => navigation.goBack())
+      .catch(err => console.error('ExerciseSelectionView: failed to add exercises to split', err));
   };
 
   const isExerciseSelected = (exerciseId: string) => {
@@ -165,14 +110,10 @@ const ExerciseSelectionView = () => {
   return (
     <Box backgroundColor="#232530" height="90%" borderRadius="$2xl" shadowRadius="$9">
       {/* Header */}
-      <Box backgroundColor="#1A1C24" p="$4" borderTopRadius="$2xl">
+      <Box backgroundColor="#1A1C24" p="$4" borderRadius="$2xl" borderBottomLeftRadius={0} borderBottomRightRadius={0}>
         <HStack alignItems="center" space="md">
-          <Icon
-            as={MaterialIcons}
-            name="fitness-center"
-            color="#6B8EF2"
-            size="sm"
-          />
+          {/* @ts-ignore Icon typing for vector icons */}
+          <Icon as={MaterialIcons as any} name="fitness-center" color="#6B8EF2" size="sm" />
           <Text color="$white" fontSize="$lg" fontWeight="$bold">
             Select Exercises
           </Text>
@@ -180,8 +121,8 @@ const ExerciseSelectionView = () => {
       </Box>
 
       {/* Content */}
-      <Box flex={1} borderBottomRadius="$2xl" overflow="hidden">
-        <HStack space="$0" height="$full">
+  <Box flex={1} borderRadius="$2xl" borderTopLeftRadius={0} borderTopRightRadius={0} overflow="hidden">
+  <HStack height="$full">
           {/* Body Parts - 30% */}
           <Box width="30%" backgroundColor="#1A1C24">
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -266,12 +207,8 @@ const ExerciseSelectionView = () => {
                         <Text color="$white" fontSize="$sm" mr="$2">
                           {exercise.name}
                         </Text>
-                        <Icon
-                          as={AntDesign}
-                          name="close"
-                          color="$white"
-                          size="xs"
-                        />
+                        {/* @ts-ignore Icon typing for vector icons */}
+                        <Icon as={AntDesign as any} name="close" color="$white" size="xs" />
                       </Pressable>
                     ))}
                   </HStack>
@@ -309,16 +246,12 @@ const ExerciseSelectionView = () => {
                         <Text color="$white" fontSize="$md">
                           {exercise.name}
                         </Text>
-                        {isExerciseSelected(exercise.id) && (
-                          <Center width="$6" height="$6" backgroundColor="#6B8EF2" borderRadius="$full">
-                            <Icon
-                              as={AntDesign}
-                              name="check"
-                              color="$white"
-                              size="xs"
-                            />
-                          </Center>
-                        )}
+                         {isExerciseSelected(exercise.id) && (
+                           <Center width="$6" height="$6" backgroundColor="#6B8EF2" borderRadius="$full">
+                             {/* @ts-ignore Icon typing for vector icons */}
+                             <Icon as={AntDesign as any} name="check" color="$white" size="xs" />
+                           </Center>
+                         )}
                       </HStack>
                     </Pressable>
                   ))
@@ -331,13 +264,8 @@ const ExerciseSelectionView = () => {
                     </HStack>
                     :
                     <Center flex={1} p="$4">
-                      <Icon
-                        as={MaterialIcons}
-                        name="category"
-                        color="$gray500"
-                        size="xl"
-                        mb="$2"
-                      />
+                      {/* @ts-ignore Icon typing for vector icons */}
+                      <Icon as={MaterialIcons as any} name="category" color="$gray500" size="xl" mb="$2" />
                       <Text color="$gray400" textAlign="center">
                         Select a body part to see available exercises
                       </Text>
@@ -371,7 +299,8 @@ const ExerciseSelectionView = () => {
                   onPress={handleAddExercises}
                   flex={1}
                 >
-                  <ButtonIcon as={AntDesign} name="plus" color="$white" size="sm" />
+                  {/* @ts-ignore ButtonIcon typing for vector icons */}
+                  <ButtonIcon as={AntDesign as any} name="plus" color="$white" size="sm" />
                   <ButtonText fontSize="$sm">{`Add (${selectedExercises.length})`}</ButtonText>
                 </Button>
               </HStack>

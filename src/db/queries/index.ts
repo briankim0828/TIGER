@@ -1,5 +1,6 @@
 // Simple data access layer for local SQLite database
 import * as SQLite from 'expo-sqlite';
+import { useMemo } from 'react';
 import { SimpleDataAccess } from './simple';
 
 // Hook to access database from the Electric context
@@ -12,7 +13,9 @@ export function useDatabase() {
     throw new Error('Database not initialized. Make sure ElectricProvider is wrapping your app.');
   }
 
-  return new SimpleDataAccess(db);
+  // Memoize the data access wrapper to keep a stable reference across renders
+  const client = useMemo(() => new SimpleDataAccess(db), [db]);
+  return client;
 }
 
 // Export the SimpleDataAccess class for direct use

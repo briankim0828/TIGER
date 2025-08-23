@@ -13,13 +13,14 @@ import Animated, {
   withTiming, 
   useSharedValue 
 } from "react-native-reanimated";
-import { Exercise, Split, WEEKDAYS } from "../types";
+import { WEEKDAYS } from "../types";
+import { ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
 
 // Interface for body part section data used internally
 interface BodyPartSectionData {
   id: string;
   bodyPart: string;
-  exercises: Exercise[];
+  exercises: (ProgramExerciseLite & { splitIds: string[] })[];
 }
 
 // Define the desired order of body parts
@@ -43,13 +44,13 @@ const ExerciseItem = React.memo(
     onToggle,
     isPressDisabled,
   }: {
-    exercise: Exercise;
-    splits: Split[];
+    exercise: ProgramExerciseLite & { splitIds: string[] };
+    splits: ProgramSplitWithExercises[];
     isExpanded: boolean;
     onToggle: (id: string) => void;
     isPressDisabled: boolean;
   }) => {
-    const splitColors = useMemo(() => {
+  const splitColors = useMemo(() => {
       return exercise.splitIds.reduce((acc, splitId) => {
         const split = splits.find((s) => s.id === splitId);
         acc[splitId] = split?.color || "#2A2E38";
@@ -97,12 +98,8 @@ const ExerciseItem = React.memo(
       >
         <HStack justifyContent="space-between" alignItems="center">
           <HStack style={{ gap: 8, alignItems: "center", flex: 1 }}>
-            <Icon
-              as={AntDesign}
-              name={isExpanded ? "down" : "right"}
-              color="#A1A1AA"
-              size="sm"
-            />
+            {/* @ts-ignore */}
+            <Icon as={AntDesign as any} name={isExpanded ? "down" : "right"} color="#A1A1AA" size="sm" />
             <Text color="white" style={{ fontSize: 16 }}>
               {exercise.name}
             </Text>
@@ -172,7 +169,7 @@ const ExerciseItem = React.memo(
 const BodyPartSection = React.memo(
   ({
     bodyPart,
-    exercises,
+  exercises,
     splits,
     expandedExercises,
     onToggle,
@@ -180,8 +177,8 @@ const BodyPartSection = React.memo(
     isPressDisabled,
   }: {
     bodyPart: string;
-    exercises: Exercise[];
-    splits: Split[];
+  exercises: (ProgramExerciseLite & { splitIds: string[] })[];
+  splits: ProgramSplitWithExercises[];
     expandedExercises: string[];
     onToggle: (id: string) => void;
     isFirstItem?: boolean;
@@ -236,14 +233,14 @@ const OptimizedExerciseList = React.memo(
 
 // --- Data Processing Hook ---
 
-const useProcessedExercises = (splits: Split[]): BodyPartSectionData[] => {
+const useProcessedExercises = (splits: ProgramSplitWithExercises[]): BodyPartSectionData[] => {
   return useMemo(() => {
      if (!splits || splits.length === 0) {
       return [];
     }
 
     // 1. Extract and deduplicate exercises, aggregating splitIds
-    const exerciseMap = new Map<string, Exercise & { splitIds: string[] }>();
+    const exerciseMap = new Map<string, (ProgramExerciseLite & { splitIds: string[] })>();
     splits.forEach((split) => {
       if (split.exercises && Array.isArray(split.exercises)) {
         split.exercises.forEach((exercise) => {
@@ -279,7 +276,7 @@ const useProcessedExercises = (splits: Split[]): BodyPartSectionData[] => {
       }
       acc[bodyPart].push(exercise);
       return acc;
-    }, {} as Record<string, (Exercise & { splitIds: string[] })[]>);
+    }, {} as Record<string, (ProgramExerciseLite & { splitIds: string[] })[]>);
 
     // 3. Create ordered sections based on BODY_PART_ORDER
     const bodyPartSections = BODY_PART_ORDER.reduce((acc, bodyPart) => {
@@ -311,7 +308,7 @@ const useProcessedExercises = (splits: Split[]): BodyPartSectionData[] => {
 // --- Main Component ---
 
 interface MyExercisesProps {
-  splits: Split[];
+  splits: ProgramSplitWithExercises[];
   editMode: "none" | "program" | "splits";
   expandedExercises: string[];
   onToggleExerciseExpansion: (exerciseId: string) => void;

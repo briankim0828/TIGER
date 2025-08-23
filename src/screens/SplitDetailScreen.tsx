@@ -11,140 +11,79 @@ import {
   ScrollView,
 } from "@gluestack-ui/themed";
 import { AntDesign } from "@expo/vector-icons";
-import { Split, Exercise, Set } from "../types";
+// Legacy types are ignored; we use DB as the source of truth
 import { ScrollView as RNScrollView } from "react-native";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useData } from "../contexts/DataContext";
-import { saveSplitsToSupabase } from "../supabase/supabaseSplits";
+import { useDatabase } from "../db/queries";
+import { ProgramSplit } from "../types/ui";
+import type { SplitExerciseJoin } from "../db/queries/simple";
 
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  SplitDetail: { split: Split; newlyAddedExercises?: Exercise[] };
+  SplitDetail: { split: ProgramSplit; newlyAddedExercises?: any[] };
   ExerciseSelection: { splitId: string };
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 type RoutePropType = RouteProp<WorkoutStackParamList, "SplitDetail">;
 
-// Extend the Exercise type to include sets and reps
-interface ExerciseWithDetails extends Omit<Exercise, "sets"> {
-  sets: Set[];
-}
+type ExerciseRow = { id: string; name: string };
 
 const SplitDetailScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RoutePropType>();
   const { split, newlyAddedExercises } = route.params;
   const splitColor = split.color || "#2A2E38";
-  const [exercises, setExercises] = useState<ExerciseWithDetails[]>([]);
+  const [exercises, setExercises] = useState<ExerciseRow[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [hasLocalChanges, setHasLocalChanges] = useState(false);
-  const scrollViewRef = useRef<RNScrollView>(null);
-  const { splits, updateSplits } = useData();
+  // No need for ref to themed ScrollView (type mismatch)
+  const db = useDatabase();
 
-  // Convert SelectionExercise to WorkoutExercise
-  const convertToWorkoutExercise = (
-    exercise: Pick<Exercise, "id" | "name" | "bodyPart">
-  ): ExerciseWithDetails => ({
-    ...exercise,
-    splitIds: [split.id],
-    sets: [],
-  });
-
-  // Use exercises directly from the navigation params (initial load)
-  useEffect(() => {
-    if (split && split.exercises && !newlyAddedExercises) {
-      console.log(
-        "SplitDetailScreen - Initial loading exercises from route params:",
-        split.exercises.length
-      );
-      const exercisesWithDetails = split.exercises.map((ex) => ({
-        ...ex,
-        splitIds: [split.id],
-        sets: (ex as any).sets || [],
-      }));
-      setExercises(exercisesWithDetails);
-    } else if (!split?.exercises && !newlyAddedExercises) {
-      console.log(
-        "SplitDetailScreen - No initial exercises found in route params"
-      );
-      setExercises([]);
+  const loadSplitExercises = useCallback(async () => {
+    try {
+      const rows: SplitExerciseJoin[] = await db.getSplitExercises(split.id);
+      const list = rows.map((r) => ({ id: r.exercise.id, name: r.exercise.name }));
+      setExercises(list);
+    } catch (e) {
+      console.error('SplitDetailScreen: failed to load split exercises', e);
     }
-  }, [split]);
+  }, [db, split.id]);
+
+  // Initial and focus-based load
+  useEffect(() => {
+    loadSplitExercises();
+  }, [loadSplitExercises]);
+  useFocusEffect(
+    useCallback(() => {
+      loadSplitExercises();
+    }, [loadSplitExercises])
+  );
 
   // Effect to handle newly added exercises passed back via route params
   useEffect(() => {
+    // We now persist directly in selection view; no need to handle params
     if (newlyAddedExercises && newlyAddedExercises.length > 0) {
-      console.log(
-        `SplitDetailScreen - Received ${newlyAddedExercises.length} new exercises from route params.`
-      );
-      const newWorkoutExercises = newlyAddedExercises.map(
-        convertToWorkoutExercise
-      );
-      setExercises((prevExercises) => [...prevExercises, ...newWorkoutExercises]);
-      setHasLocalChanges(true);
-
-      // Clear the param to prevent re-adding on subsequent renders/focus changes
       navigation.setParams({ newlyAddedExercises: undefined });
+      loadSplitExercises();
     }
-  }, [newlyAddedExercises, navigation]);
+  }, [newlyAddedExercises, navigation, loadSplitExercises]);
 
-  // Save exercises to storage whenever editing finishes and changes exist
-  useEffect(() => {
-    const saveExercises = async () => {
-      if (!isEditing && hasLocalChanges) {
-        console.log("SplitDetailScreen: Detected changes, preparing to save...");
-        const exercisesToSave = exercises.map(({ id, name, bodyPart, sets }) => ({ id, name, bodyPart, sets }));
-        const updatedSplits = splits.map((splitItem: Split) =>
-          splitItem.id === split.id
-            ? { ...split, exercises: exercisesToSave }
-            : splitItem
-        );
-
-        console.log(
-          `SplitDetailScreen: Saving ${updatedSplits.length} splits to Supabase.`
-        );
-        const success = await saveSplitsToSupabase(updatedSplits);
-
-        if (success) {
-          console.log(
-            "SplitDetailScreen: Splits saved successfully via supabaseSplits."
-          );
-          updateSplits(updatedSplits);
-          setHasLocalChanges(false);
-        } else {
-          console.error(
-            "SplitDetailScreen: Failed to save splits via supabaseSplits."
-          );
-        }
-      }
-    };
-
-    saveExercises();
-  }, [
-    isEditing,
-    hasLocalChanges,
-    split,
-    exercises,
-    splits,
-    updateSplits,
-    saveSplitsToSupabase,
-  ]);
+  // Removed Supabase/DataContext persistence: DB is now the source of truth
 
   const handleRemoveExercise = async (index: number) => {
-    const updatedExercises = exercises.filter((_, i) => i !== index);
-    setExercises(updatedExercises);
-    setHasLocalChanges(true);
+    const exercise = exercises[index];
+    if (!exercise) return;
+    try {
+      await db.removeExerciseFromSplit(split.id, exercise.id);
+      await loadSplitExercises();
+    } catch (e) {
+      console.error('SplitDetailScreen: failed to remove exercise', e);
+    }
   };
 
-  const handleUpdateExercise = (
-    index: number,
-    field: "sets" | "reps",
-    value: string
-  ) => {
-    console.warn("handleUpdateExercise called but currently commented out - review implementation needed.");
-  };
+  // Placeholder for potential future per-exercise metadata
+  const handleUpdateExercise = () => {};
 
   const addExerciseButton = (
     <Pressable
@@ -165,7 +104,8 @@ const SplitDetailScreen = () => {
       }}
     >
       <HStack space="sm" justifyContent="center" alignItems="center">
-        <Icon as={AntDesign} name="plus" color="#6B8EF2" size="sm" />
+  {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
+  <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
         <Text color="#6B8EF2" fontSize="$md">
           Add Exercise
         </Text>
@@ -182,35 +122,30 @@ const SplitDetailScreen = () => {
               variant="link"
               onPress={() => navigation.goBack()}
             >
-              <ButtonIcon as={AntDesign} name="left" color="$white" />
+              {/* @ts-ignore ButtonIcon typing for vector icons */}
+              <ButtonIcon as={AntDesign as any} name="left" color="$white" />
             </Button>
             <Text color="$white" fontSize="$xl" fontWeight="$bold">
               {split.name}
             </Text>
           </HStack>
-          <Button
-            variant="link"
-            onPress={() => setIsEditing(!isEditing)}
-          >
-            <ButtonIcon
-              as={AntDesign}
-              name={isEditing ? "check" : "edit"}
-              color="white"
-            />
+          <Button variant="link" onPress={() => setIsEditing(!isEditing)}>
+            {/* Replace ButtonIcon with Icon to avoid typing friction */}
+            {/* @ts-ignore */}
+            <Icon as={AntDesign as any} name={isEditing ? "check" : "edit"} color="white" />
           </Button>
         </HStack>
 
-        <ScrollView
-          ref={scrollViewRef}
+  <ScrollView
           flex={1}
           showsVerticalScrollIndicator={false}
         >
           <VStack space="lg" p="$3">
-            {exercises.length > 0 ? (
+    {exercises.length > 0 ? (
               <VStack space="md">
                 {exercises.map((exercise, index) => (
                   <Box
-                    key={exercise.id}
+        key={exercise.id}
                     backgroundColor="transparent"
                     p="$3"
                     borderRadius="$lg"
@@ -231,20 +166,13 @@ const SplitDetailScreen = () => {
                           {index + 1}
                         </Text>
                         <Text color="$white" fontSize="$md">
-                          {exercise.name}
+          {exercise.name}
                         </Text>
                       </HStack>
                       {isEditing && (
-                        <Button
-                          variant="link"
-                          onPress={() => handleRemoveExercise(index)}
-                          sx={{ p: 0 }}
-                        >
-                          <ButtonIcon
-                            as={AntDesign}
-                            name="close"
-                            color="$gray400"
-                          />
+                        <Button variant="link" onPress={() => handleRemoveExercise(index)} sx={{ p: 0 }}>
+                          {/* @ts-ignore */}
+                          <Icon as={AntDesign as any} name="close" color="$gray400" />
                         </Button>
                       )}
                     </HStack>

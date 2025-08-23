@@ -15,7 +15,8 @@ import Animated, {
   withDelay,
 } from "react-native-reanimated";
 import { AntDesign } from "@expo/vector-icons";
-import { Split, WEEKDAYS, WeekDay } from "../types";
+import { WEEKDAYS, WeekDay } from "../types";
+import { ProgramSplit, ProgramEditMode } from "../types/ui";
 
 // Helper function to get abbreviated day names
 const getAbbreviatedDay = (day: WeekDay): string => {
@@ -37,7 +38,7 @@ const WeekdayItem = React.memo(
     isEditing,
   }: {
     day: WeekDay;
-    splits: Split[];
+    splits: ProgramSplit[];
     isSelected: boolean;
     onPress: () => void;
     isEditing: boolean;
@@ -130,7 +131,10 @@ const WeekdayItem = React.memo(
                 {getFirstLetter(daySplits[0].name)}
               </Text>
             ) : (
-              <Icon as={AntDesign} name="plus" color="white" size="lg" />
+              <>
+                {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
+                <Icon as={AntDesign as any} name="plus" color="white" size="lg" />
+              </>
             )}
           </Box>
           {/* Show up arrow only if selected in edit mode */}
@@ -140,12 +144,8 @@ const WeekdayItem = React.memo(
               { height: 15, justifyContent: 'center', alignItems: 'center' }
             ]}
           >
-            <Icon
-              as={AntDesign}
-              name="up"
-              color={isSelected ? "#6B8EF2" : "#A1A1AA"}
-              size="xs"
-            />
+            {/* @ts-ignore */}
+            <Icon as={AntDesign as any} name="up" color={isSelected ? "#6B8EF2" : "#A1A1AA"} size="xs" />
           </Animated.View>
         </VStack>
       </Pressable>
@@ -156,8 +156,8 @@ const WeekdayItem = React.memo(
 // --- Main Component ---
 
 interface MyProgramProps {
-  splits: Split[];
-  editMode: "none" | "program" | "splits";
+  splits: ProgramSplit[];
+  editMode: ProgramEditMode;
   selectedDay: WeekDay | null;
   onDaySelect: (day: WeekDay) => void;
   onToggleEditMode: () => void;

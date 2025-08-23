@@ -3,11 +3,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import WorkoutScreen from './WorkoutScreen';
 import SplitDetailScreen from './SplitDetailScreen';
 import ExerciseSelectionView from '../components/ExerciseSelectionView';
-import { Split } from '../types';
+import { ProgramSplit } from '../types/ui';
 
 export type WorkoutStackParamList = {
   WorkoutMain: undefined;
-  SplitDetail: { split: Split };
+  SplitDetail: { split: ProgramSplit };
   ExerciseSelection: undefined;
 };
 

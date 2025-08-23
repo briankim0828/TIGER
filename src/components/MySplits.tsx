@@ -21,7 +21,8 @@ import Animated, {
   withDelay,
 } from "react-native-reanimated";
 import { AntDesign, Entypo } from "@expo/vector-icons";
-import { Split, WeekDay } from "../types";
+import { WeekDay } from "../types";
+import { ProgramSplit, ProgramEditMode } from "../types/ui";
 import { parseFontSize } from "../../helper/fontsize";
 
 // Constants
@@ -49,8 +50,8 @@ const SplitItem = React.memo(
     onDelete,
     onFocusScroll,
   }: {
-    split: Split;
-    editMode: "none" | "program" | "splits";
+  split: ProgramSplit;
+  editMode: ProgramEditMode;
     isEditingThisSplit: boolean;
     selectedDay: WeekDay | null;
     onPress: () => void;
@@ -213,13 +214,14 @@ const SplitItem = React.memo(
               </Box>
               {/* Show exercise count while editing */}
               <Text style={{ color: "#A1A1AA", fontSize: 14 }}>
-                {split.exercises.length} exercises
+                {split.exerciseCount} exercises
               </Text>
               <Pressable
                 onPress={onDelete}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Icon as={AntDesign} name="close" color="#EF4444" size="md" />
+                {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
+                <Icon as={AntDesign as any} name="close" color="#EF4444" size="md" />
               </Pressable>
             </HStack>
           ) : (
@@ -237,17 +239,19 @@ const SplitItem = React.memo(
                 <Animated.View style={contentShiftAnimatedStyle}>
                   <HStack style={{ gap: 12, alignItems: "center" }}>
                     <Text color="white" style={{ fontSize: 14 }}>
-                      {split.exercises.length} exercises
+                      {split.exerciseCount} exercises
                     </Text>
                     {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
                     <Animated.View style={arrowAnimatedStyle}>
-                      <Icon as={AntDesign} name="right" color="#A1A1AA" size="sm" />
+                      {/* @ts-ignore */}
+                      <Icon as={AntDesign as any} name="right" color="#A1A1AA" size="sm" />
                     </Animated.View>
                   </HStack>
                 </Animated.View>
                 {/* Menu Icon (shown only in Splits mode when not editing this item) */}
                 <Animated.View style={[menuAnimatedStyle, { justifyContent: 'center', alignItems: 'center' }]} >
-                    <Icon as={Entypo} name="menu" color="#A1A1AA" size="md" />
+                    {/* @ts-ignore */}
+                    <Icon as={Entypo as any} name="menu" color="#A1A1AA" size="md" />
                 </Animated.View>
               </HStack>
             </>
@@ -286,12 +290,12 @@ const SplitItem = React.memo(
 // --- Main Component ---
 
 interface MySplitsProps {
-  splits: Split[];
-  editedSplits: Split[] | null; // Use this when in splits edit mode
-  editMode: "none" | "program" | "splits";
+  splits: ProgramSplit[];
+  editedSplits: ProgramSplit[] | null; // Use this when in splits edit mode
+  editMode: ProgramEditMode;
   selectedDay: WeekDay | null;
   editingSplitId: string | null;
-  onSplitPress: (split: Split) => void;
+  onSplitPress: (split: ProgramSplit) => void;
   onNameEdit: (id: string, name: string) => void;
   onColorSelect: (id: string, color: string) => void;
   onDeleteSplit: (id: string) => void;
@@ -380,12 +384,8 @@ const MySplits: React.FC<MySplitsProps> = ({
               disabled={!canAddMoreSplits}
             >
               <HStack justifyContent="center" alignItems="center" style={{ gap: 8 }}>
-                <Icon 
-                  as={AntDesign} 
-                  name="plus" 
-                  color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
-                  size="sm" 
-                />
+                {/* @ts-ignore */}
+                <Icon as={AntDesign as any} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} size="sm" />
                 <Text 
                   color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
                   style={{ fontSize: 14, fontWeight: "bold" }}

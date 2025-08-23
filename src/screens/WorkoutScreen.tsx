@@ -16,57 +16,105 @@ import {
   Dimensions,
   TouchableWithoutFeedback,
 } from "react-native";
-import { Exercise, Split, WeekDay } from "../types";
-import { useData } from "../contexts/DataContext";
-import { useNavigation } from "@react-navigation/native";
+import { WeekDay } from "../types";
+import { ProgramSplit, ProgramEditMode, ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
+import type { SplitExerciseJoin } from "../db/queries/simple";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { WorkoutStackParamList } from "./WorkoutMain";
-import { newUuid } from "../utils/ids";
-import { getUserSplitsFromSupabase, saveSplitsToSupabase } from "../supabase/supabaseSplits";
 import MySplits from "../components/MySplits";
 import MyExercises from "../components/MyExercises";
 import MyProgram from "../components/MyProgram";
+import { useDatabase } from "../db/queries";
+
+// We now use ProgramSplit for Program/Splits UIs
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
-type EditMode = "none" | "program" | "splits";
+type EditMode = ProgramEditMode;
 
 const WorkoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const scrollViewRef = useRef<RNScrollView>(null);
-  const { splits, updateSplits } = useData();
+  const db = useDatabase();
+  const USER_ID = 'local-user'; // TODO: wire to auth when available
 
   const [editMode, setEditMode] = useState<EditMode>("none");
   const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
-  const [editedSplits, setEditedSplits] = useState<Split[] | null>(null);
-  const editedSplitsRef = useRef<Split[] | null>(null);
+  const [splits, setSplits] = useState<ProgramSplit[]>([]);
+  const [editedSplits, setEditedSplits] = useState<ProgramSplit[] | null>(null);
+  const editedSplitsRef = useRef<ProgramSplit[] | null>(null);
   const [selectedDay, setSelectedDay] = useState<WeekDay | null>(null);
-  const [selectedSplit, setSelectedSplit] = useState<Split | null>(null);
+  const [selectedSplit, setSelectedSplit] = useState<ProgramSplit | null>(null);
   const [isFirstMount, setIsFirstMount] = useState(true);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [scrollY, setScrollY] = useState(0);
   const [expandedExercises, setExpandedExercises] = useState<string[]>([]);
+  const [splitsWithExercises, setSplitsWithExercises] = useState<ProgramSplitWithExercises[] | null>(null);
 
-  const getUserSplits = useCallback(async () => {
-    console.log("WorkoutScreen: Fetching user splits...");
-    const fetchedSplits = await getUserSplitsFromSupabase();
-    if (fetchedSplits) {
-      console.log(`WorkoutScreen: Received ${fetchedSplits.length} splits from Supabase.`);
-      updateSplits(fetchedSplits);
-    } else {
-      console.error("WorkoutScreen: Failed to fetch splits from Supabase or none found.");
+  const mapRowToProgramSplit = useCallback((row: any): ProgramSplit => {
+    const exerciseCount = typeof row.exerciseCount === 'number' ? row.exerciseCount : (typeof row.exercise_count === 'string' ? parseInt(row.exercise_count, 10) : row.exercise_count || 0);
+    return { id: row.id, name: row.name, color: row.color, days: [], exerciseCount };
+  }, []);
+
+  const fetchSplits = useCallback(async () => {
+    try {
+      console.log("WorkoutScreen: Fetching user splits from local DB...");
+  const [rows, dayAssigns] = await Promise.all([
+        db.getUserSplitsWithExerciseCounts(USER_ID),
+        db.getDayAssignments(USER_ID)
+      ]);
+      const assignBySplit = new Map<string, string[]>();
+      for (const a of dayAssigns as any[]) {
+        const list = assignBySplit.get(a.split_id) ?? [];
+        list.push(a.weekday);
+        assignBySplit.set(a.split_id, list);
+      }
+    const ui = rows.map((r: any) => {
+  const base = mapRowToProgramSplit(r);
+  return { ...base, days: (assignBySplit.get(r.id) ?? []) as WeekDay[] };
+      });
+    setSplits(ui);
+    // Hydrate exercises per split for MyExercises panel (derived lightweight shape)
+    try {
+      const detailed: ProgramSplitWithExercises[] = [];
+      for (const s of ui) {
+        const se: SplitExerciseJoin[] = await db.getSplitExercises(s.id);
+        const exs: ProgramExerciseLite[] = se.map((r) => ({
+          id: r.exercise.id,
+          name: r.exercise.name,
+          bodyPart: (r.exercise.bodyPart || r.exercise.modality || 'Uncategorized') ?? 'Uncategorized',
+        }));
+        detailed.push({ ...s, exercises: exs });
+      }
+      setSplitsWithExercises(detailed);
+    } catch (e) {
+      console.warn('WorkoutScreen: failed to hydrate exercises for MyExercises view', e);
+      setSplitsWithExercises(null);
     }
-  }, [updateSplits]);
+    // If we're currently editing splits, keep the edited list in sync so UI reflects DB changes
+    setEditedSplits(prev => (editMode === 'splits' ? JSON.parse(JSON.stringify(ui)) : prev));
+    } catch (e) {
+      console.error('WorkoutScreen: Failed to fetch splits from DB', e);
+    }
+  }, [db, USER_ID, mapRowToProgramSplit, editMode]);
 
   useEffect(() => {
     if (isFirstMount) {
-      getUserSplits();
+      fetchSplits();
       setIsFirstMount(false);
     }
-  }, [isFirstMount, getUserSplits]);
+  }, [isFirstMount, fetchSplits]);
+
+  // Refresh whenever screen gains focus (e.g., returning from detail)
+  useFocusEffect(
+    useCallback(() => {
+      fetchSplits();
+    }, [fetchSplits])
+  );
 
   const setEditModeWithDebug = useCallback((newMode: EditMode) => {
     if (newMode === "splits" && editMode !== "splits") {
-      const initialSplits = JSON.parse(JSON.stringify(splits || []));
+  const initialSplits = JSON.parse(JSON.stringify(splits || []));
       setEditedSplits(initialSplits);
       editedSplitsRef.current = initialSplits;
       console.log("WorkoutScreen: Entering splits edit mode.");
@@ -92,89 +140,81 @@ const WorkoutScreen = () => {
   const toggleProgramEditMode = useCallback(async () => {
     console.log("toggleProgramEditMode called. Current mode:", editMode);
     if (editMode === "program") {
-      console.log("WorkoutScreen: Saving splits via toggleProgramEditMode...");
-      const success = await saveSplitsToSupabase(splits);
-      if (success) {
-         console.log("WorkoutScreen: Splits saved successfully via toggleProgramEditMode.");
-      } else {
-         console.error("WorkoutScreen: Failed to save splits via toggleProgramEditMode.");
-      }
+      // No-op for now: day assignments not persisted in DB yet
       setEditModeWithDebug("none");
     } else {
       setEditModeWithDebug("program");
     }
-  }, [editMode, splits, saveSplitsToSupabase, setEditModeWithDebug]);
+  }, [editMode, setEditModeWithDebug]);
 
   const toggleSplitsEditMode = useCallback(async () => {
     const currentEditedSplits = editedSplitsRef.current;
     if (editMode === "splits") {
-      if (currentEditedSplits) {
-        console.log("WorkoutScreen: Saving edited splits...");
-        const success = await saveSplitsToSupabase(currentEditedSplits);
-        if (success) {
-          updateSplits(currentEditedSplits); 
-          console.log("WorkoutScreen: Splits saved and context updated.");
-        } else {
-          console.error("WorkoutScreen: Failed to save splits.");
-        }
-      }
+      // On exit, we already persist on change; just refresh UI
+      await fetchSplits();
       setEditModeWithDebug("none");
     } else {
       setEditModeWithDebug("splits");
     }
-  }, [editMode, updateSplits, setEditModeWithDebug, saveSplitsToSupabase]);
+  }, [editMode, setEditModeWithDebug, fetchSplits]);
 
   const handleSplitNameEdit = useCallback((id: string, newName: string) => {
-    let newState: Split[] | null = null;
+    // Update local edited state for UI responsiveness
     setEditedSplits(prev => {
-      newState = prev?.map(split =>
-        split.id === id ? { ...split, name: newName } : split
-      ) ?? null;
+      const newState = prev?.map(split => split.id === id ? { ...split, name: newName } : split) ?? null;
       editedSplitsRef.current = newState;
       return newState;
     });
-  }, []);
+    // Persist immediately
+    db.updateSplit({ id, name: newName })
+      .then(() => fetchSplits())
+      .catch(err => console.error('Failed to update split name', err));
+  }, [db, fetchSplits]);
 
   const handleColorSelect = useCallback((id: string, color: string) => {
-    let newState: Split[] | null = null;
     setEditedSplits(prev => {
-      newState = prev?.map(split =>
-        split.id === id ? { ...split, color } : split
-      ) ?? null;
+      const newState = prev?.map(split => split.id === id ? { ...split, color } : split) ?? null;
       editedSplitsRef.current = newState;
       return newState;
     });
-  }, []);
+    db.updateSplit({ id, color })
+      .then(() => fetchSplits())
+      .catch(err => console.error('Failed to update split color', err));
+  }, [db, fetchSplits]);
 
   const handleAddSplit = useCallback(() => {
-    const currentSplitsForLength = editedSplitsRef.current ?? splits;
-    const newSplit: Split = {
-      id: newUuid(),
-      name: `Split ${currentSplitsForLength.length + 1}`,
-      color: "#FF5733",
-      days: [],
-      exercises: [],
-    };
-    let newState: Split[] | null = null;
-    setEditedSplits(prev => {
-      newState = [...(prev ?? []), newSplit];
-      editedSplitsRef.current = newState;
-      return newState;
-    });
-    setEditingSplitId(newSplit.id);
-  }, [splits]);
+    const list = editedSplitsRef.current ?? splits;
+    // Find max existing number from names like 'split N' (case-insensitive)
+    let maxNum = 0;
+    const re = /^\s*split\s*(\d+)\s*$/i;
+    for (const s of list) {
+      const m = typeof s.name === 'string' ? s.name.match(re) : null;
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    }
+    const nextName = `split ${maxNum + 1}`;
+    db.createSplit({ userId: USER_ID, name: nextName, color: "#FF5733" })
+      .then(async (created) => {
+        setEditingSplitId(created.id);
+        await fetchSplits();
+        // In splits edit mode, auto-enter edit for the newly added split by id
+        if (editMode === 'splits') {
+          setEditedSplits(prev => prev ? prev : JSON.parse(JSON.stringify(splits)));
+        }
+      })
+      .catch(err => console.error('Failed to create split', err));
+  }, [db, USER_ID, splits, fetchSplits, editMode]);
 
   const handleDeleteSplit = useCallback((id: string) => {
-    let newState: Split[] | null = null;
-    setEditedSplits(prev => {
-      newState = prev?.filter(split => split.id !== id) ?? null;
-      editedSplitsRef.current = newState;
-      if (editingSplitId === id) {
-        setEditingSplitId(null);
-      }
-      return newState;
-    });
-  }, [editingSplitId]);
+    db.deleteSplit(id)
+      .then(() => fetchSplits())
+      .then(() => {
+        if (editingSplitId === id) setEditingSplitId(null);
+      })
+      .catch(err => console.error('Failed to delete split', err));
+  }, [db, fetchSplits, editingSplitId]);
 
   const handleDaySelect = useCallback((day: WeekDay) => {
       if (editMode !== "program") return;
@@ -187,28 +227,23 @@ const WorkoutScreen = () => {
     }
   }, [selectedDay, editMode]);
 
-  const handleSplitSelect = useCallback(async (splitToAssign: Split) => {
+  const handleSplitSelect = useCallback(async (splitToAssign: ProgramSplit) => {
       if (!selectedDay || editMode !== "program") return;
 
-      const updatedSplits = splits.map((s) => {
-        const daysWithoutSelected = s.days.filter((d) => d !== selectedDay);
-      if (s.id === splitToAssign.id) {
-        if (!daysWithoutSelected.includes(selectedDay)) {
-          return { ...s, days: [...daysWithoutSelected, selectedDay] };
-        }
-        return { ...s, days: daysWithoutSelected };
-        }
-        return { ...s, days: daysWithoutSelected };
-      });
-
-    console.log("WorkoutScreen: Assigning split to day. Updated splits:", updatedSplits);
-      updateSplits(updatedSplits);
+      // Toggle assignment in DB: if this split already has the day, unassign, else assign
+      const currentlyAssigned = splitToAssign.days.includes(selectedDay);
+      try {
+        await db.setDayAssignment(USER_ID, selectedDay, currentlyAssigned ? null : splitToAssign.id);
+        await fetchSplits();
+      } catch (e) {
+        console.error('Failed to set day assignment', e);
+      }
 
       setSelectedDay(null);
       setSelectedSplit(null);
-  }, [selectedDay, editMode, splits, updateSplits]);
+  }, [selectedDay, editMode, db, USER_ID, fetchSplits]);
 
-  const handleSplitPress = useCallback((split: Split) => {
+  const handleSplitPress = useCallback((split: ProgramSplit) => {
       if (selectedDay && editMode === "program") {
         handleSplitSelect(split);
         return;
@@ -224,20 +259,15 @@ const WorkoutScreen = () => {
     [selectedDay, editMode, handleSplitSelect, navigation, setEditingSplitId]
   );
 
-  const handleSplitDetailUpdate = useCallback(async (updatedSplit: Split) => {
+  const handleSplitDetailUpdate = useCallback(async (updatedSplit: ProgramSplit) => {
       console.log("WorkoutScreen: Receiving update from SplitDetail:", updatedSplit);
-      const updatedSplits = splits.map((split: Split) =>
+  const updatedSplits = splits.map((split: ProgramSplit) =>
         split.id === updatedSplit.id ? updatedSplit : split
       );
-      const success = await saveSplitsToSupabase(updatedSplits);
-      if (success) {
-          updateSplits(updatedSplits);
-          console.log("WorkoutScreen: Split updated and saved successfully from detail screen.");
-      } else {
-           console.error("WorkoutScreen: Failed to save split update from detail screen.");
-      }
+      // For now, only update local state; persistence is handled within detail screen in next step
+      setSplits(updatedSplits);
     },
-    [splits, updateSplits, saveSplitsToSupabase]
+    [splits]
   );
 
   const toggleExerciseExpansion = useCallback((exerciseId: string) => {
@@ -338,7 +368,7 @@ const WorkoutScreen = () => {
               />
              
               <MyExercises
-                splits={splits}
+                splits={splitsWithExercises ?? splits.map(s => ({ ...s, exercises: [] }))}
                 editMode={editMode}
                 expandedExercises={expandedExercises}
                 onToggleExerciseExpansion={toggleExerciseExpansion}
