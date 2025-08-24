@@ -568,3 +568,36 @@ Success criteria
 - Manual row types replaced by Drizzle’s generated types.
 - Behaviors preserved (created_at ASC ordering, avoidDuplicates, contiguous order_pos).
 - Active Workout gains live updates without manual refetch.
+
+---
+
+# 2025-08-24
+
+Checkpoint 4a: Active Workout on Drizzle (SQLite) — COMPLETED ✅
+
+Summary
+- Moved Active Workout flow off in-memory state to typed, transactional operations on SQLite via Drizzle.
+- UI now renders from DB snapshots and uses pull-based refetch after mutations (live queries will arrive in CP4b).
+- Fixed stability issues: hook-order warning and UNIQUE constraint failures on rapid “Add Set”.
+
+Key changes
+- Schema (SQLite): `workout_sessions`, `workout_exercises` (unique: sessionId+orderPos), `workout_sets` (unique: sessionExerciseId+setIndex) with supporting indexes. File: `src/db/sqlite/schema.ts`.
+- Data access (Drizzle): `WorkoutsDataAccess` in `src/db/queries/workouts.drizzle.ts`
+  - Transactions: `inTx()` uses BEGIN IMMEDIATE to serialize concurrent writes on RN SQLite.
+  - addSet(): atomic next-index + insert inside one transaction; bounded retry on UNIQUE collisions.
+  - Full ops: startWorkout, endWorkout, getSessionExercises, getSetsForSessionExercise, updateSet, deleteSet, add/remove/reorder exercise (renormalizes indices).
+- Context: `src/contexts/WorkoutContext.tsx` is a thin facade over DAO calls; exposes start/end workout and set/exercise mutations, plus getters for active session and a composed snapshot.
+- UI: `src/components/ActiveWorkoutModal.tsx`
+  - Reads a DB snapshot and caches exerciseId → sessionExerciseId mapping to avoid extra lookups.
+  - Adds a ref-based lock and button disable to prevent double-tap “Add Set” races; refetches snapshot after writes.
+  - Removed early returns before hooks; header/timer and action buttons refactored.
+- App shell: `App.tsx` wraps modal visibility in safe polling/refetch; configures Reanimated logger + LogBox ignores to reduce noise.
+
+Runtime impact
+- Add/update/delete set and exercise actions are atomic and resilient to quick taps.
+- Active session state survives reloads and is derived purely from DB rows.
+- Reduced log noise; no hook-order violations observed.
+
+Notes and follow-ups
+- Remaining: Switch from polling/refetch to live queries (Electric) in CP4b; optional UI to reorder exercises within an active session; light DAO tests for transactions and index renormalization.
+- If RN “Text strings must be rendered within a <Text>” reappears, check for raw string children inside non-Text parents in `ActiveWorkoutModal.tsx` and `MySplits.tsx` and wrap them with Text.

@@ -469,7 +469,7 @@ const ProfileScreen: React.FC = () => {
         </HStack>
       </Box>
 
-      {/* Settings & Options Section */}
+  {/* Settings & Options Section */}
       <VStack px={4} mt={4} space="md" pb={8}>
          <Text color="white" fontSize="$lg" fontWeight="bold" mb={0}>Settings</Text>
          {/* Example Setting Item */}
@@ -487,6 +487,16 @@ const ProfileScreen: React.FC = () => {
                  </Icon>
              </HStack>
          </Pressable>
+
+         {/* Debug: Database Inspector */}
+         <Button
+           variant="outline"
+           action="secondary"
+           size="lg"
+           onPress={() => (navigation as any).navigate('DebugDatabase')}
+         >
+           <ButtonText>Open Debug Database</ButtonText>
+         </Button>
 
          {/* Logout Button */}
          <Button

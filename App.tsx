@@ -31,6 +31,7 @@ import {
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
+import DebugDatabaseScreen from "./src/screens/DebugDatabaseScreen";
 import { GluestackUIProvider, Box, Text } from "@gluestack-ui/themed";
 import { config } from "./gluestack-ui.config";
 import { StatusBar } from "react-native";
@@ -145,6 +146,7 @@ type RootStackParamList = {
   Main: NavigatorScreenParams<MainTabParamList>;
   Login: undefined;
   ExerciseSelectionModalScreen: undefined;
+  DebugDatabase: undefined;
 };
 
 // -----------------------------
@@ -176,7 +178,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
 const AuthNavigationWrapper = () => {
   return (
     <Box flex={1} bg="#1E2028">
-      <GlobalHeader title="PR." />
+      <GlobalHeader title="TIGER" />
       <Box flex={1}>
         <Stack.Navigator
           screenOptions={{
@@ -224,7 +226,7 @@ function MainTabs() {
   return (
     <Box flex={1} bg="#1E2028">
       <Box alignItems="center">
-        <GlobalHeader title="PR." />
+        <GlobalHeader title="TIGER" />
       </Box>
       <Box flex={1}>
         <Tab.Navigator
@@ -268,6 +270,7 @@ const NavigationWrapper = () => {
               name="ExerciseSelectionModalScreen"
               component={ExerciseSelectionView}
             />
+            <Stack.Screen name="DebugDatabase" component={DebugDatabaseScreen} />
           </Stack.Group>
         </Stack.Navigator>
       </Box>
