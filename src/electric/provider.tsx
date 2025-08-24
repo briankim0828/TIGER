@@ -54,6 +54,15 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
     initializeDatabase();
   }, []);
 
+  // Avoid rendering children until DB is ready to prevent "Database not initialized" errors from hooks.
+  if (!isInitialized || !db) {
+    return (
+      <ElectricContext.Provider value={{ db, isInitialized }}>
+        {null}
+      </ElectricContext.Provider>
+    );
+  }
+
   return (
     <ElectricContext.Provider value={{ db, isInitialized }}>
       {children}

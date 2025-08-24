@@ -7,7 +7,7 @@ import {
   WorkoutDay,
   BodyPartSectionData 
 } from '../types';
-import { fetchSessionsFromSupabase, clearWorkoutSessionsFromSupabase } from '../supabase/supabaseWorkout';
+// Legacy Supabase sync disabled
 import { isUuid } from '../utils/ids';
 
 interface DataContextType {
@@ -57,65 +57,16 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         dataService.getBodyPartSections()
       ]);
 
-      // Immediately fetch remote data from Supabase - this is now the source of truth
-      try {
-        const remoteSessionsData = await fetchSessionsFromSupabase();
-        console.log('[DEBUG] Remote sessions from Supabase:', remoteSessionsData.length);
-        console.log('[DEBUG] Local sessions in AsyncStorage:', localSessionsData.length);
-        
-        // If Supabase returned data, use it as the source of truth
-        if (remoteSessionsData.length > 0) {
-          // Clean up remote data (handle non-UUID split IDs)
-          const cleanedRemoteData = remoteSessionsData.map(session => {
-            if (session.splitId && !isUuid(session.splitId)) {
-              console.warn(`Remote session ${session.date} has non-UUID splitId: "${session.splitId}". Treating as null.`);
-              return { ...session, splitId: null };
-            }
-            return session;
-          });
-          
-          console.log('[DEBUG] Using Supabase as source of truth for workout history');
-          
-          // Update local storage to match Supabase
-          await dataService.saveWorkoutSessions(cleanedRemoteData);
-          
-          // Update state with cleaned remote data
-          setWorkoutSessions(cleanedRemoteData);
-          setWorkoutDays(cleanedRemoteData.map(session => ({
-            date: session.date,
-            completed: session.completed,
-            splitId: session.splitId === null ? undefined : session.splitId
-          })));
-        } else {
-          // If Supabase has no data but local storage does, use local
-          console.log('[DEBUG] No remote sessions found in Supabase, using local data');
-          setWorkoutSessions(localSessionsData);
-          setWorkoutDays(localSessionsData.map(session => ({
-            date: session.date,
-            completed: session.completed,
-            splitId: session.splitId === null ? undefined : session.splitId
-          })));
-        }
-        
-        // Always update the other data
-        setSplits(splitsData);
-        setExercises(exercisesData);
-        setBodyPartSections(sectionsData);
-      } catch (syncError) {
-        console.error('Error syncing with Supabase:', syncError);
-        
-        // If sync fails, still load local data as fallback
-        console.log('[DEBUG] Supabase sync failed, falling back to local data');
-        setSplits(splitsData);
-        setExercises(exercisesData);
-        setWorkoutSessions(localSessionsData);
-        setWorkoutDays(localSessionsData.map(session => ({
-          date: session.date,
-          completed: session.completed,
-          splitId: session.splitId === null ? undefined : session.splitId
-        })));
-        setBodyPartSections(sectionsData);
-      }
+      // Remote Supabase sync removed; use local data only
+      setSplits(splitsData);
+      setExercises(exercisesData);
+      setWorkoutSessions(localSessionsData);
+      setWorkoutDays(localSessionsData.map(session => ({
+        date: session.date,
+        completed: session.completed,
+        splitId: undefined,
+      })));
+      setBodyPartSections(sectionsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -156,7 +107,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setWorkoutDays(prev => [...prev, {
         date: session.date,
         completed: session.completed,
-        splitId: session.splitId === null ? undefined : session.splitId
+        splitId: undefined,
       }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add workout session');
@@ -195,15 +146,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // First clear local storage
       await dataService.clearAll();
-      
-      // Then clear remote Supabase data
-      try {
-        await clearWorkoutSessionsFromSupabase();
-        console.log('[DEBUG] Successfully cleared both local and Supabase data');
-      } catch (supabaseError) {
-        console.error('Failed to clear Supabase data:', supabaseError);
-        // Continue even if Supabase clear fails
-      }
       
       // Refresh data to update state with empty storage
       await refreshData();

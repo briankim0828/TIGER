@@ -42,35 +42,69 @@ import {
 // Ignore specific warning about text strings
 LogBox.ignoreLogs([
   "Text strings must be rendered within a <Text> component.",
+  "[Reanimated] Reading from `value` during component render.",
+  "Reading from `value` during component render.",
 ]);
+
+// Reanimated logger configuration to silence repetitive render warnings
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const RNReanimated = require('react-native-reanimated');
+  if (RNReanimated && RNReanimated.configureReanimatedLogger) {
+    RNReanimated.configureReanimatedLogger({
+      // keep errors on, silence noisy warnings
+      level: 'error',
+      strict: false,
+    });
+  }
+} catch {}
 
 // -----------------------------
 // Active Workout Modal Container
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
-  const { isWorkoutActive, currentWorkoutSession, endWorkout } = useWorkout();
+  const { getActiveSessionId, endWorkout } = useWorkout();
+  const [isVisible, setIsVisible] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
+  const USER_ID = 'local-user';
+
+  // Poll for active session presence as a lightweight pull-based visibility source
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      try {
+        const sid = await getActiveSessionId(USER_ID);
+        if (!mounted) return;
+        setSessionId(sid);
+        setIsVisible(!!sid);
+      } catch {}
+    };
+    check();
+    const t = setInterval(check, 1500);
+    return () => { mounted = false; clearInterval(t); };
+  }, [getActiveSessionId]);
 
   const handleEndWorkoutAndClose = async () => {
+    if (!sessionId) return;
     setIsClosingFromSave(true);
-    await endWorkout();
+    await endWorkout(sessionId, { status: 'completed' });
     setTimeout(() => setIsClosingFromSave(false), 500);
   };
 
   const handleModalClose = () => {
-    if (isWorkoutActive && !isClosingFromSave) {
-      endWorkout();
+    if (isVisible && !isClosingFromSave && sessionId) {
+      endWorkout(sessionId, { status: 'completed' });
     } else {
       console.log(
-        "App - Modal already closing from save operation, skipping duplicate endWorkout call"
+        'App - Modal already closing from save operation, skipping duplicate endWorkout call'
       );
     }
   };
 
   return (
     <ActiveWorkoutModal
-      isVisible={isWorkoutActive}
-      exercises={currentWorkoutSession?.exercises || []}
+      isVisible={isVisible}
       onClose={handleModalClose}
       onSave={handleEndWorkoutAndClose}
     />

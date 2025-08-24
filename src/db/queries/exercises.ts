@@ -2,7 +2,8 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, like, or } from 'drizzle-orm';
-import { exerciseCatalog } from '../schema';
+import { exercises as exerciseCatalog } from '../sqlite/schema';
+import { generateUUID } from '../../utils/uuid';
 
 export class ExerciseQueries {
   private db: ReturnType<typeof drizzle>;
@@ -34,7 +35,7 @@ export class ExerciseQueries {
       return await this.db
         .select()
         .from(exerciseCatalog)
-        .where(eq(exerciseCatalog.kind, kind))
+  .where(eq(exerciseCatalog.kind, kind))
         .orderBy(exerciseCatalog.name);
     } catch (error) {
       console.error('Error fetching exercises by kind:', error);
@@ -50,7 +51,7 @@ export class ExerciseQueries {
       return await this.db
         .select()
         .from(exerciseCatalog)
-        .where(eq(exerciseCatalog.modality, modality))
+  .where(eq(exerciseCatalog.modality, modality))
         .orderBy(exerciseCatalog.name);
     } catch (error) {
       console.error('Error fetching exercises by modality:', error);
@@ -70,7 +71,8 @@ export class ExerciseQueries {
         .where(
           or(
             like(exerciseCatalog.name, searchPattern),
-            like(exerciseCatalog.slug, searchPattern)
+            // SQLite schema doesn't have slug; name match only
+            like(exerciseCatalog.name, searchPattern)
           )
         )
         .orderBy(exerciseCatalog.name);
@@ -112,11 +114,12 @@ export class ExerciseQueries {
       const result = await this.db
         .insert(exerciseCatalog)
         .values({
+          id: generateUUID(),
           name: data.name,
-          slug: data.slug || data.name.toLowerCase().replace(/\s+/g, '-'),
           kind: data.kind,
           modality: data.modality,
-          defaultRestSec: data.defaultRestSec
+          defaultRestSec: data.defaultRestSec,
+          createdAt: new Date().toISOString()
         })
         .returning();
       
@@ -190,8 +193,10 @@ export class ExerciseQueries {
   async getExerciseKinds() {
     try {
       const result = await this.db
-        .selectDistinct({ kind: exerciseCatalog.kind })
+        // expo-sqlite driver supports selectDistinct via select().distinct
+        .select({ kind: exerciseCatalog.kind })
         .from(exerciseCatalog)
+        .groupBy(exerciseCatalog.kind)
         .orderBy(exerciseCatalog.kind);
       
       return result.map(row => row.kind);
@@ -207,8 +212,9 @@ export class ExerciseQueries {
   async getExerciseModalities() {
     try {
       const result = await this.db
-        .selectDistinct({ modality: exerciseCatalog.modality })
+        .select({ modality: exerciseCatalog.modality })
         .from(exerciseCatalog)
+        .groupBy(exerciseCatalog.modality)
         .orderBy(exerciseCatalog.modality);
       
       return result.map(row => row.modality);

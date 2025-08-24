@@ -23,7 +23,6 @@ import {
   CheckCircleIcon,
   CircleIcon,
 } from '@gluestack-ui/themed';
-import { Exercise, Set } from '../types';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -41,57 +40,64 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
+type RenderSet = { id: string; weight: number; reps: number; completed: boolean };
+type RenderExercise = { id: string; name: string; sets: RenderSet[] };
+
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
-  exercises: Exercise[];
   onClose: () => void;
-  onSave?: () => Promise<void>;  // Optional prop for handling save operation
+  onSave?: () => Promise<void>; // Optional custom handler
 }
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isVisible,
-  exercises,
   onClose,
   onSave
 }) => {
   const navigation = useNavigation<NavigationProp>();
-  // Use the new discardWorkout function from context
-  const { updateSet, currentWorkoutSession, addSet, endWorkout, discardWorkout } = useWorkout();
+  const {
+    getActiveSessionId,
+    getSessionSnapshot,
+    addSet,
+    updateSet,
+    deleteSet,
+    endWorkout,
+    addExerciseToSession,
+    removeExerciseFromSession,
+  } = useWorkout();
   const toast = useToast();
+  const USER_ID = 'local-user'; // TODO: replace with auth when available
   
-  // Log props when component mounts or props change
-  useEffect(() => {
-    // console.log('ActiveWorkoutModal - Activated with data:', {
-    //   isVisible,
-    //   exercises: exercises.map(ex => ({
-    //     id: ex.id,
-    //     name: ex.name,
-    //     bodyPart: ex.bodyPart,
-    //     sets: ex.sets?.length
-    //   }))
-    // });
-    
-    if (currentWorkoutSession && isVisible) {
-      console.log('ActiveWorkoutModal - Current workout session:', {
-        session_date: currentWorkoutSession.session_date,
-        // split_id: currentWorkoutSession.split_id,
-        // user_id: currentWorkoutSession.user_id,
-        exercises_count: currentWorkoutSession.exercises.length,
-        exercises: currentWorkoutSession.exercises.map(ex => ({          
-          name: ex.name,      
-        }))
-        // sets_status: currentWorkoutSession.sets.map((exerciseSets, i) => ({
-        //   exercise: currentWorkoutSession.exercises[i]?.name,
-        //   sets: exerciseSets.map(set => ({
-        //     id: set.id,
-        //     weight: set.weight,
-        //     reps: set.reps,
-        //     completed: set.completed
-        //   }))
-        // }))
-      });
+  // Local render model from DB snapshot
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [currentExercises, setCurrentExercises] = useState<RenderExercise[]>([]);
+  const [exerciseIdToSessionExerciseId, setExerciseIdToSessionExerciseId] = useState<Record<string, string>>({});
+
+  const refetchSnapshot = useCallback(async (sid: string) => {
+    try {
+      const snap = await getSessionSnapshot(sid);
+  console.debug('[ActiveWorkoutModal] Snapshot loaded', { sessionId: sid, exCount: snap.exercises.length });
+      const render: RenderExercise[] = snap.exercises.map((ex) => ({
+        id: ex.exercise.id,
+        name: ex.exercise.name,
+        sets: (snap.setsByExercise[ex.sessionExerciseId] || []).map((s) => ({
+          id: s.id,
+          weight: (s.weight as number | null | undefined) ? Number(s.weight) : 0,
+          reps: s.reps ?? 0,
+          completed: (s.completed ?? 0) === 1,
+        })),
+      }));
+      setCurrentExercises(render);
+      // Build a quick lookup: exerciseId -> sessionExerciseId
+      const map: Record<string, string> = {};
+      for (const j of snap.exercises) {
+        map[j.exercise.id] = j.sessionExerciseId;
+      }
+      setExerciseIdToSessionExerciseId(map);
+    } catch (e) {
+      console.error('ActiveWorkoutModal: Failed to refetch snapshot', e);
     }
-  }, [isVisible, exercises, currentWorkoutSession]);
+  }, [getSessionSnapshot]);
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -99,9 +105,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // State
   const [workoutTimer, setWorkoutTimer] = useState(0);
-  const [currentExercises, setCurrentExercises] = useState<Exercise[]>([]);
+  // currentExercises now populated from DB via refetchSnapshot
   const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
+  const [addingSetFor, setAddingSetFor] = useState<string | null>(null);
+  const addingSetLockRef = useRef(false);
   const [isDiscardAlertOpen, setIsDiscardAlertOpen] = useState(false); // New state for discard alert
   
   // Snap points for different states - must be a memoized array to prevent re-renders
@@ -109,22 +117,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const snapPoints = useMemo(() => ['10%', '100%'], []);
   
   // Initialize with exercises
+  // Fetch active session and initial snapshot when opened
   useEffect(() => {
-    // if (exercises.length > 0) {
-    //   console.log('ActiveWorkoutModal - Setting current exercises:', JSON.stringify(exercises, null, 2));
-    //   setCurrentExercises(exercises);
-    // }
-
-    // console.log('ActiveWorkoutModal - Setting current exercises:', JSON.stringify(exercises, null, 2));
-    setCurrentExercises(exercises);
-  }, [exercises]);
+    let cancelled = false;
+    (async () => {
+  if (!isVisible) return;
+      const sid = await getActiveSessionId(USER_ID);
+      if (!sid) return;
+      if (!cancelled) setSessionId(sid);
+      await refetchSnapshot(sid);
+    })();
+    return () => { cancelled = true; };
+  }, [isVisible, USER_ID, getActiveSessionId, refetchSnapshot]);
   
   // Open/close bottom sheet based on visibility
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (isVisible && bottomSheetRef.current) {
+  if (isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.expand(); // Open to full height
-      } else if (!isVisible && bottomSheetRef.current) {
+  } else if (!isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.close();
       }
     }, 100);
@@ -151,7 +162,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setCurrentExercises([]);
     };
   }, [isVisible]);
-  
+
   // Timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -197,8 +208,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         console.log('ActiveWorkoutModal - Using provided onSave handler');
         await onSave();
       } else {
-        console.log('ActiveWorkoutModal - Calling endWorkout from context directly');
-        await endWorkout();
+        console.log('ActiveWorkoutModal - Calling endWorkout (DB)');
+        if (sessionId) await endWorkout(sessionId, { status: 'completed' });
       }
       console.log('ActiveWorkoutModal - Save operation completed successfully');
       
@@ -231,7 +242,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ),
       });
     }
-  }, [endWorkout, onSave, isEndingWorkout, toast]);
+  }, [endWorkout, onSave, isEndingWorkout, toast, sessionId]);
   
   // Format timer as MM:SS
   const formatTimer = (seconds: number) => {
@@ -300,80 +311,90 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Handle reps input change locally (no update to context)
   const handleSetFieldBlur = useCallback((exerciseId: string, setIndex: number, field: 'weight' | 'reps') => {
-    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
-    if (exerciseIndex === -1) return;
+    const ex = currentExercises.find((e) => e.id === exerciseId);
+    if (!ex) return;
+    const set = ex.sets[setIndex];
+    if (!set) return;
 
-    const exercise = currentExercises[exerciseIndex];
-    if (!exercise || !exercise.sets || !exercise.sets[setIndex]) return;
-
-    const setKey = `${exerciseId}-${exercise.sets[setIndex].id || setIndex}`;
+    const setKey = `${exerciseId}-${set.id || setIndex}`;
     const numericValue = parseFloat(localInputValues[setKey]?.[field] || '0');
-    
     if (isNaN(numericValue) && (localInputValues[setKey]?.[field]?.trim() !== '')) {
-        toast.show({
-            placement: "top",
-            render: ({ id }) => (
-              <Toast nativeID={id} action="error" variant="accent">
-                <VStack space="xs">
-                  <ToastTitle>Invalid Input</ToastTitle>
-                  <ToastDescription>Please enter a valid number for {field}.</ToastDescription>
-                </VStack>
-              </Toast>
-            ),
-        });
-        return;
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Invalid Input</ToastTitle>
+              <ToastDescription>Please enter a valid number for {field}.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+      return;
     }
-    
-    const originalSetValue = exercise.sets[setIndex][field];
     const currentValue = localInputValues[setKey]?.[field] || '';
-    
-    if (currentValue.trim() === '' && originalSetValue !== 0) {
-        updateSet(exerciseIndex, setIndex, { [field]: 0 });
-    } else if (!isNaN(numericValue) && numericValue !== originalSetValue) {
-        updateSet(exerciseIndex, setIndex, { [field]: numericValue });
+    const original = set[field as 'weight' | 'reps'] || 0;
+    const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
+    if (next !== original) {
+      updateSet(set.id, { [field]: next } as any)
+        .then(async () => { if (sessionId) { await refetchSnapshot(sessionId); } })
+        .catch(console.error);
     }
-  }, [currentExercises, localInputValues, updateSet, toast]);
+  }, [currentExercises, localInputValues, updateSet, toast, sessionId, refetchSnapshot]);
 
   // Handle set completion toggle
   const handleToggleSetCompletion = useCallback((exerciseId: string, setIndex: number) => {
-    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
-    if (exerciseIndex === -1) return;
-
-    const exercise = currentExercises[exerciseIndex];
-    if (exercise && exercise.sets && exercise.sets[setIndex]) {
-      const currentSet = exercise.sets[setIndex];
-      updateSet(exerciseIndex, setIndex, { completed: !currentSet.completed });
-    }
-  }, [currentExercises, updateSet]);
+    const ex = currentExercises.find((e) => e.id === exerciseId);
+    if (!ex) return;
+    const s = ex.sets[setIndex];
+    if (!s) return;
+    updateSet(s.id, { completed: s.completed ? 0 : 1 } as any)
+      .then(async () => { if (sessionId) { await refetchSnapshot(sessionId); } })
+      .catch(console.error);
+  }, [currentExercises, updateSet, sessionId, refetchSnapshot]);
   
   // Handle Add Set button click
   const handleAddNewSet = useCallback((exerciseId: string) => {
-    console.log(`ActiveWorkoutModal - Adding set for exercise ${exerciseId}`);
-    const exerciseIndex = currentExercises.findIndex(ex => ex.id === exerciseId);
-    if (exerciseIndex !== -1) {
-        addSet(exerciseIndex); // Use exerciseIndex (number)
-    } else {
-        console.error("Could not find exercise to add set to:", exerciseId);
-    }
-  }, [addSet, currentExercises]); // Added currentExercises dependency
+    if (!sessionId) return;
+    if (addingSetLockRef.current) return; // hard guard against double-taps within the same frame
+    const idx = currentExercises.findIndex((e) => e.id === exerciseId);
+    if (idx === -1) return;
+    const sessionExerciseId = exerciseIdToSessionExerciseId[exerciseId];
+    if (!sessionExerciseId) return;
+    addingSetLockRef.current = true;
+    setAddingSetFor(exerciseId);
+    (async () => {
+      await addSet(sessionExerciseId, {});
+      await refetchSnapshot(sessionId);
+    })()
+      .catch(console.error)
+      .finally(() => {
+        addingSetLockRef.current = false;
+        setAddingSetFor(null);
+      });
+  }, [addSet, currentExercises, sessionId, refetchSnapshot, exerciseIdToSessionExerciseId]);
 
   // Function to handle the actual discard action using the context function
   const handleConfirmDiscard = useCallback(() => {
     console.log('ActiveWorkoutModal - Confirming discard');
-    setIsDiscardAlertOpen(false); // Close the alert
-    discardWorkout(); // Call the context function to discard the workout
-    bottomSheetRef.current?.close(); // Close the modal
-    toast.show({
-      placement: "top",
-      render: ({ id }) => (
-        <Toast nativeID={id} action="info" variant="accent">
-          <VStack space="xs">
-            <ToastTitle>Workout Discarded</ToastTitle>
-          </VStack>
-        </Toast>
-      ),
-    });
-  }, [discardWorkout, toast]);
+    setIsDiscardAlertOpen(false);
+    if (sessionId) {
+      endWorkout(sessionId, { status: 'cancelled' })
+        .then(() => bottomSheetRef.current?.close())
+        .finally(() => {
+          toast.show({
+            placement: 'top',
+            render: ({ id }) => (
+              <Toast nativeID={id} action="info" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Workout Discarded</ToastTitle>
+                </VStack>
+              </Toast>
+            ),
+          });
+        });
+    }
+  }, [endWorkout, sessionId, toast]);
 
   // Function to open the discard confirmation dialog
   const openDiscardAlert = () => {
@@ -414,7 +435,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     </Box>
   );
 
-  const renderSetRow = (set: Set | undefined, exerciseId: string, setIndex: number, exerciseIndexProp: number) => {
+  const renderSetRow = (set: RenderSet | undefined, exerciseId: string, setIndex: number, exerciseIndexProp: number) => {
     // Check for undefined set
     if (!set) {
       console.warn(`renderSetRow called with undefined set for exerciseId: ${exerciseId}, setIndex: ${setIndex}`);
@@ -505,7 +526,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           {expandedExercises[exercise.id] && (
                             <VStack mt="$3" space="md">
                               {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, exerciseIndex))}
-                              <Button variant="outline" action="secondary" onPress={() => handleAddNewSet(exercise.id)} mt="$2" size="sm">
+                              <Button variant="outline" action="secondary" onPress={() => handleAddNewSet(exercise.id)} mt="$2" size="sm" disabled={addingSetFor === exercise.id}>
                                 <Ionicons name="add-outline" size={20} color="#6B8EF2" style={{ marginRight: 4 }} />
                                 <ButtonText>Add Set</ButtonText>
                               </Button>

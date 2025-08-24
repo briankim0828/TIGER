@@ -9,11 +9,13 @@ import { Box, Text, Pressable } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import { useFocusEffect } from "@react-navigation/native";
 import { useData } from "../contexts/DataContext";
+import { useDatabase } from "../db/queries";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ScrollView, StyleSheet } from "react-native";
 import SessionSummaryModal from "../components/SessionSummaryModal";
-import { Split, Exercise, WorkoutDay } from '../types';
+import { WorkoutDay } from '../types';
+import type { ProgramSplit } from '../types/ui';
 
 interface WorkoutSession {
   date: string;
@@ -21,8 +23,10 @@ interface WorkoutSession {
 }
 
 const ProgressScreen: React.FC = () => {
-  const { splits, workoutSessions, loading: dataLoading } = useData();
-  const { startWorkout } = useWorkout();
+  const { workoutSessions, loading: dataLoading } = useData();
+  const db = useDatabase();
+  const { startWorkout, getActiveSessionId } = useWorkout();
+  const USER_ID = 'local-user';
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -31,6 +35,7 @@ const ProgressScreen: React.FC = () => {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [loading, setLoading] = useState(true);
   const [calendarKey, setCalendarKey] = useState(0);
+  const [splits, setSplits] = useState<ProgramSplit[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(useMemo(() => {
     return `${currentYear}-${String(currentMonth + 1).padStart(
       2,
@@ -72,8 +77,8 @@ const ProgressScreen: React.FC = () => {
     return days[date.getDay()];
   }, []);
 
-  const scheduledSplit = useMemo(() => {
-    const dayOfWeek = getDayOfWeek(selectedDate);
+  const scheduledSplit: ProgramSplit | null = useMemo(() => {
+    const dayOfWeek = getDayOfWeek(selectedDate) as any as import('../types').WeekDay | null;
     if (!dayOfWeek) return null;
     return splits.find(split => split.days.includes(dayOfWeek)) || null;
   }, [selectedDate, splits, getDayOfWeek]);
@@ -81,6 +86,32 @@ const ProgressScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       const processData = async () => {
+        // Pull Program Builder state from SQLite via Drizzle
+        try {
+          const [rows, dayAssigns] = await Promise.all([
+            db.getUserSplitsWithExerciseCounts(USER_ID),
+            db.getDayAssignments(USER_ID),
+          ]);
+          // Build days per split id
+          const daysBySplit = new Map<string, import('../types').WeekDay[]>();
+          for (const a of dayAssigns) {
+            const list = daysBySplit.get(a.split_id) ?? [];
+            list.push(a.weekday as import('../types').WeekDay);
+            daysBySplit.set(a.split_id, list);
+          }
+          // Build simple split objects for calendar
+          const calendarSplits: ProgramSplit[] = rows.map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            color: r.color ?? undefined,
+            days: daysBySplit.get(r.id) ?? [],
+            exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
+          }));
+          setSplits(calendarSplits);
+        } catch (e) {
+          console.warn('[ProgressScreen] Failed to build calendar splits from DB', e);
+          setSplits([]);
+        }
         const formattedWorkouts = workoutSessions.map((session) => ({
           date: session.date,
           completed: session.completed,
@@ -105,7 +136,7 @@ const ProgressScreen: React.FC = () => {
       if (!dataLoading) {
         processData();
       }
-    }, [dataLoading, workoutSessions])
+  }, [dataLoading, workoutSessions, db])
   );
 
   const handleDayPress = useCallback(
@@ -115,8 +146,8 @@ const ProgressScreen: React.FC = () => {
       }
       
       const workoutSession = workoutSessions.find(session => session.date === date);
-      const dayOfWeek = getDayOfWeek(date);
-      const currentSplit = dayOfWeek ? splits.find(split => split.days.includes(dayOfWeek)) : null;
+  const dayOfWeek = getDayOfWeek(date) as any as import('../types').WeekDay | null;
+  const currentSplit = dayOfWeek ? splits.find(split => split.days.includes(dayOfWeek)) : null;
       
       console.log('[DEBUG] Selected Date Info:', {
         date,
@@ -135,7 +166,7 @@ const ProgressScreen: React.FC = () => {
       
       setSelectedDate(date);
     },
-    [selectedDate, workoutSessions, getDayOfWeek, splits]
+  [selectedDate, workoutSessions, getDayOfWeek, splits]
   );
 
   const handleWorkoutPress = useCallback(() => {
@@ -151,22 +182,26 @@ const ProgressScreen: React.FC = () => {
   }, []);
 
   const handleStartWorkout = useCallback(async () => {
-    if (!scheduledSplit || !selectedDate) {
-      console.error("Cannot start workout: Missing split or selected date.");
+    if (!scheduledSplit) {
+      console.error("Cannot start workout: Missing split.");
       return;
     }
-    
-    const exercisesForWorkout: Exercise[] = scheduledSplit.exercises.map(ex => ({
-      id: ex.id,
-      name: ex.name,
-      bodyPart: ex.bodyPart,
-      splitIds: [scheduledSplit.id],
-      sets: [],
-    }));
-
-    await startWorkout(exercisesForWorkout, selectedDate, scheduledSplit.name);
+    // Fetch exercises for this split from the DB (Program Builder source of truth)
+    const joins = await db.getSplitExercises(scheduledSplit.id);
+    const fromIds = joins.map((j) => j.exercise.id);
+    console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
+    await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
     setShowSessionSummary(false);
-  }, [scheduledSplit, selectedDate, startWorkout]);
+  }, [scheduledSplit, startWorkout, db]);
+
+  useEffect(() => {
+    // optional: detect an active session for this user
+    (async () => {
+      try {
+        await getActiveSessionId(USER_ID);
+      } catch {}
+    })();
+  }, [getActiveSessionId]);
 
   if (loading || dataLoading) {
     return (

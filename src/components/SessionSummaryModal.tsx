@@ -3,11 +3,13 @@ import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Box, Text, Pressable, VStack, HStack } from '@gluestack-ui/themed';
-import { Split, Exercise } from '../types';
+import { Exercise } from '../types';
+import type { ProgramSplit } from '../types/ui';
+import { useDatabase } from '../db/queries';
 
 interface SessionSummaryModalProps {
   selectedDate: string | null;
-  scheduledSplit: Split | null;
+  scheduledSplit: ProgramSplit | null;
   onClose: () => void;
   onStartWorkout: () => void;
 }
@@ -18,13 +20,14 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   onClose,
   onStartWorkout,
 }) => {
+  const db = useDatabase();
   // Log props when component mounts or props change
   useEffect(() => {
     console.log('SessionSummaryModal - Activated with data:', {
       selectedDate,
       scheduledSplit: scheduledSplit ? {
         name: scheduledSplit.name,
-        exercises: scheduledSplit.exercises.map(ex => ex.name).join(', ')
+        exerciseCount: scheduledSplit.exerciseCount
       } : null
     });
   }, [selectedDate, scheduledSplit]);
@@ -54,19 +57,22 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     // Small delay to ensure the component is fully mounted
     const timer = setTimeout(() => {
       if (scheduledSplit && bottomSheetRef.current) {
-        // Initialize with exercises from the scheduled split if available
-        const exercisesWithSplitId = scheduledSplit.exercises.map(ex => ({
-          ...ex,
-          splitIds: [scheduledSplit.id]
-        }));
-        
-        // console.log('SessionSummaryModal - Initializing exercises:', JSON.stringify(exercisesWithSets, null, 2));
-        setCurrentExercises(exercisesWithSplitId);
+        // Fetch exercises from DB for preview
+        (async () => {
+          try {
+            const joins = await db.getSplitExercises(scheduledSplit.id);
+            const exs = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart || 'Uncategorized', splitIds: [scheduledSplit.id] } as Exercise));
+            setCurrentExercises(exs);
+          } catch (e) {
+            console.warn('[SessionSummaryModal] failed to load split exercises', e);
+            setCurrentExercises([]);
+          }
+        })();
       }
     }, 100);
     
     return () => clearTimeout(timer);
-  }, [scheduledSplit]);
+  }, [scheduledSplit, db]);
   
   // Handle opening bottom sheet separately to ensure it works properly
   useEffect(() => {

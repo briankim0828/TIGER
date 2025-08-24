@@ -1,8 +1,10 @@
 // Workout session-related queries
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
-import { eq, desc, and, gte, lte } from 'drizzle-orm';
-import { workoutSessions, workoutExercises, exerciseCatalog } from '../schema';
+import { eq, desc, and } from 'drizzle-orm';
+import { workoutSessions, workoutExercises } from '../sqlite/schema';
+import { exercises as exerciseCatalog } from '../sqlite/schema';
+import { generateUUID } from '../../utils/uuid';
 
 export class WorkoutQueries {
   private db: ReturnType<typeof drizzle>;
@@ -59,8 +61,7 @@ export class WorkoutQueries {
           modality: exerciseCatalog.modality,
           orderPos: workoutExercises.orderPos,
           restSecDefault: workoutExercises.restSecDefault,
-          notes: workoutExercises.notes,
-          fromSplitExerciseId: workoutExercises.fromSplitExerciseId
+          notes: workoutExercises.notes
         })
         .from(workoutExercises)
         .innerJoin(exerciseCatalog, eq(workoutExercises.exerciseId, exerciseCatalog.id))
@@ -79,17 +80,17 @@ export class WorkoutQueries {
     userId: string;
     splitId?: string;
     state?: string;
-    plannedForDate?: string;
+  plannedForDate?: string; // unused in sqlite schema
   }) {
     try {
       const result = await this.db
         .insert(workoutSessions)
         .values({
+          id: generateUUID(),
           userId: data.userId,
           splitId: data.splitId,
           state: data.state || 'active',
-          plannedForDate: data.plannedForDate,
-          startedAt: new Date()
+      startedAt: new Date().toISOString()
         })
         .returning();
       
@@ -109,9 +110,9 @@ export class WorkoutQueries {
         .update(workoutSessions)
         .set({
           state: 'completed',
-          finishedAt: new Date(),
-          note: note,
-          updatedAt: new Date()
+          finishedAt: new Date().toISOString(),
+          notes: note,
+          updatedAt: new Date().toISOString()
         })
         .where(eq(workoutSessions.id, sessionId))
         .returning();
@@ -132,18 +133,17 @@ export class WorkoutQueries {
     orderPos: number;
     restSecDefault?: number;
     notes?: string;
-    fromSplitExerciseId?: string;
   }) {
     try {
       const result = await this.db
         .insert(workoutExercises)
         .values({
+          id: generateUUID(),
           sessionId: data.sessionId,
           exerciseId: data.exerciseId,
           orderPos: data.orderPos,
           restSecDefault: data.restSecDefault,
-          notes: data.notes,
-          fromSplitExerciseId: data.fromSplitExerciseId
+          notes: data.notes
         })
         .returning();
       
@@ -249,8 +249,10 @@ export class WorkoutQueries {
       // Calculate total workout time (in minutes)
       const totalWorkoutTime = completedWorkouts.reduce((total, session) => {
         if (session.finishedAt && session.startedAt) {
-          const duration = session.finishedAt.getTime() - session.startedAt.getTime();
-          return total + Math.round(duration / (1000 * 60)); // Convert to minutes
+          const start = new Date(session.startedAt as unknown as string).getTime();
+          const end = new Date(session.finishedAt as unknown as string).getTime();
+          const duration = end - start;
+          return total + Math.round(duration / (1000 * 60)); // minutes
         }
         return total;
       }, 0);

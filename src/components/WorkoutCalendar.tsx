@@ -10,14 +10,15 @@ import {
   Platform,
   UIManager,
 } from "react-native";
-import { Split, WeekDay, WEEKDAYS } from "../types";
+import { WeekDay, WEEKDAYS } from "../types";
+import type { ProgramSplit } from "../types/ui";
 
 interface WorkoutCalendarProps {
   month: number;
   year: number;
   workouts: { date: string; completed: boolean }[];
   onDayPress?: (date: string) => void;
-  splits: Split[];
+  splits: ProgramSplit[];
 }
 
 interface MonthSection {
@@ -213,7 +214,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
 
   // Create an ultra-fast lookup for splits by day
   const splitsByDay = useMemo(() => {
-    const map = new Map<WeekDay, Split>();
+    const map = new Map<WeekDay, ProgramSplit>();
     splits.forEach((split) => {
       split.days.forEach((day) => {
         if (day) map.set(day as WeekDay, split);
@@ -232,7 +233,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
 
   // Fast split lookup
   const getSplitForDate = useCallback(
-    (dayOfWeek: WeekDay): Split | undefined => {
+    (dayOfWeek: WeekDay): ProgramSplit | undefined => {
       return splitsByDay.get(dayOfWeek);
     },
     [splitsByDay]

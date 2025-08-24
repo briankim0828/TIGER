@@ -318,6 +318,8 @@ const MySplits: React.FC<MySplitsProps> = ({
   onToggleEditMode,
   onFocusScroll,
 }) => {
+  // Guard against undefined/null inputs during first render
+  if (!splits) return null;
 
   const displaySplits = useMemo(() => editMode === 'splits' ? editedSplits : splits, [editMode, editedSplits, splits]);
   const canAddMoreSplits = useMemo(() => (displaySplits?.length ?? 0) < MAX_SPLITS, [displaySplits]);

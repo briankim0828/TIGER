@@ -180,7 +180,8 @@ class DataService {
       return sessions.map(session => ({
         date: session.date,
         completed: session.completed,
-        splitId: session.splitId === null ? undefined : session.splitId
+  // splitId is no longer tracked in StoredWorkoutSession; keep undefined for legacy shape
+  splitId: undefined
       }));
     } catch (error) {
       console.error('Error getting workout days:', error);

@@ -130,6 +130,28 @@ export class SimpleDataAccess {
         );
       `);
 
+      // Create workout_sets table
+      await this.db.execAsync(`
+        CREATE TABLE IF NOT EXISTS workout_sets (
+          id TEXT PRIMARY KEY,
+          session_exercise_id TEXT NOT NULL,
+          set_index INTEGER NOT NULL,
+          weight REAL,
+          reps INTEGER,
+          rpe REAL,
+          completed INTEGER DEFAULT 0,
+          started_at TEXT,
+          completed_at TEXT,
+          notes TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (session_exercise_id) REFERENCES workout_exercises (id)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_session_exercise_setidx_uq
+          ON workout_sets (session_exercise_id, set_index);
+        CREATE INDEX IF NOT EXISTS idx_workout_sets_session_exercise
+          ON workout_sets (session_exercise_id);
+      `);
+
       // Create split_day_assignments table for program days
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS split_day_assignments (

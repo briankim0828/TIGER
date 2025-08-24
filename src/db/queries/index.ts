@@ -3,21 +3,32 @@ import * as SQLite from 'expo-sqlite';
 import { useMemo } from 'react';
 import { SimpleDataAccess } from './simple';
 import { ProgramBuilderDataAccess } from './programBuilder.drizzle';
+import { WorkoutsDataAccess } from './workouts.drizzle';
 
 // Hook to access database from the Electric context
 import { useElectric } from '../../electric';
 
 export function useDatabase() {
-  const { db } = useElectric();
-  
+  const { db, isInitialized } = useElectric();
   if (!db) {
-    throw new Error('Database not initialized. Make sure ElectricProvider is wrapping your app.');
+    if (!isInitialized) {
+      // Surface a predictable placeholder; caller can guard via isInitialized if needed
+      throw new Error('Database not initialized.');
+    }
+    throw new Error('Database failed to initialize.');
   }
-
-  // Memoize the data access wrapper to keep a stable reference across renders
-  const client = useMemo(() => new ProgramBuilderDataAccess(db), [db]);
-  return client;
+  return useMemo(() => new ProgramBuilderDataAccess(db), [db]);
 }
 
 // Export the SimpleDataAccess class for direct use
-export { SimpleDataAccess, ProgramBuilderDataAccess };
+export { SimpleDataAccess, ProgramBuilderDataAccess, WorkoutsDataAccess };
+
+// Dedicated hook for workouts access (kept separate to avoid mixing concerns)
+export function useWorkouts() {
+  const { db, isInitialized } = useElectric();
+  if (!db) {
+    if (!isInitialized) throw new Error('Database not initialized.');
+    throw new Error('Database failed to initialize.');
+  }
+  return useMemo(() => new WorkoutsDataAccess(db), [db]);
+}

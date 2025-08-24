@@ -45,58 +45,19 @@ export const signOutUser = async (): Promise<{ error: any | null }> => {
 /**
  * Fetches the user profile data from the 'profiles' table.
  */
-export const fetchUserProfileFromSupabase = async (userId: string): Promise<UserProfile | null> => {
-  if (!userId) return null;
-  try {
-    console.log('Supabase: Fetching user profile for:', userId);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    if (error) {
-      console.error('Supabase: Error fetching user profile:', error);
-      return null;
-    }
-    if (data) {
-      console.log('Supabase: Profile data retrieved:', data);
-      return data as UserProfile;
-    } else {
-      console.log('Supabase: No profile found for user');
-      return null;
-    }
-  } catch (error) {
-    console.error('Supabase: Exception fetching user profile:', error);
-    return null;
-  }
+export const fetchUserProfileFromSupabase = async (_userId: string): Promise<UserProfile | null> => {
+  // Profiles table no longer exists; return null to avoid errors.
+  console.log('[supabaseProfile] profiles table removed; skipping remote fetch.');
+  return null;
 };
 
 /**
  * Updates the avatar_id in the user's profile.
  */
-export const updateUserProfileAvatar = async (userId: string, avatarId: string): Promise<UserProfile | null> => {
-  try {
-    const { data: updatedProfile, error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({
-        avatar_id: avatarId, // Store the file path
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (profileUpdateError) {
-      console.error('Supabase: Profile update error:', profileUpdateError);
-      throw profileUpdateError;
-    }
-    console.log('Supabase: Profile updated with new avatar_id:', updatedProfile);
-    return updatedProfile;
-  } catch (error) {
-    console.error('Supabase: Error updating profile avatar:', error);
-    return null;
-  }
+export const updateUserProfileAvatar = async (_userId: string, _avatarId: string): Promise<UserProfile | null> => {
+  // Profiles table removed; there's nothing to update remotely.
+  console.log('[supabaseProfile] update avatar skipped; profiles table removed.');
+  return null;
 };
 
 // --- Avatar Storage ---
@@ -170,53 +131,17 @@ export const uploadAvatar = async (
 /**
  * Fetches workout session statistics for a user.
  */
-export const fetchUserWorkoutStats = async (userId: string): Promise<{ totalWorkouts: number; hoursTrained: number } | null> => {
-  if (!userId) return null;
-  try {
-    const { data: sessions, error } = await supabase
-      .from('workout_sessions')
-      .select('duration_sec')
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('Supabase: Error fetching workout sessions:', error);
-      return null;
-    }
-
-    if (sessions) {
-      return {
-        totalWorkouts: sessions.length,
-        hoursTrained: sessions.reduce((acc, session) => acc + (session.duration_sec || 0), 0)
-      };
-    }
-    return { totalWorkouts: 0, hoursTrained: 0 }; // Return zero stats if no sessions
-  } catch (error) {
-    console.error('Supabase: Exception fetching workout stats:', error);
-    return null;
-  }
+export const fetchUserWorkoutStats = async (_userId: string): Promise<{ totalWorkouts: number; hoursTrained: number } | null> => {
+  // Remote workout_sessions table removed. Return zero stats for now.
+  console.log('[supabaseProfile] workout_sessions table removed; returning zero stats.');
+  return { totalWorkouts: 0, hoursTrained: 0 };
 };
 
 /**
  * Deletes all workout sessions for a given user.
  */
-export const deleteWorkoutSessions = async (userId: string): Promise<{ error: any | null }> => {
-  if (!userId) {
-    return { error: new Error('User ID is required to delete sessions') };
-  }
-  try {
-    console.log('Supabase: Deleting workout sessions for user:', userId);
-    const { error } = await supabase
-      .from('workout_sessions')
-      .delete()
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('Supabase: Error deleting workout sessions:', error);
-      throw error;
-    }
-    console.log('Supabase: Successfully deleted workout sessions.');
-    return { error: null };
-  } catch (error) {
-    return { error };
-  }
-}; 
+export const deleteWorkoutSessions = async (_userId: string): Promise<{ error: any | null }> => {
+  // Remote delete disabled.
+  console.log('[supabaseProfile] Remote delete skipped; workout_sessions table removed.');
+  return { error: null };
+};

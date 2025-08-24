@@ -394,7 +394,7 @@ const ProfileScreen: React.FC = () => {
   if (loading) {
     return (
       <Box flex={1} justifyContent="center" alignItems="center" bg="#232530">
-        <Spinner size="lg" color="#6B8EF2" />
+        <Spinner size="large" color="#6B8EF2" />
       </Box>
     );
   }
@@ -407,7 +407,7 @@ const ProfileScreen: React.FC = () => {
     <ScrollView bg="#1E2028" flex={1}>
       <VStack space="xl" alignItems="center" pt={8} pb={4}>
         <Pressable onPress={pickImage}>
-          <Avatar size="large" bg="$primary500">
+          <Avatar size="xl" bg="$primary500">
              {/* Add key to force re-render on URL change */}
             <AvatarImage source={{ uri: avatarUrl }} alt="User Avatar" key={avatarUrl} />
             <AvatarFallbackText>{fallbackName}</AvatarFallbackText>
@@ -420,7 +420,7 @@ const ProfileScreen: React.FC = () => {
                     bg="rgba(0,0,0,0.5)"
                     borderRadius="$full"
                 >
-                    <Spinner color="white" />
+                    <Spinner size="small" color="white" />
                 </Box>
             )}
           </Avatar>
@@ -460,7 +460,9 @@ const ProfileScreen: React.FC = () => {
               $pressed={{ opacity: 0.7 }}
               // Add onPress handler if needed
             >
-              <Icon as={MaterialIcons} name={tab.icon} size="xl" color="#6B8EF2" mb={2} />
+              <Icon as={MaterialIcons} color="#6B8EF2" mb={2}>
+                {tab.icon}
+              </Icon>
               <Text color="white" fontSize="$sm" fontWeight="medium">{tab.title}</Text>
             </Pressable>
           ))}
@@ -475,12 +477,14 @@ const ProfileScreen: React.FC = () => {
              bg="#2A2E38"
              p={4}
              borderRadius="lg"
-             _pressed={{ opacity: 0.7 }}
+             $pressed={{ opacity: 0.7 }}
              // onPress={() => navigation.navigate('SomeSettingScreen')} // Example navigation
          >
              <HStack justifyContent="space-between" alignItems="center">
                  <Text color="white" fontSize="$md">Account Settings</Text>
-                 <Icon as={MaterialIcons} name="chevron-right" size="md" color="gray.400" />
+                 <Icon as={MaterialIcons} color="gray.400">
+                   chevron-right
+                 </Icon>
              </HStack>
          </Pressable>
 
@@ -492,7 +496,7 @@ const ProfileScreen: React.FC = () => {
           mt={4}
           onPress={handleLogout}
           bg="$red600" // Example: Use semantic token for red
-          _pressed={{ bg: "$red700" }}
+          $pressed={{ bg: "$red700" }}
         >
           <ButtonText>Logout</ButtonText>
         </Button>
@@ -505,8 +509,7 @@ const ProfileScreen: React.FC = () => {
            mt={2}
            onPress={() => setIsAlertOpen(true)}
            borderColor="$red600" // Example: Use semantic token
-           _text={{ color: "$red600" }}
-           _pressed={{ bg: "rgba(220, 53, 69, 0.1)" }} // Example: Red tint on press
+           $pressed={{ bg: "rgba(220, 53, 69, 0.1)" }} // Example: Red tint on press
          >
            <ButtonText color="$red600">Clear All Workout Data</ButtonText>
          </Button>

@@ -2,7 +2,8 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, desc } from 'drizzle-orm';
-import { splits, exerciseCatalog, splitExercises } from '../schema';
+import { splits, exercises as exerciseCatalog, splitExercises } from '../sqlite/schema';
+import { generateUUID } from '../../utils/uuid';
 
 export class SplitQueries {
   private db: ReturnType<typeof drizzle>;
@@ -83,10 +84,13 @@ export class SplitQueries {
       const result = await this.db
         .insert(splits)
         .values({
+          id: generateUUID(),
           name: data.name,
           userId: data.userId,
           color: data.color,
-          isActive: true
+          isActive: 1,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         })
         .returning();
       
@@ -106,12 +110,16 @@ export class SplitQueries {
     isActive?: boolean;
   }) {
     try {
+      const updatePayload: any = {
+        updatedAt: new Date().toISOString(),
+      };
+      if (typeof data.name !== 'undefined') updatePayload.name = data.name;
+      if (typeof data.color !== 'undefined') updatePayload.color = data.color;
+      if (typeof data.isActive !== 'undefined') updatePayload.isActive = data.isActive ? 1 : 0;
+
       const result = await this.db
         .update(splits)
-        .set({
-          ...data,
-          updatedAt: new Date()
-        })
+        .set(updatePayload)
         .where(eq(splits.id, splitId))
         .returning();
       
@@ -158,6 +166,7 @@ export class SplitQueries {
       const result = await this.db
         .insert(splitExercises)
         .values({
+          id: generateUUID(),
           splitId: data.splitId,
           exerciseId: data.exerciseId,
           orderPos: data.orderPos,
