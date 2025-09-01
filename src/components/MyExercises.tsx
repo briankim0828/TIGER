@@ -342,9 +342,9 @@ const MyExercises: React.FC<MyExercisesProps> = ({
 
   return (
     <VStack style={{ gap: 30, width: "100%", marginTop: 8 }}>
-      <HStack justifyContent="space-between" alignItems="center">
+      <HStack justifyContent="space-between" alignItems="center" pointerEvents="box-none">
         <Text color="white" style={{ fontSize: 20, fontWeight: "bold" }}>
-          My Exercises
+          Exercises
         </Text>
         {/* Optional: Add an Edit button here if needed in the future */}
       </HStack>

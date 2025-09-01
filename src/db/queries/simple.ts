@@ -9,6 +9,7 @@ export type SplitRow = {
   user_id: string;
   name: string;
   color: string | null;
+  order_pos?: number | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -55,11 +56,36 @@ export class SimpleDataAccess {
           user_id TEXT NOT NULL,
           name TEXT NOT NULL,
           color TEXT DEFAULT '#4F46E5',
+          order_pos INTEGER,
           is_active INTEGER DEFAULT 1,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+      // Lightweight migration: ensure order_pos exists and is backfilled sequentially per user
+      try {
+        const cols = await this.db.getAllAsync(`PRAGMA table_info(splits)`);
+        const hasOrderPos = Array.isArray(cols) && (cols as any[]).some((c) => c.name === 'order_pos');
+        if (!hasOrderPos) {
+          await this.db.runAsync(`ALTER TABLE splits ADD COLUMN order_pos INTEGER`);
+        }
+        // Backfill any NULL order_pos by assigning sequential positions per (user_id, created_at)
+        await this.db.execAsync(`
+          UPDATE splits
+          SET order_pos = (
+            SELECT COUNT(1) FROM splits s2
+            WHERE s2.user_id = splits.user_id
+              AND (
+                s2.created_at < splits.created_at OR
+                (s2.created_at = splits.created_at AND s2.id <= splits.id)
+              )
+          )
+          WHERE order_pos IS NULL;
+        `);
+      } catch (e) {
+        console.warn('SQLite migration (order_pos) may have failed or is unnecessary:', e);
+      }
 
       // Create a simple exercises table
       await this.db.execAsync(`
@@ -174,7 +200,7 @@ export class SimpleDataAccess {
   async getUserSplits(userId: string): Promise<SplitRow[]> {
     try {
   const result = await this.db.getAllAsync(
-  'SELECT * FROM splits WHERE user_id = ? ORDER BY created_at ASC',
+  'SELECT * FROM splits WHERE user_id = ? ORDER BY COALESCE(order_pos, 0) ASC, created_at ASC',
         [userId]
       );
   return result as unknown as SplitRow[];
@@ -195,7 +221,7 @@ export class SimpleDataAccess {
          ) AS exercise_count
          FROM splits s
          WHERE s.user_id = ?
-         ORDER BY s.created_at ASC`,
+         ORDER BY COALESCE(s.order_pos, 0) ASC, s.created_at ASC`,
         [userId]
       );
 
@@ -227,9 +253,15 @@ export class SimpleDataAccess {
   async createSplit(data: { name: string; userId: string; color?: string }) {
     try {
       const id = newUuid();
+      // Determine next order position (append to bottom)
+      const row: any = await this.db.getFirstAsync(
+        'SELECT COALESCE(MAX(order_pos), 0) AS max_order FROM splits WHERE user_id = ?',
+        [data.userId]
+      );
+      const nextOrder = (typeof row?.max_order === 'string' ? parseInt(row.max_order, 10) : (row?.max_order ?? 0)) + 1;
       await this.db.runAsync(
-        'INSERT INTO splits (id, user_id, name, color) VALUES (?, ?, ?, ?)',
-        [id, data.userId, data.name, data.color || '#4F46E5']
+        'INSERT INTO splits (id, user_id, name, color, order_pos) VALUES (?, ?, ?, ?, ?)',
+        [id, data.userId, data.name, data.color || '#4F46E5', nextOrder]
       );
       return { id, ...data };
     } catch (error) {

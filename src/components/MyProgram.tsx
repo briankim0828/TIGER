@@ -245,7 +245,7 @@ const MyProgram: React.FC<MyProgramProps> = ({
 
   return (
     <VStack space="md" style={{ width: '100%' }}>
-      <HStack justifyContent="space-between" alignItems="center" style={{ width: '100%' }}>
+      <HStack justifyContent="space-between" alignItems="center" style={{ width: '100%' }} pointerEvents="box-none">
         <Text color="white" style={{ fontSize: 24 }} fontWeight="$bold">
           My Program
         </Text>

@@ -26,6 +26,7 @@ import MySplits from "../components/MySplits";
 import MyExercises from "../components/MyExercises";
 import MyProgram from "../components/MyProgram";
 import { useDatabase } from "../db/queries";
+import Animated, { Layout } from "react-native-reanimated";
 
 // We now use ProgramSplit for Program/Splits UIs
 
@@ -73,7 +74,7 @@ const WorkoutScreen = () => {
   const base = mapRowToProgramSplit(r);
   return { ...base, days: (assignBySplit.get(r.id) ?? []) as WeekDay[] };
       });
-    setSplits(ui);
+  setSplits(ui);
     // Hydrate exercises per split for MyExercises panel (derived lightweight shape)
     try {
       const detailed: ProgramSplitWithExercises[] = [];
@@ -91,8 +92,12 @@ const WorkoutScreen = () => {
       console.warn('WorkoutScreen: failed to hydrate exercises for MyExercises view', e);
       setSplitsWithExercises(null);
     }
-    // If we're currently editing splits, keep the edited list in sync so UI reflects DB changes
-    setEditedSplits(prev => (editMode === 'splits' ? JSON.parse(JSON.stringify(ui)) : prev));
+    // If we're currently editing splits, keep the edited list and ref in sync so UI reflects DB changes
+    if (editMode === 'splits') {
+      const clone = JSON.parse(JSON.stringify(ui));
+      setEditedSplits(clone);
+      editedSplitsRef.current = clone;
+    }
     } catch (e) {
       console.error('WorkoutScreen: Failed to fetch splits from DB', e);
     }
@@ -178,26 +183,14 @@ const WorkoutScreen = () => {
   }, [db, fetchSplits]);
 
   const handleAddSplit = useCallback(() => {
-    const list = editedSplitsRef.current ?? splits;
-    // Find max existing number from names like 'split N' (case-insensitive)
-    let maxNum = 0;
-    const re = /^\s*split\s*(\d+)\s*$/i;
-    for (const s of list) {
-      const m = typeof s.name === 'string' ? s.name.match(re) : null;
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (!isNaN(n) && n > maxNum) maxNum = n;
-      }
-    }
-    const nextName = `split ${maxNum + 1}`;
+    // Default name should be "Split {current # of splits + 1}"
+    const list = (editMode === 'splits' ? (editedSplitsRef.current ?? splits) : splits) || [];
+    const nextName = `Split ${list.length + 1}`;
     db.createSplit({ userId: USER_ID, name: nextName, color: "#FF5733" })
       .then(async (created) => {
         setEditingSplitId(created.id);
         await fetchSplits();
-        // In splits edit mode, auto-enter edit for the newly added split by id
-        if (editMode === 'splits') {
-          setEditedSplits(prev => prev ? prev : JSON.parse(JSON.stringify(splits)));
-        }
+        // editedSplits is synced by fetchSplits when in 'splits' mode
       })
       .catch(err => console.error('Failed to create split', err));
   }, [db, USER_ID, splits, fetchSplits, editMode]);
@@ -375,12 +368,14 @@ const WorkoutScreen = () => {
                 onFocusScroll={handleFocusScroll}
               />
              
-              <MyExercises
-                splits={splitsWithExercises ?? splits.map(s => ({ ...s, exercises: [] }))}
-                editMode={editMode}
-                expandedExercises={expandedExercises}
-                onToggleExerciseExpansion={toggleExerciseExpansion}
-              />
+              <Animated.View layout={Layout.duration(200)}>
+                <MyExercises
+                  splits={splitsWithExercises ?? splits.map(s => ({ ...s, exercises: [] }))}
+                  editMode={editMode}
+                  expandedExercises={expandedExercises}
+                  onToggleExerciseExpansion={toggleExerciseExpansion}
+                />
+              </Animated.View>
              
             </VStack>
           </RNScrollView>

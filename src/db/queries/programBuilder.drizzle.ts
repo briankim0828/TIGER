@@ -25,13 +25,14 @@ export class ProgramBuilderDataAccess {
         user_id: splits.userId,
         name: splits.name,
         color: splits.color,
+        order_pos: splits.orderPos,
         is_active: splits.isActive,
         created_at: splits.createdAt,
         updated_at: splits.updatedAt,
       })
       .from(splits)
-      .where(eq(splits.userId, userId))
-      .orderBy(asc(splits.createdAt));
+  .where(eq(splits.userId, userId))
+  .orderBy(asc(sql`COALESCE(${splits.orderPos}, 0)`), asc(splits.createdAt));
     return rows as SplitRow[];
   }
 
@@ -70,12 +71,13 @@ export class ProgramBuilderDataAccess {
     // SELECT s.*, COUNT(se.id) AS exercise_count
     // FROM splits s LEFT JOIN split_exercises se ON se.split_id = s.id
     // WHERE s.user_id = ? GROUP BY s.id, ... ORDER BY s.created_at ASC
-    const rows = await this.db
+  const rows = await this.db
       .select({
         id: splits.id,
         user_id: splits.userId,
         name: splits.name,
         color: splits.color,
+    order_pos: splits.orderPos,
         is_active: splits.isActive,
         created_at: splits.createdAt,
         updated_at: splits.updatedAt,
@@ -84,7 +86,7 @@ export class ProgramBuilderDataAccess {
       .from(splits)
       .leftJoin(splitExercises, eq(splitExercises.splitId, splits.id))
       .where(eq(splits.userId, userId))
-      .groupBy(
+  .groupBy(
         splits.id,
         splits.userId,
         splits.name,
@@ -93,7 +95,7 @@ export class ProgramBuilderDataAccess {
         splits.createdAt,
         splits.updatedAt,
       )
-      .orderBy(asc(splits.createdAt));
+  .orderBy(asc(sql`COALESCE(${splits.orderPos}, 0)`), asc(splits.createdAt));
 
     return rows.map((r) => ({
       id: r.id,
@@ -154,11 +156,18 @@ export class ProgramBuilderDataAccess {
   // Delegate remaining operations (writes and any reads not yet migrated) to SimpleDataAccess
   async createSplit(data: { name: string; userId: string; color?: string }) {
     const id = newUuid();
+    // Determine next order_pos per user
+    const maxRow = await this.db
+      .select({ maxOrder: sql<string>`COALESCE(MAX(${splits.orderPos}), 0)` })
+      .from(splits)
+      .where(eq(splits.userId, data.userId));
+    const nextOrder = (parseInt((maxRow[0]?.maxOrder ?? '0') as string, 10) || 0) + 1;
     await this.db.insert(splits).values({
       id,
       userId: data.userId,
       name: data.name,
       color: data.color ?? '#4F46E5',
+      orderPos: nextOrder,
     }).run();
     return { id, ...data };
   }

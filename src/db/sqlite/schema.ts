@@ -18,6 +18,8 @@ export const splits = sqliteTable('splits', {
   userId: text('user_id').notNull(),
   name: text('name').notNull(),
   color: text('color'),
+  // Stable ordering for splits list
+  orderPos: integer('order_pos'),
   isActive: integer('is_active'),
   createdAt: text('created_at'),
   updatedAt: text('updated_at'),

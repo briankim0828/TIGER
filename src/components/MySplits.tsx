@@ -19,6 +19,7 @@ import Animated, {
   withTiming,
   withSequence,
   withDelay,
+  Keyframe,
 } from "react-native-reanimated";
 import { AntDesign, Entypo } from "@expo/vector-icons";
 import { WeekDay } from "../types";
@@ -214,7 +215,8 @@ const SplitItem = React.memo(
                   placeholder="Enter split name"
                   placeholderTextColor="rgba(255, 255, 255, 0.4)"
                   style={{ color: "white", fontSize: calculatedFontSize, paddingVertical: Platform.OS === 'ios' ? 0 : 4 }} // Adjust padding
-                  autoFocus={true}
+                  // Do not auto-focus; only open keyboard when user taps the text input explicitly
+                  autoFocus={false}
                   onFocus={measureInput} // Measure on focus
                   onSubmitEditing={Keyboard.dismiss} // Optional: dismiss keyboard on submit
                   blurOnSubmit={false} // Keep keyboard potentially for next interaction
@@ -334,13 +336,17 @@ const MySplits: React.FC<MySplitsProps> = ({
   const displaySplits = useMemo(() => editMode === 'splits' ? editedSplits : splits, [editMode, editedSplits, splits]);
   const canAddMoreSplits = useMemo(() => (displaySplits?.length ?? 0) < MAX_SPLITS, [displaySplits]);
 
+  // Add Split button press feedback
+  const addBtnOpacity = useSharedValue(1);
+  const addBtnAnimatedStyle = useAnimatedStyle(() => ({ opacity: addBtnOpacity.value }));
+
   return (
     <VStack style={{ gap: 16, width: "100%" }}>
       {/* Splits List Section */}
       <VStack style={{ gap: 16 }}> 
-        <HStack justifyContent="space-between" alignItems="center">
+  <HStack justifyContent="space-between" alignItems="center" pointerEvents="box-none">
           <Text color="white" style={{ fontSize: 20, fontWeight: "bold" }}>
-            My Splits
+            Splits
           </Text>
           {/* Show Splits Edit/Done only when not in Program Edit */}
           {editMode !== "program" && (
@@ -381,31 +387,45 @@ const MySplits: React.FC<MySplitsProps> = ({
 
           {/* Add Split Button (only in splits edit mode) */}
           {editMode === "splits" && (
-            <Pressable
-              onPress={onAddSplit}
-              style={{
-                backgroundColor: "#1E2028",
-                padding: 8,
-                marginTop: 8,
-                borderRadius: 6,
-                borderWidth: 1,
-                borderColor: canAddMoreSplits ? "#6B8EF2" : "#4B5563",
-                borderStyle: "dashed",
-                opacity: canAddMoreSplits ? 1 : 0.5,
-              }}
-              disabled={!canAddMoreSplits}
+            <Animated.View
+              entering={new Keyframe({
+                0: { opacity: 0, transform: [{ translateY: -10 }] },
+                100: { opacity: 1, transform: [{ translateY: 0 }] },
+              }).duration(200)}
+              exiting={new Keyframe({
+                0: { opacity: 1, transform: [{ translateY: 0 }] },
+                100: { opacity: 0, transform: [{ translateY: -10 }] },
+              }).duration(200)}
+              style={addBtnAnimatedStyle}
             >
-              <HStack justifyContent="center" alignItems="center" style={{ gap: 8 }}>
-                {/* @ts-ignore */}
-                <Icon as={AntDesign as any} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} size="sm" />
-                <Text 
-                  color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
-                  style={{ fontSize: 14, fontWeight: "bold" }}
-                >
-                  {canAddMoreSplits ? "Add Split" : `Maximum ${MAX_SPLITS} splits reached`}
-                </Text>
-              </HStack>
-            </Pressable>
+              <Pressable
+                onPress={onAddSplit}
+                onPressIn={() => { addBtnOpacity.value = withTiming(0.7, { duration: 80 }); }}
+                onPressOut={() => { addBtnOpacity.value = withTiming(1, { duration: 120 }); }}
+                style={{
+                  backgroundColor: "#1E2028",
+                  padding: 8,
+                  marginTop: 8,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: canAddMoreSplits ? "#6B8EF2" : "#4B5563",
+                  borderStyle: "dashed",
+                  opacity: canAddMoreSplits ? 1 : 0.5,
+                }}
+                disabled={!canAddMoreSplits}
+              >
+                <HStack justifyContent="center" alignItems="center" style={{ gap: 8 }}>
+                  {/* @ts-ignore */}
+                  <Icon as={AntDesign as any} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} size="sm" />
+                  <Text 
+                    color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
+                    style={{ fontSize: 14, fontWeight: "bold" }}
+                  >
+                    {canAddMoreSplits ? "Add Split" : `Maximum ${MAX_SPLITS} splits reached`}
+                  </Text>
+                </HStack>
+              </Pressable>
+            </Animated.View>
           )}
         </VStack>
       </VStack>
