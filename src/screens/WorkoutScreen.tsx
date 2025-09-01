@@ -138,13 +138,8 @@ const WorkoutScreen = () => {
   }, [editMode, splits]);
 
   const toggleProgramEditMode = useCallback(async () => {
-    console.log("toggleProgramEditMode called. Current mode:", editMode);
-    if (editMode === "program") {
-      // No-op for now: day assignments not persisted in DB yet
-      setEditModeWithDebug("none");
-    } else {
-      setEditModeWithDebug("program");
-    }
+  console.log("toggleProgramEditMode called. Current mode:", editMode);
+  // Deprecated by weekday-tap entry; keep no-op for safety if referenced.
   }, [editMode, setEditModeWithDebug]);
 
   const toggleSplitsEditMode = useCallback(async () => {
@@ -217,15 +212,23 @@ const WorkoutScreen = () => {
   }, [db, fetchSplits, editingSplitId]);
 
   const handleDaySelect = useCallback((day: WeekDay) => {
-      if (editMode !== "program") return;
+      // New behavior: tapping any weekday enters program mode and selects the day.
+      if (editMode !== "program") {
+        setEditModeWithDebug("program");
+        setSelectedDay(day);
+        setSelectedSplit(null);
+        return;
+      }
+      // If already in program mode: tap same day to exit, different day to switch.
       if (selectedDay === day) {
         setSelectedDay(null);
         setSelectedSplit(null);
-    } else {
-      setSelectedDay(day);
-      setSelectedSplit(null);
-    }
-  }, [selectedDay, editMode]);
+        setEditModeWithDebug("none");
+      } else {
+        setSelectedDay(day);
+        setSelectedSplit(null);
+      }
+  }, [selectedDay, editMode, setEditModeWithDebug]);
 
   const handleSplitSelect = useCallback(async (splitToAssign: ProgramSplit) => {
       if (!selectedDay || editMode !== "program") return;
@@ -349,7 +352,6 @@ const WorkoutScreen = () => {
                 editMode={editMode}
                 selectedDay={selectedDay}
                 onDaySelect={handleDaySelect}
-                onToggleEditMode={toggleProgramEditMode}
               />
               
               <MySplits

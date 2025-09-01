@@ -78,7 +78,6 @@ const WeekdayItem = React.memo(
       <Pressable 
         onPress={onPress} 
         style={{ flex: 1, marginHorizontal: 2 }}
-        disabled={!isEditing}
       >
         <VStack space="xs" alignItems="center">
           <Text
@@ -160,7 +159,6 @@ interface MyProgramProps {
   editMode: ProgramEditMode;
   selectedDay: WeekDay | null;
   onDaySelect: (day: WeekDay) => void;
-  onToggleEditMode: () => void;
 }
 
 const MyProgram: React.FC<MyProgramProps> = ({
@@ -168,7 +166,6 @@ const MyProgram: React.FC<MyProgramProps> = ({
   editMode,
   selectedDay,
   onDaySelect,
-  onToggleEditMode,
 }) => {
   return (
     <VStack space="md" style={{ width: '100%' }}>
@@ -176,21 +173,6 @@ const MyProgram: React.FC<MyProgramProps> = ({
         <Text color="white" style={{ fontSize: 24 }} fontWeight="$bold">
           My Program
         </Text>
-        {/* Only show Edit button when not in Splits mode */}
-        {editMode !== "splits" && (
-          <Pressable onPress={onToggleEditMode}>
-            <Box style={{ width: 80 }}>
-              <Text
-                color="#6B8EF2"
-                style={{ fontSize: 14 }}
-                fontWeight="$bold"
-                textAlign="right"
-              >
-                {editMode === "program" ? "Done" : "Edit"}
-              </Text>
-            </Box>
-          </Pressable>
-        )}
       </HStack>
 
       {/* Weekday Selector (only interactive in program mode) */}

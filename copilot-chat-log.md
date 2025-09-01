@@ -601,3 +601,37 @@ Runtime impact
 Notes and follow-ups
 - Remaining: Switch from polling/refetch to live queries (Electric) in CP4b; optional UI to reorder exercises within an active session; light DAO tests for transactions and index renormalization.
 - If RN “Text strings must be rendered within a <Text>” reappears, check for raw string children inside non-Text parents in `ActiveWorkoutModal.tsx` and `MySplits.tsx` and wrap them with Text.
+
+
+# 2025-08-24-2
+
+I'll scan the workspace to verify the refactor status for Checkpoint 4 by locating the key files, checking for any AsyncStorage usage, and reviewing the WorkoutContext, ActiveWorkoutModal, WorkoutScreen, and the Drizzle-backed workout queries/schema to confirm the move to a relational model. I'll search for usages of DataContext/useData and the legacy data service to assess remaining dependencies on AsyncStorage and confirm the main workout flows now use the Drizzle layer. Here’s a quick confirmation mapped to your Checkpoint 4 goals based on the repo right now.
+
+Checklist
+- Rewrite Workout Logic
+  - startWorkout is a DB transaction that creates a session + its exercises: Implemented in workouts.drizzle.ts using inTx(). It inserts into workout_sessions and workout_exercises (contiguous order) and is exposed via src/contexts/WorkoutContext.tsx. No large in-memory object is created.
+  - addSet and updateSet are atomic DB mutations: addSet computes the next set_index and inserts into workout_sets inside a transaction with bounded retry on UNIQUE collisions; updateSet patches the row; deleteSet renormalizes indices. All DB-backed.
+  - endWorkout updates the session status/timestamps: endWorkout sets state and finishedAt on workout_sessions; duration can be derived from startedAt/finishedAt.
+- Adapt Workout UI
+  - Workout UI reads from the DB, not in-memory: ActiveWorkoutModal.tsx calls getActiveSessionId + getSessionSnapshot from useWorkout(), renders a snapshot derived from DB, and refetches after mutations. It doesn’t maintain a giant in-memory workout object.
+  - Live reactivity: Deferred. The current implementation uses pull-based refetch (post-mutation and on-open). useLiveQuery is planned for CP4b (as noted in the chat log).
+  - WorkoutScreen.tsx: Program Builder area is already DB-backed (getUserSplitsWithExerciseCounts, getDayAssignments, etc.). Active workout UX is centered in ActiveWorkoutModal.
+
+Schema and constraints in place
+- schema.ts defines workout_sessions, workout_exercises (unique sessionId+orderPos), and workout_sets (unique sessionExerciseId+setIndex) with helpful indexes to enforce ordering and avoid races.
+- The data-access layer (WorkoutsDataAccess) uses Drizzle over Expo SQLite and wraps write paths in BEGIN IMMEDIATE transactions.
+
+AsyncStorage audit (legacy vs current flows)
+- Legacy AsyncStorage remains in data.ts and src/contexts/DataContext.tsx; referenced by ProfileScreen/ProgressScreen and supabaseClient.js (for auth storage). These aren’t on the core active workout path.
+- Active workout and Program Builder now use the relational SQLite model via Drizzle.
+
+Conclusion
+- Conceptually, Checkpoint 4a is done: active workout logic runs on transactional DB ops via Drizzle; the UI renders from DB snapshots and refreshes after mutations. The only deferred piece from your CP4 spec is live queries; those are slated for CP4b with Electric.
+
+Light follow-ups to fully close the loop
+- CP4b: Replace manual refetch in ActiveWorkoutModal with live queries for session, session_exercises, and sets.
+- CP5: Retire DataContext and data.ts once remaining legacy screens are migrated.
+- Optional: If you want a persisted “duration” column, add it to workout_sessions, otherwise compute duration from startedAt/finishedAt as needed.
+
+next: fix bugs then move to live queries, then add features
+add proper auth too
