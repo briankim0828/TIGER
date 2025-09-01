@@ -21,6 +21,7 @@ import Animated, {
   withSequence,
   withDelay,
   Keyframe,
+  Layout,
 } from "react-native-reanimated";
 import { AntDesign, Entypo } from "@expo/vector-icons";
 import { WeekDay } from "../types";
@@ -183,7 +184,7 @@ const SplitItem = React.memo(
     }
 
     return (
-      <Pressable
+  <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
@@ -370,6 +371,12 @@ const MySplits: React.FC<MySplitsProps> = ({
   const displaySplits = useMemo(() => editMode === 'splits' ? (editedSplits ?? splits) : splits, [editMode, editedSplits, splits]);
   const canAddMoreSplits = useMemo(() => (displaySplits?.length ?? 0) < MAX_SPLITS, [displaySplits]);
 
+  // Local mirror of data to allow smooth post-drop settling without waiting for parent refresh
+  const [listData, setListData] = useState<ProgramSplit[]>(displaySplits ?? []);
+  useEffect(() => {
+    setListData(displaySplits ?? []);
+  }, [displaySplits]);
+
   // Add Split button press feedback
   const addBtnOpacity = useSharedValue(1);
   const addBtnAnimatedStyle = useAnimatedStyle(() => ({ opacity: addBtnOpacity.value }));
@@ -396,13 +403,19 @@ const MySplits: React.FC<MySplitsProps> = ({
 
         <VStack style={{ gap: 8, overflow: 'visible' }}>
           <DraggableFlatList
-            data={displaySplits ?? []}
+            data={listData}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={{ gap: 8 }}
+            ItemSeparatorComponent={() => <Box style={{ height: 8 }} />}
             style={{ overflow: 'visible' }}
             scrollEnabled={false}
+            autoscrollSpeed={150}
+            activationDistance={8}
+            dragItemOverflow={true}
+            
             onDragEnd={({ data }) => {
               const reordered = data as ProgramSplit[];
+              // Update local data immediately for smooth animation completion
+              setListData(reordered);
               onPersistOrder && onPersistOrder(reordered.map((s) => s.id));
             }}
             ListEmptyComponent={
@@ -431,7 +444,7 @@ const MySplits: React.FC<MySplitsProps> = ({
                     onColorSelect={(color: string) => onColorSelect(item.id, color)}
                     onDelete={() => onDeleteSplit(item.id)}
                     onFocusScroll={onFocusScroll}
-                  />
+                    />
                   {/* Drag handle overlay on the menu icon area */}
                   <Pressable
                     onLongPress={editMode === 'splits' && !isThisEditing ? drag : undefined}
