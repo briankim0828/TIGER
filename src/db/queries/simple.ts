@@ -270,7 +270,7 @@ export class SimpleDataAccess {
     }
   }
 
-  async updateSplit(data: { id: string; name?: string; color?: string; isActive?: boolean }) {
+  async updateSplit(data: { id: string; name?: string; color?: string; isActive?: boolean; orderPos?: number }) {
     try {
       const fields: string[] = [];
       const values: any[] = [];
@@ -286,6 +286,10 @@ export class SimpleDataAccess {
       if (typeof data.isActive === 'boolean') {
         fields.push('is_active = ?');
         values.push(data.isActive ? 1 : 0);
+      }
+      if (typeof data.orderPos === 'number') {
+        fields.push('order_pos = ?');
+        values.push(data.orderPos);
       }
 
       // Always update timestamp

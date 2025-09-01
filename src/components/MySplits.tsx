@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   Box,
   HStack,
@@ -13,6 +13,7 @@ import {
   Platform,
   Keyboard,
 } from "react-native";
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from "react-native-draggable-flatlist";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -44,6 +45,7 @@ const SplitItem = React.memo(
     split,
     editMode,
     isEditingThisSplit,
+  dragDisabled,
     selectedDay,
     onPress,
     onNameEdit,
@@ -54,6 +56,7 @@ const SplitItem = React.memo(
   split: ProgramSplit;
   editMode: ProgramEditMode;
     isEditingThisSplit: boolean;
+  dragDisabled: boolean;
     selectedDay: WeekDay | null;
     onPress: () => void;
     onNameEdit: (text: string) => void;
@@ -87,27 +90,55 @@ const SplitItem = React.memo(
       borderColor.value = withTiming(target, { duration: 200 });
     }, [selectedDay, isEditingThisSplit, editMode, split.days]);
 
+    const prevShowMenuRef = useRef<boolean>(false);
     useEffect(() => {
       const isSplitsModeActive = editMode === "splits";
       const showMenu = isSplitsModeActive && !isEditingThisSplit;
       const showArrow = editMode !== "program" && !isEditingThisSplit;
 
-      const targetMenuWidth = showMenu ? 25 : 0;
+      const targetMenuWidth = 25;
       const gapReduction = 18;
       const targetContentShift = showMenu ? -targetMenuWidth + gapReduction : 0;
 
-      menuOpacity.value = withTiming(showMenu ? 1 : 0, { duration: 200 });
-      menuTranslateX.value = withTiming(showMenu ? 0 : 20, { duration: 200 });
-      menuWidth.value = withTiming(targetMenuWidth, { duration: 200 });
+      const wasShowingMenu = prevShowMenuRef.current;
 
-      arrowOpacity.value = withTiming(showArrow ? 1 : 0, { duration: 200 });
-      arrowRotation.value = withTiming(isSplitsModeActive ? 90 : 0, { duration: 200 });
+  const D = 200; // keep all animations in sync
+  // Arrow visibility/rotation always animates
+  arrowOpacity.value = withTiming(showArrow ? 1 : 0, { duration: D });
+  arrowRotation.value = withTiming(isSplitsModeActive ? 90 : 0, { duration: D });
 
-      contentShiftX.value = withTiming(targetContentShift, { duration: 200 });
-  // Slide exercise count right when arrow hides (program mode), back when arrow shows
-  const countShift = 20; // approximates arrow width + gap
-  countTranslateX.value = withTiming(showArrow ? 0 : countShift, { duration: 200 });
-    }, [editMode, isEditingThisSplit]);
+  // Content shifts left when menu appears and right when it disappears
+  contentShiftX.value = withTiming(targetContentShift, { duration: D });
+
+  // Exercise count micro-shift when arrow hides in program mode
+  const countShift = 20;
+  countTranslateX.value = withTiming(showArrow ? 0 : countShift, { duration: D });
+
+      if (showMenu && !wasShowingMenu) {
+        // Enter: animate width, slide, and opacity together
+        menuWidth.value = withTiming(targetMenuWidth, { duration: 200 });
+        menuTranslateX.value = withTiming(0, { duration: 200 }); // from 20 -> 0
+        menuOpacity.value = withTiming(dragDisabled ? 0.3 : 1, { duration: 200 });
+      } else if (!showMenu && wasShowingMenu) {
+        // Exit: animate all together (no delayed width collapse)
+        menuTranslateX.value = withTiming(20, { duration: 200 }); // 0 -> 20
+        menuOpacity.value = withTiming(0, { duration: 200 });
+        menuWidth.value = withTiming(0, { duration: 200 });
+      } else {
+        // State unchanged: keep properties consistent (also updates opacity if dragDisabled changes)
+        if (showMenu) {
+          menuWidth.value = withTiming(targetMenuWidth, { duration: 0 });
+          menuTranslateX.value = withTiming(0, { duration: 0 });
+          menuOpacity.value = withTiming(dragDisabled ? 0.3 : 1, { duration: 200 });
+        } else {
+          menuOpacity.value = withTiming(0, { duration: 200 });
+          menuTranslateX.value = withTiming(20, { duration: 0 });
+          menuWidth.value = withTiming(0, { duration: 0 });
+        }
+      }
+
+      prevShowMenuRef.current = showMenu;
+    }, [editMode, isEditingThisSplit, dragDisabled]);
 
     const borderAnimatedStyle = useAnimatedStyle(() => ({
       borderColor: isEditingThisSplit ? "white" : borderColor.value,
@@ -314,6 +345,8 @@ interface MySplitsProps {
   onAddSplit: () => void;
   onToggleEditMode: () => void;
   onFocusScroll: (y: number, height: number) => void;
+  // Persist new order to DB (index is 1-based order position)
+  onPersistOrder?: (orderedIds: string[]) => void;
 }
 
 const MySplits: React.FC<MySplitsProps> = ({
@@ -329,11 +362,12 @@ const MySplits: React.FC<MySplitsProps> = ({
   onAddSplit,
   onToggleEditMode,
   onFocusScroll,
+  onPersistOrder,
 }) => {
   // Guard against undefined/null inputs during first render
   if (!splits) return null;
 
-  const displaySplits = useMemo(() => editMode === 'splits' ? editedSplits : splits, [editMode, editedSplits, splits]);
+  const displaySplits = useMemo(() => editMode === 'splits' ? (editedSplits ?? splits) : splits, [editMode, editedSplits, splits]);
   const canAddMoreSplits = useMemo(() => (displaySplits?.length ?? 0) < MAX_SPLITS, [displaySplits]);
 
   // Add Split button press feedback
@@ -341,9 +375,9 @@ const MySplits: React.FC<MySplitsProps> = ({
   const addBtnAnimatedStyle = useAnimatedStyle(() => ({ opacity: addBtnOpacity.value }));
 
   return (
-    <VStack style={{ gap: 16, width: "100%" }}>
+    <VStack style={{ gap: 16, width: "100%", overflow: 'visible' }}>
       {/* Splits List Section */}
-      <VStack style={{ gap: 16 }}> 
+      <VStack style={{ gap: 16, overflow: 'visible' }}> 
   <HStack justifyContent="space-between" alignItems="center" pointerEvents="box-none">
           <Text color="white" style={{ fontSize: 20, fontWeight: "bold" }}>
             Splits
@@ -360,30 +394,55 @@ const MySplits: React.FC<MySplitsProps> = ({
           )}
         </HStack>
 
-        <VStack style={{ gap: 8 }}>
-          {(displaySplits?.length === 0 && editMode !== 'splits') ? (
-            <Text 
-              color="#A1A1AA" 
-              style={{ fontSize: 14, textAlign: "center", paddingVertical: 16 }}
-            >
-              No splits defined yet. Tap 'Edit' to add one.
-            </Text>
-          ) : (
-            displaySplits?.map((split) => (
-              <SplitItem
-                key={split.id}
-                split={split}
-                editMode={editMode}
-                isEditingThisSplit={editMode === "splits" && editingSplitId === split.id}
-                selectedDay={selectedDay}
-                onPress={() => onSplitPress(split)}
-                onNameEdit={(text: string) => onNameEdit(split.id, text)}
-                onColorSelect={(color: string) => onColorSelect(split.id, color)}
-                onDelete={() => onDeleteSplit(split.id)}
-                onFocusScroll={onFocusScroll}
-              />
-            ))
-          )}
+        <VStack style={{ gap: 8, overflow: 'visible' }}>
+          <DraggableFlatList
+            data={displaySplits ?? []}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ gap: 8 }}
+            style={{ overflow: 'visible' }}
+            scrollEnabled={false}
+            onDragEnd={({ data }) => {
+              const reordered = data as ProgramSplit[];
+              onPersistOrder && onPersistOrder(reordered.map((s) => s.id));
+            }}
+            ListEmptyComponent={
+              editMode !== 'splits' ? (
+                <Text
+                  color="#A1A1AA"
+                  style={{ fontSize: 14, textAlign: 'center', paddingVertical: 16 }}
+                >
+                  No splits defined yet. Tap 'Edit' to add one.
+                </Text>
+              ) : null
+            }
+            renderItem={({ item, drag, isActive }: RenderItemParams<ProgramSplit>) => {
+              const isThisEditing = editMode === 'splits' && editingSplitId === item.id;
+              return (
+                <ScaleDecorator activeScale={1.03}>
+                  <SplitItem
+                    key={item.id}
+                    split={item}
+                    editMode={editMode}
+                    isEditingThisSplit={isThisEditing}
+                    dragDisabled={isThisEditing}
+                    selectedDay={selectedDay}
+                    onPress={() => onSplitPress(item)}
+                    onNameEdit={(text: string) => onNameEdit(item.id, text)}
+                    onColorSelect={(color: string) => onColorSelect(item.id, color)}
+                    onDelete={() => onDeleteSplit(item.id)}
+                    onFocusScroll={onFocusScroll}
+                  />
+                  {/* Drag handle overlay on the menu icon area */}
+                  <Pressable
+                    onLongPress={editMode === 'splits' && !isThisEditing ? drag : undefined}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 40 }}
+                    hitSlop={8}
+                    pointerEvents={editMode === 'splits' && isThisEditing ? 'none' : 'auto'}
+                  />
+                </ScaleDecorator>
+              );
+            }}
+          />
 
           {/* Add Split Button (only in splits edit mode) */}
           {editMode === "splits" && (

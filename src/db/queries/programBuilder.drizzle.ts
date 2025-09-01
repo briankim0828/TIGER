@@ -172,16 +172,18 @@ export class ProgramBuilderDataAccess {
     return { id, ...data };
   }
 
-  async updateSplit(data: { id: string; name?: string; color?: string; isActive?: boolean }) {
+  async updateSplit(data: { id: string; name?: string; color?: string; isActive?: boolean; orderPos?: number }) {
     const fields: Partial<{
       name: string;
       color: string | null;
       isActive: number | null;
       updatedAt: string;
+      orderPos: number;
     }> = {};
     if (typeof data.name === 'string') fields.name = data.name;
     if (typeof data.color === 'string') fields.color = data.color;
     if (typeof data.isActive === 'boolean') fields.isActive = data.isActive ? 1 : 0;
+  if (typeof data.orderPos === 'number') fields.orderPos = data.orderPos;
     fields.updatedAt = sql`CURRENT_TIMESTAMP` as unknown as string;
 
     await this.db.update(splits).set(fields).where(eq(splits.id, data.id)).run();

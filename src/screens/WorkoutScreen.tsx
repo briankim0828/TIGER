@@ -11,10 +11,11 @@ import {
 import {
   KeyboardAvoidingView,
   Platform,
-  ScrollView as RNScrollView,
   Keyboard,
   Dimensions,
   TouchableWithoutFeedback,
+  FlatList,
+  ListRenderItemInfo,
 } from "react-native";
 import { WeekDay } from "../types";
 import { ProgramSplit, ProgramEditMode, ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
@@ -35,7 +36,7 @@ type EditMode = ProgramEditMode;
 
 const WorkoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
-  const scrollViewRef = useRef<RNScrollView>(null);
+  const scrollViewRef = useRef<FlatList<any>>(null);
   const db = useDatabase();
   const USER_ID = 'local-user'; // TODO: wire to auth when available
 
@@ -109,6 +110,18 @@ const WorkoutScreen = () => {
       setIsFirstMount(false);
     }
   }, [isFirstMount, fetchSplits]);
+
+  // Track keyboard height for focus-into-view scrolling during split name edits
+  useEffect(() => {
+    const onShow = (e: any) => setKeyboardHeight(e.endCoordinates?.height ?? 0);
+    const onHide = () => setKeyboardHeight(0);
+    const showSub = Keyboard.addListener('keyboardDidShow', onShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
+    return () => {
+  showSub.remove();
+  hideSub.remove();
+    };
+  }, []);
 
   // Refresh whenever screen gains focus (e.g., returning from detail)
   useFocusEffect(
@@ -204,6 +217,21 @@ const WorkoutScreen = () => {
       .catch(err => console.error('Failed to delete split', err));
   }, [db, fetchSplits, editingSplitId]);
 
+  // Persist reordered split IDs to DB using 1-based order positions
+  const handlePersistSplitOrder = useCallback(async (orderedIds: string[]) => {
+    try {
+      // Batch updates sequentially
+      let pos = 1;
+      for (const id of orderedIds) {
+        await db.updateSplit({ id, orderPos: pos });
+        pos += 1;
+      }
+      await fetchSplits();
+    } catch (e) {
+      console.error('Failed to persist split order', e);
+    }
+  }, [db, fetchSplits]);
+
   const handleDaySelect = useCallback((day: WeekDay) => {
       // New behavior: tapping any weekday enters program mode and selects the day.
       if (editMode !== "program") {
@@ -284,7 +312,7 @@ const WorkoutScreen = () => {
   }, [editMode, setEditModeWithDebug]);
 
   const handleFocusScroll = (inputY: number, inputHeight: number) => {
-    if (editMode !== "splits" || !scrollViewRef.current) return;
+  if (editMode !== "splits" || !scrollViewRef.current) return;
 
     const screenHeight = Dimensions.get("window").height;
     const estimatedKeyboardHeight = Platform.OS === 'ios' ? keyboardHeight : keyboardHeight + 50;
@@ -307,78 +335,70 @@ const WorkoutScreen = () => {
         return;
     }
 
-     scrollViewRef.current.scrollTo({ y: scrollToY, animated: true });
+  scrollViewRef.current.scrollToOffset({ offset: scrollToY, animated: true });
   };
-
-  useEffect(() => {
-    const keyboardWillShowSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => setKeyboardHeight(e.endCoordinates.height)
-    );
-    const keyboardWillHideSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setKeyboardHeight(0)
-    );
-
-    return () => {
-      keyboardWillShowSub.remove();
-      keyboardWillHideSub.remove();
-    };
-  }, []);
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={{ flex: 1 }}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
-  <TouchableWithoutFeedback onPress={handleBackgroundPress}>
-        <Box flex={1} backgroundColor="#1E2028" paddingTop={0}>
-          <RNScrollView
+      <TouchableWithoutFeedback onPress={handleBackgroundPress}>
+        <Box flex={1}>
+          <FlatList
             ref={scrollViewRef}
-            style={{ flex: 1 }}
+            data={[]}
+            keyExtractor={() => "header"}
+            ListHeaderComponent={
+              <VStack space="md" p="$3.5">
+                <MyProgram
+                  splits={splits}
+                  editMode={editMode}
+                  selectedDay={selectedDay}
+                  onDaySelect={handleDaySelect}
+                />
+                <MySplits
+                  splits={splits}
+                  editedSplits={editedSplits}
+                  editMode={editMode}
+                  selectedDay={selectedDay}
+                  editingSplitId={editingSplitId}
+                  onSplitPress={handleSplitPress}
+                  onNameEdit={handleSplitNameEdit}
+                  onColorSelect={handleColorSelect}
+                  onDeleteSplit={handleDeleteSplit}
+                  onAddSplit={handleAddSplit}
+                  onToggleEditMode={toggleSplitsEditMode}
+                  onFocusScroll={handleFocusScroll}
+                  onPersistOrder={handlePersistSplitOrder}
+                />
+                <Box>
+                  <Animated.View layout={Layout.duration(200)}>
+                    <MyExercises
+                      splits={
+                        splitsWithExercises ??
+                        splits.map((s) => ({ ...s, exercises: [] }))
+                      }
+                      editMode={editMode}
+                      expandedExercises={expandedExercises}
+                      onToggleExerciseExpansion={toggleExerciseExpansion}
+                    />
+                  </Animated.View>
+                </Box>
+              </VStack>
+            }
+            ListFooterComponent={<Box style={{ height: 20 }} />}
             automaticallyAdjustKeyboardInsets={true}
             keyboardShouldPersistTaps="handled"
-            scrollEnabled={true}
             contentContainerStyle={{ paddingBottom: 20 }}
             onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
             scrollEventThrottle={16}
-          >
-            <VStack space="md" p="$3.5">
-              
-              <MyProgram
-                splits={splits}
-                editMode={editMode}
-                selectedDay={selectedDay}
-                onDaySelect={handleDaySelect}
-              />
-              
-              <MySplits
-                splits={splits}
-                editedSplits={editedSplits}
-                editMode={editMode}
-                selectedDay={selectedDay}
-                editingSplitId={editingSplitId}
-                onSplitPress={handleSplitPress}
-                onNameEdit={handleSplitNameEdit}
-                onColorSelect={handleColorSelect}
-                onDeleteSplit={handleDeleteSplit}
-                onAddSplit={handleAddSplit}
-                onToggleEditMode={toggleSplitsEditMode}
-                onFocusScroll={handleFocusScroll}
-              />
-             
-              <Animated.View layout={Layout.duration(200)}>
-                <MyExercises
-                  splits={splitsWithExercises ?? splits.map(s => ({ ...s, exercises: [] }))}
-                  editMode={editMode}
-                  expandedExercises={expandedExercises}
-                  onToggleExerciseExpansion={toggleExerciseExpansion}
-                />
-              </Animated.View>
-             
-            </VStack>
-          </RNScrollView>
+            renderItem={
+              null as unknown as (
+                (info: ListRenderItemInfo<any>) => React.ReactElement
+              )
+            }
+          />
         </Box>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
