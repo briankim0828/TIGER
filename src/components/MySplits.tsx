@@ -68,6 +68,7 @@ const SplitItem = React.memo(
     const menuTranslateX = useSharedValue(20);
     const menuWidth = useSharedValue(0);
     const contentShiftX = useSharedValue(0);
+  const countTranslateX = useSharedValue(0);
     const [inputValue, setInputValue] = useState(split.name);
     const textInputRef = useRef<TextInput>(null);
 
@@ -76,11 +77,14 @@ const SplitItem = React.memo(
     }, [split.name]);
 
     useEffect(() => {
-      borderColor.value = withTiming(
-        selectedDay !== null && !isEditingThisSplit && editMode === 'program' ? "#6B8EF2" : "#3A3E48",
-        { duration: 200 }
-      );
-    }, [selectedDay, isEditingThisSplit, editMode]);
+      const inProgram = editMode === 'program' && !isEditingThisSplit;
+      const hasSelectedDay = selectedDay !== null;
+      const isAssignedToSelected = hasSelectedDay && split.days.includes(selectedDay as WeekDay);
+      const target = inProgram && hasSelectedDay
+        ? (isAssignedToSelected ? "#EF4444" : "#6B8EF2")
+        : "#3A3E48";
+      borderColor.value = withTiming(target, { duration: 200 });
+    }, [selectedDay, isEditingThisSplit, editMode, split.days]);
 
     useEffect(() => {
       const isSplitsModeActive = editMode === "splits";
@@ -99,17 +103,21 @@ const SplitItem = React.memo(
       arrowRotation.value = withTiming(isSplitsModeActive ? 90 : 0, { duration: 200 });
 
       contentShiftX.value = withTiming(targetContentShift, { duration: 200 });
+  // Slide exercise count right when arrow hides (program mode), back when arrow shows
+  const countShift = 20; // approximates arrow width + gap
+  countTranslateX.value = withTiming(showArrow ? 0 : countShift, { duration: 200 });
     }, [editMode, isEditingThisSplit]);
 
     const borderAnimatedStyle = useAnimatedStyle(() => ({
       borderColor: isEditingThisSplit ? "white" : borderColor.value,
-      borderWidth: isEditingThisSplit ? 1 : (selectedDay !== null && !isEditingThisSplit && editMode === 'program' ? 2 : 0),
+  borderWidth: isEditingThisSplit ? 1 : (selectedDay !== null && !isEditingThisSplit && editMode === 'program' ? 3 : 0),
     }));
 
     const pressBorderAnimatedStyle = useAnimatedStyle(() => ({ borderColor: pressBorderColor.value }));
     const arrowAnimatedStyle = useAnimatedStyle(() => ({ opacity: arrowOpacity.value, transform: [{ rotateZ: `${arrowRotation.value}deg` }] }));
     const menuAnimatedStyle = useAnimatedStyle(() => ({ width: menuWidth.value, opacity: menuOpacity.value, transform: [{ translateX: menuTranslateX.value }] }));
     const contentShiftAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: contentShiftX.value }] }));
+  const countAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: countTranslateX.value }] }));
 
     const handlePressIn = () => {
       if (!isEditingThisSplit && editMode !== 'program') { // Don't show press effect in program mode or when editing
@@ -238,9 +246,11 @@ const SplitItem = React.memo(
               <HStack alignItems="center"> {/* Use style for spacing with animations */}
                 <Animated.View style={contentShiftAnimatedStyle}>
                   <HStack style={{ gap: 12, alignItems: "center" }}>
-                    <Text color="white" style={{ fontSize: 14 }}>
-                      {split.exerciseCount} exercises
-                    </Text>
+                    <Animated.View style={countAnimatedStyle}>
+                      <Text color="white" style={{ fontSize: 14 }}>
+                        {split.exerciseCount} exercises
+                      </Text>
+                    </Animated.View>
                     {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
                     <Animated.View style={arrowAnimatedStyle}>
                       {/* @ts-ignore */}

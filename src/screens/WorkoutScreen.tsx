@@ -241,9 +241,7 @@ const WorkoutScreen = () => {
       } catch (e) {
         console.error('Failed to set day assignment', e);
       }
-
-      setSelectedDay(null);
-      setSelectedSplit(null);
+  // Keep selection and program mode active; user can continue assigning
   }, [selectedDay, editMode, db, USER_ID, fetchSplits]);
 
   const handleSplitPress = useCallback((split: ProgramSplit) => {
@@ -283,6 +281,14 @@ const WorkoutScreen = () => {
         : [...prev, exerciseId]
     );
   }, [editMode]);
+
+  // Close program edit mode when tapping on background/empty spaces
+  const handleBackgroundPress = useCallback(() => {
+    Keyboard.dismiss();
+    if (editMode === 'program') {
+      setEditModeWithDebug('none');
+    }
+  }, [editMode, setEditModeWithDebug]);
 
   const handleFocusScroll = (inputY: number, inputHeight: number) => {
     if (editMode !== "splits" || !scrollViewRef.current) return;
@@ -333,7 +339,7 @@ const WorkoutScreen = () => {
       style={{ flex: 1 }}
       keyboardVerticalOffset={Platform.OS === "ios" ? 60 : 0}
     >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+  <TouchableWithoutFeedback onPress={handleBackgroundPress}>
         <Box flex={1} backgroundColor="#1E2028" paddingTop={0}>
           <RNScrollView
             ref={scrollViewRef}
