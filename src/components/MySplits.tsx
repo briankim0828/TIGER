@@ -377,8 +377,8 @@ const MySplits: React.FC<MySplitsProps> = ({
     setListData(displaySplits ?? []);
   }, [displaySplits]);
 
-  // Measure visible stack height to clamp drag within bounds while keeping overflow visible
-  const [stackHeight, setStackHeight] = useState<number | undefined>(undefined);
+  // Track dynamic content height so the list reserves correct vertical space as items expand/collapse
+  const [contentHeight, setContentHeight] = useState<number | undefined>(undefined);
 
   // Add Split button press feedback
   const addBtnOpacity = useSharedValue(1);
@@ -405,17 +405,20 @@ const MySplits: React.FC<MySplitsProps> = ({
         </HStack>
 
         <VStack style={{ gap: 8, overflow: 'visible' }}>
-          <Box onLayout={(e) => setStackHeight(e.nativeEvent.layout.height)} style={{ overflow: 'visible' }}>
           <DraggableFlatList
             data={listData}
             keyExtractor={(item) => item.id}
             ItemSeparatorComponent={() => <Box style={{ height: 8 }} />}
             style={{ overflow: 'visible' }}
-            containerStyle={stackHeight ? { height: stackHeight } : undefined}
+            containerStyle={contentHeight ? { height: contentHeight } : undefined}
             scrollEnabled={false}
             autoscrollSpeed={150}
             activationDistance={8}
             dragItemOverflow={false}
+            // Keep container height in sync with content as rows expand/collapse (e.g., color palette)
+            onContentSizeChange={(w, h) => {
+              if (typeof h === 'number') setContentHeight(h);
+            }}
             
             onDragEnd={({ data }) => {
               const reordered = data as ProgramSplit[];
@@ -461,7 +464,6 @@ const MySplits: React.FC<MySplitsProps> = ({
               );
             }}
           />
-          </Box>
 
           {/* Add Split Button (only in splits edit mode) */}
           {editMode === "splits" && (

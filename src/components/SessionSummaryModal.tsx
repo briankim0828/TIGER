@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack } from '@gluestack-ui/themed';
 import { Exercise } from '../types';
 import type { ProgramSplit } from '../types/ui';
@@ -20,6 +21,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   onClose,
   onStartWorkout,
 }) => {
+  const insets = useSafeAreaInsets();
   const db = useDatabase();
   // Log props when component mounts or props change
   useEffect(() => {
@@ -126,6 +128,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         enablePanDownToClose={true}
         index={-1}
         snapPoints={snapPoints}
+  topInset={insets.top}
         handleIndicatorStyle={{
           backgroundColor: 'white',
           width: 40,

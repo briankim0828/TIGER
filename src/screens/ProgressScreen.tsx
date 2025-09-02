@@ -13,7 +13,7 @@ import { useDatabase } from "../db/queries";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ScrollView, StyleSheet } from "react-native";
-import SessionSummaryModal from "../components/SessionSummaryModal";
+import { useOverlay } from "../contexts/OverlayContext";
 import { WorkoutDay } from '../types';
 import type { ProgramSplit } from '../types/ui';
 
@@ -43,7 +43,7 @@ const ProgressScreen: React.FC = () => {
     )}-${String(today.getDate()).padStart(2, "0")}`;
   }, [currentYear, currentMonth, today]));
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
-  const [showSessionSummary, setShowSessionSummary] = useState(false);
+  const { showSessionSummary } = useOverlay();
 
   const isInitialLoadRef = useRef(true);
   const processedDataRef = useRef<{
@@ -171,15 +171,17 @@ const ProgressScreen: React.FC = () => {
 
   const handleWorkoutPress = useCallback(() => {
     if (scheduledSplit) {
-      setShowSessionSummary(true);
+      showSessionSummary({
+        selectedDate,
+        scheduledSplit,
+        onStartWorkout: () => handleStartWorkout(),
+      });
     } else {
       console.log('No split scheduled for this day');
     }
-  }, [scheduledSplit]);
+  }, [scheduledSplit, selectedDate, showSessionSummary, handleStartWorkout]);
 
-  const handleCloseSummary = useCallback(() => {
-    setShowSessionSummary(false);
-  }, []);
+  const handleCloseSummary = useCallback(() => {}, []);
 
   const handleStartWorkout = useCallback(async () => {
     if (!scheduledSplit) {
@@ -190,8 +192,7 @@ const ProgressScreen: React.FC = () => {
     const joins = await db.getSplitExercises(scheduledSplit.id);
     const fromIds = joins.map((j) => j.exercise.id);
     console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
-    await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
-    setShowSessionSummary(false);
+  await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
   }, [scheduledSplit, startWorkout, db]);
 
   useEffect(() => {
@@ -257,14 +258,7 @@ const ProgressScreen: React.FC = () => {
         </Box>
       </ScrollView>
       
-      {showSessionSummary && (
-        <SessionSummaryModal
-          selectedDate={selectedDate}
-          scheduledSplit={scheduledSplit}
-          onClose={handleCloseSummary}
-          onStartWorkout={handleStartWorkout}
-        />
-      )}
+  {/* SessionSummaryModal is now rendered globally via GlobalOverlays */}
     </GestureHandlerRootView>
   );
 };

@@ -2,6 +2,7 @@ import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react'
 import { StyleSheet, ScrollView, View, TextInput as RNTextInput } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Box,
   Text,
@@ -25,20 +26,9 @@ import {
 } from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { navigate } from '../navigation/rootNavigation';
 
-// Define your root stack param list if not already done globally
-// Make sure this matches your actual navigation setup
-type RootStackParamList = {
-  // ... include other screens from your root stack
-  MainTabs: undefined; // Example
-  ExerciseSelectionModalScreen: undefined; // Add this line
-  // If ExerciseSelectionView needs params like splitName:
-  // ExerciseSelectionModalScreen: { splitName: string | null };
-};
-
-type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+// Using global navigation helper since this modal is rendered outside NavigationContainer
 
 type RenderSet = { id: string; weight: number; reps: number; completed: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
@@ -54,7 +44,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onSave
 }) => {
-  const navigation = useNavigation<NavigationProp>();
+  const insets = useSafeAreaInsets();
+  // navigation handled via global ref
   const {
     getActiveSessionId,
     getSessionSnapshot,
@@ -403,18 +394,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const handleAddExercisePress = () => {
     console.log('ActiveWorkoutModal - Navigating to Exercise Selection');
-    navigation.navigate('ExerciseSelectionModalScreen');
+    navigate('ExerciseSelectionModalScreen');
   };
 
   const renderHeader = () => (
     <Box
-      bg="$backgroundDark900"
-      px="$4"
+      bg="#2A2E38"
+  px="$4"
       py="$3"
-      borderTopLeftRadius="$lg"
-      borderTopRightRadius="$lg"
+      // borderTopLeftRadius="$lg"
+      // borderTopRightRadius="$lg"
       borderColor="$borderDark700"
       borderBottomWidth={1}
+  width="100%"
     >
       <HStack justifyContent="space-between" alignItems="center">
         <Pressable onPress={openDiscardAlert} p="$2">
@@ -492,11 +484,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         enablePanDownToClose={true}
         index={isVisible ? 1 : -1}
         snapPoints={snapPoints}
-        handleComponent={renderHeader}
-        backgroundStyle={styles.bottomSheetBackground}
+  topInset={insets.top}
+        // Match SessionSummaryModal visuals: dark background + white notch
+        handleIndicatorStyle={{ backgroundColor: 'white', width: 40, height: 4 }}
+        backgroundStyle={{ backgroundColor: '#2A2E38' }}
       >
         <BottomSheetView style={styles.contentContainer}>
-          <Box flex={1} width="100%" display="flex">
+          {renderHeader()}
+          <Box flex={1} width="100%" display="flex" >
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
               <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
                 
@@ -603,7 +598,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     top: 0,
-    zIndex: 100,
+    zIndex: 999,
     pointerEvents: 'box-none',
   },
   contentContainer: {
@@ -611,7 +606,7 @@ const styles = StyleSheet.create({
     width: '100%',
     paddingBottom: 0,
     backgroundColor: '#1E2028',
-    paddingHorizontal: 16,
+  paddingHorizontal: 0,
   },
   scrollView: {
     flex: 1,

@@ -2,6 +2,7 @@
 import "react-native-gesture-handler";
 import React, { useEffect, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
+import { navigationRef } from "./src/navigation/rootNavigation";
 import {
   createNativeStackNavigator,
   NativeStackNavigationProp,
@@ -20,6 +21,8 @@ import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
+import SessionSummaryModal from "./src/components/SessionSummaryModal";
+import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
 import {
@@ -45,6 +48,9 @@ LogBox.ignoreLogs([
   "Text strings must be rendered within a <Text> component.",
   "[Reanimated] Reading from `value` during component render.",
   "Reading from `value` during component render.",
+  // Silence noisy Reanimated ref shareable warning
+  "Tried to modify key `current` of an object which has been already passed to a worklet",
+  "[Reanimated] Tried to modify key `current` of an object which has been already passed to a worklet",
 ]);
 
 // Reanimated logger configuration to silence repetitive render warnings
@@ -242,9 +248,6 @@ function MainTabs() {
           <Tab.Screen name="Profile" component={ProfileScreen} />
         </Tab.Navigator>
       </Box>
-
-      {/* Keep the active workout modal overlayed above tabs */}
-      <ActiveWorkoutModalContainer />
     </Box>
   );
 }
@@ -313,6 +316,7 @@ export default function App() {
           <ElectricProvider>
             <DataProvider>
               <WorkoutProvider>
+                <OverlayProvider>
                 <SafeAreaView
                   style={{ flex: 0, backgroundColor: "#1E2028" }}
                   edges={["top"]}
@@ -322,7 +326,7 @@ export default function App() {
                   edges={["left", "right", "bottom"]}
                 >
                   <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
-                  <NavigationContainer>
+                  <NavigationContainer ref={navigationRef}>
                     <DismissKeyboardWrapper>
                       {user ? (
                         <NavigationWrapper />
@@ -332,6 +336,10 @@ export default function App() {
                     </DismissKeyboardWrapper>
                   </NavigationContainer>
                 </SafeAreaView>
+                {/* Render overlays outside the bottom SafeAreaView so they cover the entire screen incl. insets */}
+                <GlobalOverlays />
+                  <ActiveWorkoutModalContainer />
+                </OverlayProvider>
               </WorkoutProvider>
             </DataProvider>
           </ElectricProvider>
@@ -340,3 +348,17 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+// Render overlays at root using OverlayContext state
+const GlobalOverlays = () => {
+  const { sessionSummary, hideSessionSummary } = useOverlay();
+  if (!sessionSummary) return null;
+  return (
+    <SessionSummaryModal
+      selectedDate={sessionSummary.selectedDate}
+      scheduledSplit={sessionSummary.scheduledSplit}
+      onClose={hideSessionSummary}
+      onStartWorkout={sessionSummary.onStartWorkout}
+    />
+  );
+};
