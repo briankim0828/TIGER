@@ -3,27 +3,7 @@ import { StyleSheet, ScrollView, View, TextInput as RNTextInput } from 'react-na
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Box,
-  Text,
-  Pressable,
-  HStack,
-  VStack,
-  Input,
-  InputField,
-  Button,
-  ButtonText,
-  ButtonIcon,
-  Divider,
-  useToast,
-  Toast,
-  ToastTitle,
-  ToastDescription,
-  CloseIcon,
-  Heading,
-  CheckCircleIcon,
-  CircleIcon,
-} from '@gluestack-ui/themed';
+import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription } from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
@@ -46,16 +26,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   // navigation handled via global ref
-  const {
-    getActiveSessionId,
-    getSessionSnapshot,
-    addSet,
-    updateSet,
-    deleteSet,
-    endWorkout,
-    addExerciseToSession,
-    removeExerciseFromSession,
-  } = useWorkout();
+  const { getActiveSessionId, getSessionSnapshot, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
   const USER_ID = 'local-user'; // TODO: replace with auth when available
   
@@ -95,7 +66,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const cancelRef = useRef(null); // Ref for AlertDialog cancel button
   
   // State
-  const [workoutTimer, setWorkoutTimer] = useState(0);
+  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
+  const [tick, setTick] = useState(0); // periodic re-render for timer
   // currentExercises now populated from DB via refetchSnapshot
   const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
@@ -112,14 +84,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   useEffect(() => {
     let cancelled = false;
     (async () => {
-  if (!isVisible) return;
+      if (!isVisible) return;
       const sid = await getActiveSessionId(USER_ID);
       if (!sid) return;
       if (!cancelled) setSessionId(sid);
+      // Fetch header info (split title, startedAt)
+      try {
+        const info = await getSessionInfo(sid);
+        if (info?.startedAt) setSessionStartedAtMs(Date.parse(info.startedAt));
+        if (info?.splitId) {
+          const name = (await getSplitName(info.splitId)) || '';
+          if (!cancelled) setSplitTitle(name);
+        }
+      } catch {}
       await refetchSnapshot(sid);
     })();
     return () => { cancelled = true; };
-  }, [isVisible, USER_ID, getActiveSessionId, refetchSnapshot]);
+  }, [isVisible, USER_ID, getActiveSessionId, refetchSnapshot, getSessionInfo, getSplitName]);
   
   // Open/close bottom sheet based on visibility
   useEffect(() => {
@@ -134,12 +115,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => clearTimeout(timer);
   }, [isVisible]);
   
-  // Reset isEndingWorkout when modal closes or visibility changes
+  // Reset flags when modal closes; keep startedAt for accurate timer on reopen
   useEffect(() => {
     if (!isVisible) {
       console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
       setIsEndingWorkout(false);
-      setWorkoutTimer(0);
       setExpandedExercises({});
       setCurrentExercises([]);
       // Reset any other state as needed
@@ -148,28 +128,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => {
       console.log('ActiveWorkoutModal - Component cleanup, resetting state');
       setIsEndingWorkout(false);
-      setWorkoutTimer(0);
       setExpandedExercises({});
       setCurrentExercises([]);
     };
   }, [isVisible]);
 
-  // Timer effect
+  // Timer tick: compute elapsed from sessionStartedAtMs
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    
-    if (isVisible) {
-      interval = setInterval(() => {
-        setWorkoutTimer(prev => prev + 1);
-      }, 1000);
-    } else {
-      setWorkoutTimer(0); // Reset timer when closed
+    if (isVisible && sessionStartedAtMs) {
+      interval = setInterval(() => setTick((t) => t + 1), 1000);
     }
-    
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isVisible]);
+    return () => { if (interval) clearInterval(interval); };
+  }, [isVisible, sessionStartedAtMs]);
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {
@@ -397,32 +368,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     navigate('ExerciseSelectionModalScreen');
   };
 
+  const [splitTitle, setSplitTitle] = useState<string>('');
+  const elapsedSec = sessionStartedAtMs ? Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000)) : 0;
   const renderHeader = () => (
-    <Box
-      bg="#2A2E38"
-  px="$4"
-      py="$3"
-      // borderTopLeftRadius="$lg"
-      // borderTopRightRadius="$lg"
-      borderColor="$borderDark700"
-      borderBottomWidth={1}
-  width="100%"
-    >
-      <HStack justifyContent="space-between" alignItems="center">
-        <Pressable onPress={openDiscardAlert} p="$2">
-          <Ionicons name="close-outline" size={30} color="#adb5bd" />
-        </Pressable>
+    <Box bg="#2A2E38" px="$4" py="$3" borderColor="$borderDark700" borderBottomWidth={1} width="100%">
+      <HStack justifyContent="center" alignItems="center">
         <VStack alignItems="center">
-          <Text color="$textLight50" fontWeight="$bold" fontSize="$lg">
-            Active Workout
+          <Text color="$textLight50" fontWeight="$bold" fontSize="$lg" numberOfLines={1}>
+            {splitTitle || 'Active Workout'}
           </Text>
           <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
-            {formatTimer(workoutTimer)}
+            {formatTimer(elapsedSec)}
           </Text>
         </VStack>
-        <Button variant="link" onPress={handleEndWorkout} p="$2">
-          <ButtonText color="$primary400" fontWeight="$semibold" fontSize="$md">Save</ButtonText>
-        </Button>
       </HStack>
     </Box>
   );
@@ -557,7 +515,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     alignItems="center"
                     justifyContent="center"
                     $pressed={{ opacity: 0.6 }}
-                    onPress={openDiscardAlert}
+                    onPress={async () => {
+                      // Discard: close modal and delete workout
+                      if (sessionId) {
+                        try {
+                          await deleteWorkout(sessionId);
+                          bottomSheetRef.current?.close();
+                          toast.show({
+                            placement: 'top',
+                            render: ({ id }) => (
+                              <Toast nativeID={id} action="info" variant="accent">
+                                <VStack space="xs">
+                                  <ToastTitle>Workout Discarded</ToastTitle>
+                                </VStack>
+                              </Toast>
+                            ),
+                          });
+                        } catch (e) {
+                          console.error('Failed to discard workout', e);
+                        }
+                      }
+                    }}
                   >
                     <Text color="$red500" fontSize="$md" fontWeight="$bold" textAlign="center">
                       Discard Workout

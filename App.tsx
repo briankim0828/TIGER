@@ -21,6 +21,7 @@ import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
+import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
 import SessionSummaryModal from "./src/components/SessionSummaryModal";
 import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
 import LoginScreen from "./src/screens/LoginScreen";
@@ -70,10 +71,14 @@ try {
 // Active Workout Modal Container
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
-  const { getActiveSessionId, endWorkout } = useWorkout();
+  const { getActiveSessionId, endWorkout, getSessionInfo, getSplitName } = useWorkout();
   const [isVisible, setIsVisible] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
+  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
+  const [isSuppressed, setIsSuppressed] = useState(false); // user swiped modal down
   const USER_ID = 'local-user';
 
   // Poll for active session presence as a lightweight pull-based visibility source
@@ -84,37 +89,68 @@ const ActiveWorkoutModalContainer = () => {
         const sid = await getActiveSessionId(USER_ID);
         if (!mounted) return;
         setSessionId(sid);
-        setIsVisible(!!sid);
+        const hasActive = !!sid;
+        // Update split name for banner if needed
+        if (hasActive) {
+          const info = await getSessionInfo(sid!);
+          if (info?.splitId) {
+            const name = (await getSplitName(info.splitId)) || 'Active Workout';
+            setBannerSplitName(name);
+          } else {
+            setBannerSplitName('Active Workout');
+          }
+          // Cache session start time once
+          if (info?.startedAt) {
+            setSessionStartedAtMs(Date.parse(info.startedAt));
+          }
+        }
+        // If user suppressed the modal (swiped down), keep it hidden
+        setIsVisible(hasActive && !isSuppressed);
+        setBannerVisible(hasActive && isSuppressed);
       } catch {}
     };
     check();
     const t = setInterval(check, 1500);
     return () => { mounted = false; clearInterval(t); };
-  }, [getActiveSessionId]);
+  }, [getActiveSessionId, getSessionInfo, getSplitName, USER_ID, isSuppressed]);
 
   const handleEndWorkoutAndClose = async () => {
     if (!sessionId) return;
     setIsClosingFromSave(true);
     await endWorkout(sessionId, { status: 'completed' });
     setTimeout(() => setIsClosingFromSave(false), 500);
+  // Hide banner and suppression after ending
+  setIsSuppressed(false);
+  setBannerVisible(false);
+  setIsVisible(false);
+  setSessionStartedAtMs(null);
   };
 
   const handleModalClose = () => {
-    if (isVisible && !isClosingFromSave && sessionId) {
-      endWorkout(sessionId, { status: 'completed' });
-    } else {
-      console.log(
-        'App - Modal already closing from save operation, skipping duplicate endWorkout call'
-      );
-    }
+  // On swipe-down, keep session active but suppress the modal and show banner
+  setIsVisible(false);
+  setIsSuppressed(true);
+  if (sessionId) setBannerVisible(true);
   };
 
   return (
-    <ActiveWorkoutModal
-      isVisible={isVisible}
-      onClose={handleModalClose}
-      onSave={handleEndWorkoutAndClose}
-    />
+    <>
+      <ActiveWorkoutModal
+        isVisible={isVisible}
+        onClose={handleModalClose}
+        onSave={handleEndWorkoutAndClose}
+      />
+      <ActiveWorkoutBanner
+        visible={bannerVisible}
+        splitName={bannerSplitName}
+  startedAtMs={sessionStartedAtMs}
+        onPress={() => {
+          setIsSuppressed(false);
+          setBannerVisible(false);
+          setIsVisible(true);
+        }}
+      />
+    </>
   );
 };
 

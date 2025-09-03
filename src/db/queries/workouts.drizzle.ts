@@ -7,6 +7,7 @@ import {
   workoutSets,
   exercises as exerciseTable,
   splitExercises as splitExercisesTable,
+  splits as splitsTable,
 } from '../sqlite/schema';
 import { newUuid } from '../../utils/ids';
 
@@ -245,6 +246,48 @@ export class WorkoutsDataAccess {
       .where(eq(workoutSessions.id, sessionId))
       .run();
     return true;
+  }
+
+  async getSessionInfo(sessionId: string): Promise<{ id: string; userId: string; splitId: string | null; state: string; startedAt: string | null; finishedAt: string | null } | null> {
+    const rows = await this.db
+      .select()
+      .from(workoutSessions)
+      .where(eq(workoutSessions.id, sessionId))
+      .limit(1);
+    const r = rows[0] as any;
+    if (!r) return null;
+    return {
+      id: r.id as string,
+      userId: r.userId as string,
+      splitId: (r.splitId ?? null) as string | null,
+      state: r.state as string,
+      startedAt: (r.startedAt ?? null) as string | null,
+      finishedAt: (r.finishedAt ?? null) as string | null,
+    };
+  }
+
+  async getSplitName(splitId: string): Promise<string | null> {
+    const rows = await this.db.select({ name: splitsTable.name }).from(splitsTable).where(eq(splitsTable.id, splitId)).limit(1);
+    return (rows[0]?.name as string | undefined) ?? null;
+  }
+
+  async deleteWorkout(sessionId: string): Promise<boolean> {
+    return this.inTx(async () => {
+      // Find all session exercises
+      const exRows = await this.db
+        .select({ id: workoutExercises.id })
+        .from(workoutExercises)
+        .where(eq(workoutExercises.sessionId, sessionId));
+      // Delete sets for each exercise
+      for (const ex of exRows) {
+        await this.db.delete(workoutSets).where(eq(workoutSets.sessionExerciseId, ex.id as any)).run();
+      }
+      // Delete exercises
+      await this.db.delete(workoutExercises).where(eq(workoutExercises.sessionId, sessionId)).run();
+      // Delete session
+      await this.db.delete(workoutSessions).where(eq(workoutSessions.id, sessionId)).run();
+      return true;
+    });
   }
 
   async reorderSessionExercises(sessionId: string, nextIds: string[]): Promise<boolean> {

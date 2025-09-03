@@ -31,6 +31,9 @@ export interface WorkoutContextType {
   getSessionSnapshot: (
     sessionId: string
   ) => Promise<{ exercises: SessionExerciseJoin[]; setsByExercise: Record<string, WorkoutSetRow[]> }>;
+  deleteWorkout: (sessionId: string) => Promise<boolean>;
+  getSplitName: (splitId: string) => Promise<string | null>;
+  getSessionInfo: (sessionId: string) => Promise<{ id: string; userId: string; splitId: string | null; state: string; startedAt: string | null; finishedAt: string | null } | null>;
 }
 
 const WorkoutContext = createContext<WorkoutContextType | undefined>(undefined);
@@ -76,6 +79,9 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
   console.debug('[WorkoutContext] getSessionSnapshot completed', { exCount: exercises.length });
       return { exercises, setsByExercise };
     },
+  deleteWorkout: (sessionId) => workouts.deleteWorkout(sessionId),
+  getSplitName: (splitId) => workouts.getSplitName(splitId),
+  getSessionInfo: (sessionId) => workouts.getSessionInfo(sessionId),
   }), [workouts]);
 
   return <WorkoutContext.Provider value={api}>{children}</WorkoutContext.Provider>;

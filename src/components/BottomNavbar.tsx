@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { HStack, Pressable, Text, Box, VStack } from '@gluestack-ui/themed';
 import { AntDesign } from '@expo/vector-icons';
+import { setBottomNavHeight } from '../navigation/layoutMetrics';
 
 interface BottomNavbarProps {
   selectedTab: 'progress' | 'workout' | 'profile';
@@ -14,8 +15,13 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
   const inactiveHex = '#adb5bd';
   const iconSize = 20;
 
+  const onLayout = useCallback((e: any) => {
+    const h = e?.nativeEvent?.layout?.height;
+    if (typeof h === 'number') setBottomNavHeight(Math.ceil(h));
+  }, []);
+
   return (
-    <Box bg="#121213ff" borderTopWidth={1} borderColor="$borderDark800">
+    <Box bg="#121213ff" borderTopWidth={1} borderColor="$borderDark800" onLayout={onLayout}>
       <HStack px="$4" space="2xl" justifyContent="space-around" alignItems="center" pt="$4" pb="$1">
         <Pressable onPress={() => onTabChange('workout')} accessibilityRole="button" accessibilityLabel="Workout Tab">
           <VStack alignItems="center" space="xs">
