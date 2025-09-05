@@ -80,6 +80,7 @@ const ActiveWorkoutModalContainer = () => {
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [isSuppressed, setIsSuppressed] = useState(false); // user swiped modal down
   const USER_ID = 'local-user';
+  const prevSessionIdRef = React.useRef<string | null>(null);
 
   // Poll for active session presence as a lightweight pull-based visibility source
   useEffect(() => {
@@ -89,7 +90,15 @@ const ActiveWorkoutModalContainer = () => {
         const sid = await getActiveSessionId(USER_ID);
         if (!mounted) return;
         setSessionId(sid);
+        const prevSid = prevSessionIdRef.current;
         const hasActive = !!sid;
+        // If a new session just started, reset suppression so modal opens
+        if (hasActive && sid !== prevSid) {
+          setIsSuppressed(false);
+          setBannerVisible(false);
+          setIsVisible(true);
+        }
+        prevSessionIdRef.current = sid ?? null;
         // Update split name for banner if needed
         if (hasActive) {
           const info = await getSessionInfo(sid!);

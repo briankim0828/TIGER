@@ -172,41 +172,31 @@ export class WorkoutsDataAccess {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         return await this.inTx(async () => {
-          const nextIdxRows = await this.db
-            .select({ maxIdx: sql<string>`COALESCE(MAX(${workoutSets.setIndex}), -1)` })
-            .from(workoutSets)
-            .where(eq(workoutSets.sessionExerciseId, sessionExerciseId));
-          const nextIdx = (parseInt((nextIdxRows[0]?.maxIdx ?? '-1') as string, 10) || -1) + 1;
           const id = newUuid();
-          await this.db
-            .insert(workoutSets)
-            .values({
-              id,
-              sessionExerciseId,
-              setIndex: nextIdx,
-              weight: data.weight ?? null,
-              reps: data.reps ?? null,
-              rpe: data.rpe ?? null,
-              notes: data.notes ?? null,
-            })
-            .run();
+          // Atomic compute of next set_index using INSERT ... SELECT with aggregate
+          await this.sqlite.runAsync(
+            `INSERT INTO workout_sets (id, session_exercise_id, set_index, weight, reps, rpe, notes)
+             SELECT ?, ?, COALESCE(MAX(set_index) + 1, 0), ?, ?, ?, ?
+             FROM workout_sets WHERE session_exercise_id = ?;`,
+            id,
+            sessionExerciseId,
+            data.weight ?? null,
+            data.reps ?? null,
+            data.rpe ?? null,
+            data.notes ?? null,
+            sessionExerciseId
+          );
           const rows = await this.db.select().from(workoutSets).where(eq(workoutSets.id, id)).limit(1);
           return rows[0] as WorkoutSetRow;
         });
       } catch (e: any) {
         const msg = String(e?.message ?? e);
-        // SQLite error code 19, or unique index name/columns in message
         const isUnique = msg.includes('UNIQUE constraint failed') && (msg.includes('workout_sets.session_exercise_id') || msg.includes('workout_sets_order_uq'));
-        if (!isUnique) {
-          throw e;
-        }
+        if (!isUnique) throw e;
         lastErr = e;
-        // Small jitter before retrying to allow the other transaction to commit
         await new Promise((r) => setTimeout(r, 12 * attempt));
-        // continue loop to retry
       }
     }
-    // If we exhausted retries, rethrow the last error
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 

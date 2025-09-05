@@ -7,6 +7,7 @@ import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, Button
 import { useWorkout } from '../contexts/WorkoutContext';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
+import { registerSelectionCallback } from '../navigation/selectionRegistry';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -364,8 +365,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   };
 
   const handleAddExercisePress = () => {
-    console.log('ActiveWorkoutModal - Navigating to Exercise Selection');
-    navigate('ExerciseSelectionModalScreen');
+    if (!sessionId) return;
+    console.log('ActiveWorkoutModal - Navigating to Exercise Selection (session mode)');
+    const requestId = `session-add-${sessionId}-${Date.now()}`;
+    registerSelectionCallback(requestId, async (items) => {
+      try {
+        for (const ex of items) {
+          await addExerciseToSession(sessionId, ex.id);
+        }
+        await refetchSnapshot(sessionId);
+      } catch (e) {
+        console.error('ActiveWorkoutModal: failed to add selected exercises to session', e);
+      }
+    });
+    // Navigate with a generic selection request
+    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true });
   };
 
   const [splitTitle, setSplitTitle] = useState<string>('');
@@ -583,7 +597,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     paddingBottom: 0,
-    backgroundColor: '#1E2028',
+    backgroundColor: '#2A2E38',
   paddingHorizontal: 0,
   },
   scrollView: {

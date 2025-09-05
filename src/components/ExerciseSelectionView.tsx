@@ -21,6 +21,7 @@ import { CommonActions } from "@react-navigation/native";
 import { useDatabase } from "../db/queries";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { ProgramSplit } from "../types/ui";
+import { registerSelectionCallback, consumeSelectionCallback, ExerciseLite } from "../navigation/selectionRegistry";
 import type { ExerciseRow } from "../db/queries/simple";
 
 // Define the navigation param list potentially used by this screen OR the screens it navigates to
@@ -29,7 +30,12 @@ type WorkoutStackParamList = {
   WorkoutMain: undefined;
   SplitDetail: { split: ProgramSplit; newlyAddedExercises?: any[] };
   ExerciseSelection: { splitId: string };
-  ExerciseSelectionModalScreen: undefined;
+  // Generic modal screen can be called in two modes:
+  // - Program Builder: { splitId }
+  // - Generic selection: { requestId, allowMultiple?: boolean }
+  ExerciseSelectionModalScreen:
+    | { splitId: string }
+    | { requestId: string; allowMultiple?: boolean };
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
@@ -47,8 +53,11 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = () => {
   const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<RouteProp<WorkoutStackParamList, 'ExerciseSelection'>>();
-  const splitId = route.params?.splitId;
+  const route = useRoute<RouteProp<WorkoutStackParamList, 'ExerciseSelectionModalScreen'>>();
+  // Narrow params
+  const splitId = (route.params as any)?.splitId as string | undefined;
+  const requestId = (route.params as any)?.requestId as string | undefined;
+  const allowMultiple = ((route.params as any)?.allowMultiple as boolean | undefined) ?? true;
   const db = useDatabase();
 
   const onClose = () => {
@@ -56,7 +65,7 @@ const ExerciseSelectionView = () => {
   };
 
   const [selectedBodyPart, setSelectedBodyPart] = useState<string | null>(null);
-  const [selectedExercises, setSelectedExercises] = useState<{ id: string; name: string }[]>([]);
+  const [selectedExercises, setSelectedExercises] = useState<ExerciseLite[]>([]);
   const [exercisesByBodyPart, setExercisesByBodyPart] = useState<Record<string, { id: string; name: string }[]>>({});
 
   // Prepare exercises by body part for the selection view
@@ -85,22 +94,44 @@ const ExerciseSelectionView = () => {
     setSelectedBodyPart(bodyPart);
   };
 
-  const handleExerciseSelect = (exercise: { id: string; name: string }) => {
+  const handleExerciseSelect = (exercise: ExerciseLite) => {
     setSelectedExercises((prev) => {
-      // If exercise is already selected, remove it
-      if (prev.some((e) => e.id === exercise.id)) {
-        return prev.filter((e) => e.id !== exercise.id);
-      }
-      // Otherwise add the full Exercise object
+      const exists = prev.some((e) => e.id === exercise.id);
+      if (exists) return prev.filter((e) => e.id !== exercise.id);
+      if (!allowMultiple) return [exercise];
       return [...prev, exercise];
     });
   };
 
-  const handleAddExercises = () => {
-    if (selectedExercises.length === 0 || !splitId) return;
-    db.addExercisesToSplit(splitId, selectedExercises.map(e => e.id), { avoidDuplicates: true })
-      .then(() => navigation.goBack())
-      .catch(err => console.error('ExerciseSelectionView: failed to add exercises to split', err));
+  const handleAddExercises = async () => {
+    if (selectedExercises.length === 0) {
+      navigation.goBack();
+      return;
+    }
+    // Mode 1: Program Builder (split editing)
+    if (splitId) {
+      try {
+        await db.addExercisesToSplit(splitId, selectedExercises.map(e => e.id), { avoidDuplicates: true });
+        navigation.goBack();
+      } catch (err) {
+        console.error('ExerciseSelectionView: failed to add exercises to split', err);
+      }
+      return;
+    }
+    // Mode 2: Generic selection via requestId
+    if (requestId) {
+      try {
+        const cb = consumeSelectionCallback(requestId);
+        if (cb) await cb(selectedExercises);
+      } catch (e) {
+        console.error('ExerciseSelectionView: selection callback failed', e);
+      } finally {
+        navigation.goBack();
+      }
+    } else {
+      // No route params matched; just close
+      navigation.goBack();
+    }
   };
 
   const isExerciseSelected = (exerciseId: string) => {
