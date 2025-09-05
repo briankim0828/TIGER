@@ -5,11 +5,19 @@ import { SimpleDataAccess } from '../db/queries/simple';
 interface ElectricContextType {
   db: SQLite.SQLiteDatabase | null;
   isInitialized: boolean;
+  isLiveReady: boolean; // live query capability ready (local-only emulation is fine)
+  // Minimal live system (local-only): version map + bump function
+  live: {
+    tableVersions: Record<string, number>;
+    bump: (tables: string[]) => void;
+  };
 }
 
 const ElectricContext = createContext<ElectricContextType>({
   db: null,
-  isInitialized: false
+  isInitialized: false,
+  isLiveReady: false,
+  live: { tableVersions: {}, bump: () => {} },
 });
 
 export function useElectric() {
@@ -27,6 +35,17 @@ interface ElectricProviderProps {
 export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isLiveReady, setIsLiveReady] = useState(false);
+  const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
+
+  const bump = (tables: string[]) => {
+    if (!tables || tables.length === 0) return;
+    setTableVersions((prev) => {
+      const next: Record<string, number> = { ...prev };
+      for (const t of tables) next[t] = (next[t] ?? 0) + 1;
+      return next;
+    });
+  };
 
   useEffect(() => {
     const initializeDatabase = async () => {
@@ -45,6 +64,8 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
         await dataAccess.seedSampleData();
         
         setIsInitialized(true);
+  // Local-only live capability is available immediately; real Electric wiring can replace this later.
+  setIsLiveReady(true);
         console.log('Database initialized successfully');
       } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -57,14 +78,14 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   // Avoid rendering children until DB is ready to prevent "Database not initialized" errors from hooks.
   if (!isInitialized || !db) {
     return (
-      <ElectricContext.Provider value={{ db, isInitialized }}>
+      <ElectricContext.Provider value={{ db, isInitialized, isLiveReady, live: { tableVersions, bump } }}>
         {null}
       </ElectricContext.Provider>
     );
   }
 
   return (
-    <ElectricContext.Provider value={{ db, isInitialized }}>
+    <ElectricContext.Provider value={{ db, isInitialized, isLiveReady, live: { tableVersions, bump } }}>
       {children}
     </ElectricContext.Provider>
   );

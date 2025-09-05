@@ -8,6 +8,7 @@ import { useWorkout } from '../contexts/WorkoutContext';
 import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
+import { useLiveSessionSnapshot } from '../db/live/workouts';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -27,40 +28,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   // navigation handled via global ref
-  const { getActiveSessionId, getSessionSnapshot, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
+  const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
   const USER_ID = 'local-user'; // TODO: replace with auth when available
   
-  // Local render model from DB snapshot
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [currentExercises, setCurrentExercises] = useState<RenderExercise[]>([]);
-  const [exerciseIdToSessionExerciseId, setExerciseIdToSessionExerciseId] = useState<Record<string, string>>({});
-
-  const refetchSnapshot = useCallback(async (sid: string) => {
-    try {
-      const snap = await getSessionSnapshot(sid);
-  console.debug('[ActiveWorkoutModal] Snapshot loaded', { sessionId: sid, exCount: snap.exercises.length });
-      const render: RenderExercise[] = snap.exercises.map((ex) => ({
-        id: ex.exercise.id,
-        name: ex.exercise.name,
-        sets: (snap.setsByExercise[ex.sessionExerciseId] || []).map((s) => ({
-          id: s.id,
-          weight: (s.weight as number | null | undefined) ? Number(s.weight) : 0,
-          reps: s.reps ?? 0,
-          completed: (s.completed ?? 0) === 1,
-        })),
-      }));
-      setCurrentExercises(render);
-      // Build a quick lookup: exerciseId -> sessionExerciseId
-      const map: Record<string, string> = {};
-      for (const j of snap.exercises) {
-        map[j.exercise.id] = j.sessionExerciseId;
-      }
-      setExerciseIdToSessionExerciseId(map);
-    } catch (e) {
-      console.error('ActiveWorkoutModal: Failed to refetch snapshot', e);
+  // Live snapshot for current session
+  const { snapshot } = useLiveSessionSnapshot(sessionId);
+  const currentExercises: RenderExercise[] = useMemo(() => {
+    if (!snapshot || !snapshot.exercises) return [];
+    return snapshot.exercises.map((ex) => ({
+      id: ex.exercise.id,
+      name: ex.exercise.name,
+      sets: (snapshot.setsByExercise[ex.sessionExerciseId] || []).map((s) => ({
+        id: s.id,
+        weight: (s.weight as number | null | undefined) ? Number(s.weight) : 0,
+        reps: s.reps ?? 0,
+        completed: (s.completed ?? 0) === 1,
+      })),
+    }));
+  }, [snapshot]);
+  const exerciseIdToSessionExerciseId = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (snapshot && snapshot.exercises) {
+      for (const j of snapshot.exercises) map[j.exercise.id] = j.sessionExerciseId;
     }
-  }, [getSessionSnapshot]);
+    return map;
+  }, [snapshot]);
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -69,7 +63,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // State
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [tick, setTick] = useState(0); // periodic re-render for timer
-  // currentExercises now populated from DB via refetchSnapshot
+  // currentExercises derived from live snapshot
   const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [addingSetFor, setAddingSetFor] = useState<string | null>(null);
@@ -80,8 +74,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
   const snapPoints = useMemo(() => ['10%', '100%'], []);
   
-  // Initialize with exercises
-  // Fetch active session and initial snapshot when opened
+  // Initialize with active session when opened
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -98,10 +91,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           if (!cancelled) setSplitTitle(name);
         }
       } catch {}
-      await refetchSnapshot(sid);
     })();
     return () => { cancelled = true; };
-  }, [isVisible, USER_ID, getActiveSessionId, refetchSnapshot, getSessionInfo, getSplitName]);
+  }, [isVisible, USER_ID, getActiveSessionId, getSessionInfo, getSplitName]);
   
   // Open/close bottom sheet based on visibility
   useEffect(() => {
@@ -122,7 +114,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
       setIsEndingWorkout(false);
       setExpandedExercises({});
-      setCurrentExercises([]);
+  // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
     }
     
@@ -130,7 +122,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       console.log('ActiveWorkoutModal - Component cleanup, resetting state');
       setIsEndingWorkout(false);
       setExpandedExercises({});
-      setCurrentExercises([]);
+  // currentExercises derived from live snapshot; nothing to reset
     };
   }, [isVisible]);
 
@@ -299,11 +291,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const original = set[field as 'weight' | 'reps'] || 0;
     const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
     if (next !== original) {
-      updateSet(set.id, { [field]: next } as any)
-        .then(async () => { if (sessionId) { await refetchSnapshot(sessionId); } })
-        .catch(console.error);
+    updateSet(set.id, { [field]: next } as any).catch(console.error);
     }
-  }, [currentExercises, localInputValues, updateSet, toast, sessionId, refetchSnapshot]);
+  }, [currentExercises, localInputValues, updateSet, toast, sessionId]);
 
   // Handle set completion toggle
   const handleToggleSetCompletion = useCallback((exerciseId: string, setIndex: number) => {
@@ -311,10 +301,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!ex) return;
     const s = ex.sets[setIndex];
     if (!s) return;
-    updateSet(s.id, { completed: s.completed ? 0 : 1 } as any)
-      .then(async () => { if (sessionId) { await refetchSnapshot(sessionId); } })
-      .catch(console.error);
-  }, [currentExercises, updateSet, sessionId, refetchSnapshot]);
+    updateSet(s.id, { completed: s.completed ? 0 : 1 } as any).catch(console.error);
+  }, [currentExercises, updateSet, sessionId]);
   
   // Handle Add Set button click
   const handleAddNewSet = useCallback((exerciseId: string) => {
@@ -326,16 +314,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!sessionExerciseId) return;
     addingSetLockRef.current = true;
     setAddingSetFor(exerciseId);
-    (async () => {
-      await addSet(sessionExerciseId, {});
-      await refetchSnapshot(sessionId);
-    })()
+    (async () => { await addSet(sessionExerciseId, {}); })()
       .catch(console.error)
       .finally(() => {
         addingSetLockRef.current = false;
         setAddingSetFor(null);
       });
-  }, [addSet, currentExercises, sessionId, refetchSnapshot, exerciseIdToSessionExerciseId]);
+  }, [addSet, currentExercises, sessionId, exerciseIdToSessionExerciseId]);
 
   // Function to handle the actual discard action using the context function
   const handleConfirmDiscard = useCallback(() => {
@@ -373,7 +358,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         for (const ex of items) {
           await addExerciseToSession(sessionId, ex.id);
         }
-        await refetchSnapshot(sessionId);
       } catch (e) {
         console.error('ActiveWorkoutModal: failed to add selected exercises to session', e);
       }

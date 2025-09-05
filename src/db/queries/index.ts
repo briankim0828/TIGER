@@ -25,10 +25,15 @@ export { SimpleDataAccess, ProgramBuilderDataAccess, WorkoutsDataAccess };
 
 // Dedicated hook for workouts access (kept separate to avoid mixing concerns)
 export function useWorkouts() {
-  const { db, isInitialized } = useElectric();
+  const { db, isInitialized, live } = useElectric();
   if (!db) {
     if (!isInitialized) throw new Error('Database not initialized.');
     throw new Error('Database failed to initialize.');
   }
-  return useMemo(() => new WorkoutsDataAccess(db), [db]);
+  return useMemo(() => {
+    const inst = new WorkoutsDataAccess(db);
+    // Inject live notifier so writes can bump table versions
+    if (live?.bump) inst.setLiveNotifier(live.bump);
+    return inst;
+  }, [db, live?.bump]);
 }

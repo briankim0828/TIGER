@@ -10,6 +10,7 @@ import {
   splits as splitsTable,
 } from '../sqlite/schema';
 import { newUuid } from '../../utils/ids';
+import { useElectric } from '../../electric';
 
 export type WorkoutSessionRow = typeof workoutSessions.$inferSelect;
 export type WorkoutExerciseRow = typeof workoutExercises.$inferSelect;
@@ -33,11 +34,18 @@ export type SessionExerciseJoin = {
 export class WorkoutsDataAccess {
   private sqlite: SQLite.SQLiteDatabase;
   private db: ReturnType<typeof drizzle>;
+  // optional notifier for live updates (injected lazily to avoid React import cycles in non-React contexts)
+  private bumpTables?: (tables: string[]) => void;
 
   constructor(database: SQLite.SQLiteDatabase) {
     this.sqlite = database;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     this.db = drizzle(this.sqlite as any);
+  }
+
+  // Allow callers to inject a bump function to notify live queries
+  setLiveNotifier(bump: (tables: string[]) => void) {
+    this.bumpTables = bump;
   }
 
   private async inTx<T>(fn: () => Promise<T>): Promise<T> {
@@ -156,9 +164,11 @@ export class WorkoutsDataAccess {
           })
           .run();
       }
-      console.debug('[WorkoutsDA] startWorkout: inserted session exercises', { count: exerciseIds.length });
+  console.debug('[WorkoutsDA] startWorkout: inserted session exercises', { count: exerciseIds.length });
 
-      return { sessionId };
+  // Notify live queries: a new session exists and exercises were inserted
+  this.bumpTables?.(['workout_sessions', 'workout_exercises']);
+  return { sessionId };
     });
   }
 
@@ -187,7 +197,9 @@ export class WorkoutsDataAccess {
             sessionExerciseId
           );
           const rows = await this.db.select().from(workoutSets).where(eq(workoutSets.id, id)).limit(1);
-          return rows[0] as WorkoutSetRow;
+          const row = rows[0] as WorkoutSetRow;
+          this.bumpTables?.(['workout_sets']);
+          return row;
         });
       } catch (e: any) {
         const msg = String(e?.message ?? e);
@@ -202,6 +214,7 @@ export class WorkoutsDataAccess {
 
   async updateSet(setId: string, patch: Partial<Pick<WorkoutSetRow, 'weight' | 'reps' | 'rpe' | 'notes' | 'completed' | 'startedAt' | 'completedAt'>>): Promise<boolean> {
     await this.db.update(workoutSets).set(patch).where(eq(workoutSets.id, setId)).run();
+  this.bumpTables?.(['workout_sets']);
     return true;
   }
 
@@ -223,7 +236,9 @@ export class WorkoutsDataAccess {
           pos += 1;
         }
       }
-      return true;
+  // Notify live queries that sets changed
+  this.bumpTables?.(['workout_sets']);
+  return true;
     });
   }
 
@@ -235,6 +250,7 @@ export class WorkoutsDataAccess {
       .set({ state: status, finishedAt: nowIso, updatedAt: nowIso })
       .where(eq(workoutSessions.id, sessionId))
       .run();
+  this.bumpTables?.(['workout_sessions']);
     return true;
   }
 
@@ -276,6 +292,7 @@ export class WorkoutsDataAccess {
       await this.db.delete(workoutExercises).where(eq(workoutExercises.sessionId, sessionId)).run();
       // Delete session
       await this.db.delete(workoutSessions).where(eq(workoutSessions.id, sessionId)).run();
+  this.bumpTables?.(['workout_sets', 'workout_exercises', 'workout_sessions']);
       return true;
     });
   }
@@ -287,6 +304,8 @@ export class WorkoutsDataAccess {
         await this.db.update(workoutExercises).set({ orderPos: pos }).where(and(eq(workoutExercises.id, id), eq(workoutExercises.sessionId, sessionId))).run();
         pos += 1;
       }
+  // Notify that exercises order changed
+  this.bumpTables?.(['workout_exercises']);
       return true;
     });
   }
@@ -302,6 +321,7 @@ export class WorkoutsDataAccess {
       .insert(workoutExercises)
       .values({ id, sessionId, exerciseId, orderPos: nextOrder })
       .run();
+  this.bumpTables?.(['workout_exercises']);
     return { id };
   }
 
@@ -327,6 +347,7 @@ export class WorkoutsDataAccess {
           pos += 1;
         }
       }
+  this.bumpTables?.(['workout_exercises', 'workout_sets']);
       return true;
     });
   }

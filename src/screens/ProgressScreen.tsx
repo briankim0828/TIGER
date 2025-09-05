@@ -169,6 +169,18 @@ const ProgressScreen: React.FC = () => {
   [selectedDate, workoutSessions, getDayOfWeek, splits]
   );
 
+  const handleStartWorkout = useCallback(async () => {
+    if (!scheduledSplit) {
+      console.error("Cannot start workout: Missing split.");
+      return;
+    }
+    // Fetch exercises for this split from the DB (Program Builder source of truth)
+    const joins = await db.getSplitExercises(scheduledSplit.id);
+    const fromIds = joins.map((j) => j.exercise.id);
+    console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
+    await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
+  }, [scheduledSplit, startWorkout, db]);
+
   const handleWorkoutPress = useCallback(() => {
     if (scheduledSplit) {
       showSessionSummary({
@@ -182,18 +194,6 @@ const ProgressScreen: React.FC = () => {
   }, [scheduledSplit, selectedDate, showSessionSummary, handleStartWorkout]);
 
   const handleCloseSummary = useCallback(() => {}, []);
-
-  const handleStartWorkout = useCallback(async () => {
-    if (!scheduledSplit) {
-      console.error("Cannot start workout: Missing split.");
-      return;
-    }
-    // Fetch exercises for this split from the DB (Program Builder source of truth)
-    const joins = await db.getSplitExercises(scheduledSplit.id);
-    const fromIds = joins.map((j) => j.exercise.id);
-    console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
-  await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
-  }, [scheduledSplit, startWorkout, db]);
 
   useEffect(() => {
     // optional: detect an active session for this user

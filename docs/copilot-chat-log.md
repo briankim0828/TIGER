@@ -635,3 +635,26 @@ Light follow-ups to fully close the loop
 
 next: fix bugs then move to live queries, then add features
 add proper auth too
+
+# 2025-09-05
+
+Checkpoint 4b — Live Queries for Active Workout — COMPLETED ✅
+
+Summary
+- Local, push-based live queries implemented (no polling). The provider tracks tableVersions and exposes a bump(tables) notifier; DAOs call bump after writes.
+- Live hooks added in `src/db/live/workouts.ts`: `useLiveActiveSession`, `useLiveSessionExercises`, `useLiveSetsForExercises`, `useLiveSessionSnapshot`.
+- UI refactor:
+  - `ActiveWorkoutModal` now reads via `useLiveSessionSnapshot(sessionId)`; all explicit refetches removed; local inputs kept for onBlur writes.
+  - `App.tsx` modal container uses `useLiveActiveSession('local-user')`; instant show/hide on start/end (no 1.5s timer).
+- Debug tooling: `DevFloatingDebug` global button opens `LiveWorkoutDebug` in a bottom sheet (~33% height) to visualize session/exercise/set changes live.
+
+Quality gates
+- Added `npm run typecheck` (`tsc --noEmit`) and `npm run validate`; current state passes.
+- Manual smoke tests:
+  - Start workout ⇒ modal opens immediately; banner shows only if suppressed.
+  - Add sets rapidly ⇒ UI increments live; no UNIQUE errors (atomic INSERT…SELECT for set_index).
+  - Add exercises via selection ⇒ list updates live without explicit refetch.
+  - Finish/discard ⇒ modal/banner hide instantly.
+
+Notes
+- ElectricSQL is not wired yet; this is a local live emulation sufficient for single-device use. When cross-device/offline sync is needed, swap the provider/useLiveQuery internals to ElectricSQL with minimal UI changes.

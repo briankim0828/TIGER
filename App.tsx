@@ -36,6 +36,9 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
 import DebugDatabaseScreen from "./src/screens/DebugDatabaseScreen";
+import LiveWorkoutDebug from "./src/screens/LiveWorkoutDebug";
+import DevFloatingDebug from "./src/components/DevFloatingDebug";
+import { useLiveActiveSession } from "./src/db/live/workouts";
 import { GluestackUIProvider, Box, Text } from "@gluestack-ui/themed";
 import { config } from "./gluestack-ui.config";
 import { StatusBar } from "react-native";
@@ -71,57 +74,56 @@ try {
 // Active Workout Modal Container
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
-  const { getActiveSessionId, endWorkout, getSessionInfo, getSplitName } = useWorkout();
+  const { endWorkout, getSessionInfo, getSplitName } = useWorkout();
   const [isVisible, setIsVisible] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
   const [bannerVisible, setBannerVisible] = useState(false);
   const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
-  const [isSuppressed, setIsSuppressed] = useState(false); // user swiped modal down
+  const [isSuppressed, setIsSuppressed] = useState(false);
   const USER_ID = 'local-user';
   const prevSessionIdRef = React.useRef<string | null>(null);
 
-  // Poll for active session presence as a lightweight pull-based visibility source
+  // Live active session (no polling)
+  const { session } = useLiveActiveSession(USER_ID);
+
   useEffect(() => {
-    let mounted = true;
-    const check = async () => {
+    const sid = session?.id ?? null;
+    setSessionId(sid);
+    const prevSid = prevSessionIdRef.current;
+    const hasActive = !!sid;
+    if (hasActive && sid !== prevSid) {
+      // New session started -> open modal immediately and reset suppression
+      setIsSuppressed(false);
+      setBannerVisible(false);
+      setIsVisible(true);
+    }
+    prevSessionIdRef.current = sid;
+  }, [session?.id]);
+
+  // Update banner title and timer from live session
+  useEffect(() => {
+    const sid = session?.id;
+    if (!sid) {
+      setBannerVisible(false);
+      setIsVisible(false);
+      setSessionStartedAtMs(null);
+      return;
+    }
+    (async () => {
       try {
-        const sid = await getActiveSessionId(USER_ID);
-        if (!mounted) return;
-        setSessionId(sid);
-        const prevSid = prevSessionIdRef.current;
-        const hasActive = !!sid;
-        // If a new session just started, reset suppression so modal opens
-        if (hasActive && sid !== prevSid) {
-          setIsSuppressed(false);
-          setBannerVisible(false);
-          setIsVisible(true);
+        const info = await getSessionInfo(sid);
+        if (info?.splitId) {
+          const name = (await getSplitName(info.splitId)) || 'Active Workout';
+          setBannerSplitName(name);
+        } else {
+          setBannerSplitName('Active Workout');
         }
-        prevSessionIdRef.current = sid ?? null;
-        // Update split name for banner if needed
-        if (hasActive) {
-          const info = await getSessionInfo(sid!);
-          if (info?.splitId) {
-            const name = (await getSplitName(info.splitId)) || 'Active Workout';
-            setBannerSplitName(name);
-          } else {
-            setBannerSplitName('Active Workout');
-          }
-          // Cache session start time once
-          if (info?.startedAt) {
-            setSessionStartedAtMs(Date.parse(info.startedAt));
-          }
-        }
-        // If user suppressed the modal (swiped down), keep it hidden
-        setIsVisible(hasActive && !isSuppressed);
-        setBannerVisible(hasActive && isSuppressed);
+        if (info?.startedAt) setSessionStartedAtMs(Date.parse(info.startedAt));
       } catch {}
-    };
-    check();
-    const t = setInterval(check, 1500);
-    return () => { mounted = false; clearInterval(t); };
-  }, [getActiveSessionId, getSessionInfo, getSplitName, USER_ID, isSuppressed]);
+    })();
+  }, [session?.id, getSessionInfo, getSplitName]);
 
   const handleEndWorkoutAndClose = async () => {
     if (!sessionId) return;
@@ -198,6 +200,7 @@ type RootStackParamList = {
   Login: undefined;
   ExerciseSelectionModalScreen: undefined;
   DebugDatabase: undefined;
+  LiveWorkoutDebug: undefined;
 };
 
 // -----------------------------
@@ -319,6 +322,7 @@ const NavigationWrapper = () => {
               component={ExerciseSelectionView}
             />
             <Stack.Screen name="DebugDatabase" component={DebugDatabaseScreen} />
+            <Stack.Screen name="LiveWorkoutDebug" component={LiveWorkoutDebug} />
           </Stack.Group>
         </Stack.Navigator>
       </Box>
@@ -384,6 +388,7 @@ export default function App() {
                 {/* Render overlays outside the bottom SafeAreaView so they cover the entire screen incl. insets */}
                 <GlobalOverlays />
                   <ActiveWorkoutModalContainer />
+                  <DevFloatingDebug />
                 </OverlayProvider>
               </WorkoutProvider>
             </DataProvider>
