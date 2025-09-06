@@ -13,7 +13,6 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { DataProvider } from "./src/contexts/DataContext";
 import { WorkoutProvider, useWorkout } from "./src/contexts/WorkoutContext";
 import { ElectricProvider } from "./src/electric";
 import WorkoutMain from "./src/screens/WorkoutMain";
@@ -362,9 +361,8 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <GluestackUIProvider config={config}>
-          <ElectricProvider>
-            <DataProvider>
-              <WorkoutProvider>
+      <ElectricProvider>
+        <WorkoutProvider>
                 <OverlayProvider>
                 <SafeAreaView
                   style={{ flex: 0, backgroundColor: "#1E2028" }}
@@ -391,7 +389,6 @@ export default function App() {
                   <DevFloatingDebug />
                 </OverlayProvider>
               </WorkoutProvider>
-            </DataProvider>
           </ElectricProvider>
         </GluestackUIProvider>
       </SafeAreaProvider>

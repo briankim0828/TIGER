@@ -13,7 +13,7 @@ import Animated, {
   withTiming, 
   useSharedValue 
 } from "react-native-reanimated";
-import { WEEKDAYS } from "../types";
+import { WEEKDAYS } from "../types/base";
 import { ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
 
 // Interface for body part section data used internally

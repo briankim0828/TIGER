@@ -4,7 +4,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack } from '@gluestack-ui/themed';
-import { Exercise } from '../types';
+// Minimal local exercise shape (legacy global Exercise interface removed)
+interface SummaryExercise { id: string; name: string; bodyPart: string; splitIds: string[] }
 import type { ProgramSplit } from '../types/ui';
 import { useDatabase } from '../db/queries';
 
@@ -38,7 +39,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   const bottomSheetRef = useRef<BottomSheet>(null);
   
   // State for exercises
-  const [currentExercises, setCurrentExercises] = React.useState<Exercise[]>([]);
+  const [currentExercises, setCurrentExercises] = React.useState<SummaryExercise[]>([]);
   const [contentHeight, setContentHeight] = useState(0);
   
   // Calculate snap points based on content height
@@ -63,7 +64,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         (async () => {
           try {
             const joins = await db.getSplitExercises(scheduledSplit.id);
-            const exs = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart || 'Uncategorized', splitIds: [scheduledSplit.id] } as Exercise));
+            const exs = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart || 'Uncategorized', splitIds: [scheduledSplit.id] } as SummaryExercise));
             setCurrentExercises(exs);
           } catch (e) {
             console.warn('[SessionSummaryModal] failed to load split exercises', e);

@@ -29,7 +29,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { User } from '@supabase/supabase-js';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { useData } from '../contexts/DataContext';
+// DataContext removed – using workout history queries instead
+import { useWorkoutHistory } from '../db/queries';
 import {
   UserProfile,
   getCurrentUser,
@@ -38,8 +39,6 @@ import {
   updateUserProfileAvatar,
   getAvatarPublicUrl,
   uploadAvatar,
-  fetchUserWorkoutStats,
-  deleteWorkoutSessions
 } from '../supabase/supabaseProfile';
 
 type WorkoutTab = {
@@ -74,7 +73,8 @@ const ProfileScreen: React.FC = () => {
   const [cachedAvatarUrl, setCachedAvatarUrl] = useState<string | null>(null);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const cancelRef = React.useRef(null);
-  const { clearStorage, refreshData } = useData();
+  const history = useWorkoutHistory();
+  const USER_ID = 'local-user';
 
   const workoutTabs: WorkoutTab[] = [
     { id: 1, title: 'Workouts', icon: 'fitness-center' },
@@ -173,28 +173,11 @@ const ProfileScreen: React.FC = () => {
   }, [userProfile, cachedAvatarUrl, user]);
 
   const fetchUserStats = async () => {
-    if (!user) return;
     try {
-      const userStats = await fetchUserWorkoutStats(user.id);
-      if (userStats) {
-        setStats(userStats);
-      }
+      const s = await history.getWorkoutStats(user?.id ?? USER_ID);
+      setStats(s);
     } catch (error) {
-      // Error logged within fetchUserWorkoutStats
-      console.error('Error fetching stats on component level:', error);
-      toast.show({
-        placement: "top",
-        render: ({ id }) => {
-          return (
-            <Toast nativeID={id} action="error" variant="accent">
-              <VStack space="xs">
-                <ToastTitle>Error</ToastTitle>
-                <ToastDescription>Failed to load workout stats.</ToastDescription>
-              </VStack>
-            </Toast>
-          );
-        },
-      });
+      console.error('Error fetching stats (local DB):', error);
     }
   };
 
@@ -332,30 +315,9 @@ const ProfileScreen: React.FC = () => {
 
   const handleClearAllData = async () => {
     try {
-      console.log('[DEBUG] Clearing workout sessions data');
-
-      if (!user?.id) {
-        throw new Error('No authenticated user found');
-      }
-
-      const { error: deleteError } = await deleteWorkoutSessions(user.id);
-
-      if (deleteError) {
-        console.error('Error deleting workout sessions:', deleteError);
-        throw deleteError;
-      }
-
-      try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.removeItem('workout_sessions');
-        console.log('[DEBUG] Successfully cleared local workout session data');
-      } catch (localError) {
-        console.error('Error clearing local workout sessions:', localError);
-        // Optionally decide if this should halt the process or just log
-      }
-
-      await refreshData(); // Refresh data from DataContext
-      setStats({ totalWorkouts: 0, hoursTrained: 0 }); // Reset local stats state
+      console.log('[ProfileScreen] Clearing workout history (local DB only)');
+      await history.deleteAllWorkouts(user?.id ?? USER_ID);
+      setStats({ totalWorkouts: 0, hoursTrained: 0 });
 
       setIsAlertOpen(false);
       toast.show({
@@ -365,7 +327,7 @@ const ProfileScreen: React.FC = () => {
             <Toast nativeID={id} action="success" variant="accent">
               <VStack space="xs">
                 <ToastTitle>Workout Data Cleared</ToastTitle>
-                <ToastDescription>All workout session history has been removed</ToastDescription>
+                <ToastDescription>All local workout history removed</ToastDescription>
               </VStack>
             </Toast>
           );

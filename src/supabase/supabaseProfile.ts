@@ -126,22 +126,4 @@ export const uploadAvatar = async (
   }
 };
 
-// --- Workout Stats ---
-
-/**
- * Fetches workout session statistics for a user.
- */
-export const fetchUserWorkoutStats = async (_userId: string): Promise<{ totalWorkouts: number; hoursTrained: number } | null> => {
-  // Remote workout_sessions table removed. Return zero stats for now.
-  console.log('[supabaseProfile] workout_sessions table removed; returning zero stats.');
-  return { totalWorkouts: 0, hoursTrained: 0 };
-};
-
-/**
- * Deletes all workout sessions for a given user.
- */
-export const deleteWorkoutSessions = async (_userId: string): Promise<{ error: any | null }> => {
-  // Remote delete disabled.
-  console.log('[supabaseProfile] Remote delete skipped; workout_sessions table removed.');
-  return { error: null };
-};
+// Workout stats & history deletion now handled locally via Drizzle (see useWorkoutHistory).

@@ -24,7 +24,7 @@ import Animated, {
   Layout,
 } from "react-native-reanimated";
 import { AntDesign, Entypo } from "@expo/vector-icons";
-import { WeekDay } from "../types";
+import { WeekDay } from "../types/base";
 import { ProgramSplit, ProgramEditMode } from "../types/ui";
 import { parseFontSize } from "../../helper/fontsize";
 

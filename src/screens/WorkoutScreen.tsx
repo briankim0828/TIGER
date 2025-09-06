@@ -17,7 +17,7 @@ import {
   FlatList,
   ListRenderItemInfo,
 } from "react-native";
-import { WeekDay } from "../types";
+import { WeekDay } from "../types/base";
 import { ProgramSplit, ProgramEditMode, ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
 import type { SplitExerciseJoin } from "../db/queries/simple";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";

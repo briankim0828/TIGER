@@ -8,23 +8,23 @@ import React, {
 import { Box, Text, Pressable } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import { useFocusEffect } from "@react-navigation/native";
-import { useData } from "../contexts/DataContext";
-import { useDatabase } from "../db/queries";
+// DataContext removed in CP5; use direct DB queries
+import { useDatabase, useWorkoutHistory } from "../db/queries";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ScrollView, StyleSheet } from "react-native";
 import { useOverlay } from "../contexts/OverlayContext";
-import { WorkoutDay } from '../types';
-import type { ProgramSplit } from '../types/ui';
+import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
 
-interface WorkoutSession {
-  date: string;
-  completed: boolean;
-}
+// Local WeekDay type (decoupled from legacy types/index.ts slated for removal)
+type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
+
+// Internal lightweight calendar workout placeholder (may be removed later)
+interface WorkoutSession { date: string; completed: boolean }
 
 const ProgressScreen: React.FC = () => {
-  const { workoutSessions, loading: dataLoading } = useData();
   const db = useDatabase();
+  const history = useWorkoutHistory();
   const { startWorkout, getActiveSessionId } = useWorkout();
   const USER_ID = 'local-user';
 
@@ -43,16 +43,11 @@ const ProgressScreen: React.FC = () => {
     )}-${String(today.getDate()).padStart(2, "0")}`;
   }, [currentYear, currentMonth, today]));
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
+  const [calendarEntries, setCalendarEntries] = useState<WorkoutCalendarEntry[]>([]);
   const { showSessionSummary } = useOverlay();
 
   const isInitialLoadRef = useRef(true);
-  const processedDataRef = useRef<{
-    workouts: WorkoutSession[];
-    workoutDays: WorkoutDay[];
-  }>({
-    workouts: [],
-    workoutDays: [],
-  });
+  // processedDataRef removed (legacy DataContext migration complete)
 
   const todayString = useMemo(() => {
     return `${currentYear}-${String(currentMonth + 1).padStart(
@@ -78,14 +73,14 @@ const ProgressScreen: React.FC = () => {
   }, []);
 
   const scheduledSplit: ProgramSplit | null = useMemo(() => {
-    const dayOfWeek = getDayOfWeek(selectedDate) as any as import('../types').WeekDay | null;
+    const dayOfWeek = getDayOfWeek(selectedDate) as WeekDay | null;
     if (!dayOfWeek) return null;
     return splits.find(split => split.days.includes(dayOfWeek)) || null;
   }, [selectedDate, splits, getDayOfWeek]);
 
   useFocusEffect(
     useCallback(() => {
-      const processData = async () => {
+  const processData = async () => {
         // Pull Program Builder state from SQLite via Drizzle
         try {
           const [rows, dayAssigns] = await Promise.all([
@@ -93,10 +88,10 @@ const ProgressScreen: React.FC = () => {
             db.getDayAssignments(USER_ID),
           ]);
           // Build days per split id
-          const daysBySplit = new Map<string, import('../types').WeekDay[]>();
+          const daysBySplit = new Map<string, WeekDay[]>();
           for (const a of dayAssigns) {
             const list = daysBySplit.get(a.split_id) ?? [];
-            list.push(a.weekday as import('../types').WeekDay);
+            list.push(a.weekday as WeekDay);
             daysBySplit.set(a.split_id, list);
           }
           // Build simple split objects for calendar
@@ -108,23 +103,17 @@ const ProgressScreen: React.FC = () => {
             exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
           }));
           setSplits(calendarSplits);
+          // Calendar entries (legacy workoutSessions removed)
+          const entries = await history.getWorkoutCalendarEntries(USER_ID);
+          setCalendarEntries(entries);
+          // Mirror to workouts state until calendar component prop is renamed everywhere
+          setWorkouts(entries.map(e => ({ date: e.date, completed: e.completed })));
         } catch (e) {
           console.warn('[ProgressScreen] Failed to build calendar splits from DB', e);
           setSplits([]);
+          setCalendarEntries([]);
+          setWorkouts([]);
         }
-        const formattedWorkouts = workoutSessions.map((session) => ({
-          date: session.date,
-          completed: session.completed,
-        }));
-        processedDataRef.current.workouts = formattedWorkouts;
-        processedDataRef.current.workoutDays = workoutSessions.map(session => ({
-          date: session.date,
-          completed: session.completed,
-          splitId: session.splitName || undefined
-        }));
-
-        setWorkouts(formattedWorkouts);
-
         if (isInitialLoadRef.current) {
           setIsInitialLoad(false);
           isInitialLoadRef.current = false;
@@ -133,10 +122,8 @@ const ProgressScreen: React.FC = () => {
         setCalendarKey((prev) => prev + 1);
       };
 
-      if (!dataLoading) {
-        processData();
-      }
-  }, [dataLoading, workoutSessions, db])
+    processData();
+  }, [db, history])
   );
 
   const handleDayPress = useCallback(
@@ -145,28 +132,20 @@ const ProgressScreen: React.FC = () => {
         return;
       }
       
-      const workoutSession = workoutSessions.find(session => session.date === date);
-  const dayOfWeek = getDayOfWeek(date) as any as import('../types').WeekDay | null;
+  const dayOfWeek = getDayOfWeek(date) as WeekDay | null;
   const currentSplit = dayOfWeek ? splits.find(split => split.days.includes(dayOfWeek)) : null;
+  const found = calendarEntries.find(w => w.date === date);
       
       console.log('[DEBUG] Selected Date Info:', {
         date,
         split: currentSplit?.name,
-        workoutSession: workoutSession 
-          ? {
-              date: workoutSession.date,
-              startTime: workoutSession.startTime,
-              durationSec: workoutSession.durationSec,
-              exercisesCount: workoutSession.exercises.length,
-              totalSets: workoutSession.sets.flat().length,
-              completed: workoutSession.completed
-            } 
-          : 'No session found'
+    hasSession: !!found,
+    completed: found?.completed ?? false
       });
       
       setSelectedDate(date);
     },
-  [selectedDate, workoutSessions, getDayOfWeek, splits]
+  [selectedDate, calendarEntries, getDayOfWeek, splits]
   );
 
   const handleStartWorkout = useCallback(async () => {
@@ -204,7 +183,7 @@ const ProgressScreen: React.FC = () => {
     })();
   }, [getActiveSessionId]);
 
-  if (loading || dataLoading) {
+  if (loading) {
     return (
       <Box flex={1} justifyContent="center" alignItems="center" bg="$backgroundDark900">
         <Text color="$textLight50">Loading Progress...</Text>
@@ -224,7 +203,7 @@ const ProgressScreen: React.FC = () => {
             key={`calendar-${calendarKey}`}
             month={currentMonth}
             year={currentYear}
-            workouts={workouts}
+            workouts={calendarEntries}
             splits={splits}
             onDayPress={handleDayPress}
           />

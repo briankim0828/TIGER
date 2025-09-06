@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { SimpleDataAccess } from './simple';
 import { ProgramBuilderDataAccess } from './programBuilder.drizzle';
 import { WorkoutsDataAccess } from './workouts.drizzle';
+import { WorkoutHistoryDataAccess } from './workoutHistory.drizzle';
 
 // Hook to access database from the Electric context
 import { useElectric } from '../../electric';
@@ -36,4 +37,14 @@ export function useWorkouts() {
     if (live?.bump) inst.setLiveNotifier(live.bump);
     return inst;
   }, [db, live?.bump]);
+}
+
+// History & stats (read‑only helpers) hook
+export function useWorkoutHistory() {
+  const { db, isInitialized } = useElectric();
+  if (!db) {
+    if (!isInitialized) throw new Error('Database not initialized.');
+    throw new Error('Database failed to initialize.');
+  }
+  return useMemo(() => new WorkoutHistoryDataAccess(db), [db]);
 }

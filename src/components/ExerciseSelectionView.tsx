@@ -14,7 +14,7 @@ import {
   Divider,
 } from "@gluestack-ui/themed";
 import { AntDesign, MaterialIcons, Feather } from "@expo/vector-icons";
-import { BODY_PARTS } from "../types";
+import { BODY_PARTS } from "../types/base";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CommonActions } from "@react-navigation/native";

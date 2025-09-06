@@ -1,7 +1,16 @@
 // Simple data access layer without complex schema dependencies
 import * as SQLite from 'expo-sqlite';
 import { newUuid } from '../../utils/ids';
-import { DEFAULT_EXERCISES_BY_BODY_PART } from '../../types';
+// Legacy default exercise catalog removed; provide a minimal internal seed set.
+const INTERNAL_SEED_EXERCISES: Array<{ name: string; bodyPart: string; kind?: string }> = [
+  { name: 'Flat Bench Press', bodyPart: 'Chest', kind: 'strength' },
+  { name: 'Barbell Row', bodyPart: 'Back', kind: 'strength' },
+  { name: 'Squats', bodyPart: 'Legs', kind: 'strength' },
+  { name: 'Bicep Curls', bodyPart: 'Arms', kind: 'strength' },
+  { name: 'Dumbbell Shoulder Press', bodyPart: 'Shoulders', kind: 'strength' },
+  { name: 'Crunches', bodyPart: 'Core', kind: 'strength' },
+  { name: 'Treadmill', bodyPart: 'Cardio', kind: 'cardio' },
+];
 
 // Typed result shapes for this lightweight SQLite layer
 export type SplitRow = {
@@ -595,20 +604,10 @@ export class SimpleDataAccess {
       // Seed a comprehensive default catalog grouped by body part.
       // Map legacy body parts into this local model by placing them in the `modality` column
       // so ExerciseSelectionView groups them under BODY_PARTS.
-      for (const [bodyPart, list] of Object.entries(DEFAULT_EXERCISES_BY_BODY_PART)) {
-        for (const item of list) {
-          const name = item.name;
-          const kind = bodyPart === 'Cardio' ? 'cardio' : 'strength';
-          const modality = 'other'; // keep modality generic; body_part will drive grouping
-
-          const existing = await this.db.getFirstAsync(
-            'SELECT id FROM exercises WHERE name = ?',
-            [name]
-          );
-
-          if (!existing) {
-            await this.createExercise({ name, kind, modality, bodyPart });
-          }
+      for (const item of INTERNAL_SEED_EXERCISES) {
+        const existing = await this.db.getFirstAsync('SELECT id FROM exercises WHERE name = ?', [item.name]);
+        if (!existing) {
+          await this.createExercise({ name: item.name, kind: item.kind ?? 'strength', modality: 'other', bodyPart: item.bodyPart });
         }
       }
 

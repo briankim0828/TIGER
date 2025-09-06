@@ -10,7 +10,7 @@ import {
   Platform,
   UIManager,
 } from "react-native";
-import { WeekDay, WEEKDAYS } from "../types";
+import { WeekDay, WEEKDAYS } from "../types/base";
 import type { ProgramSplit } from "../types/ui";
 
 interface WorkoutCalendarProps {

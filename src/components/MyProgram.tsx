@@ -9,7 +9,7 @@ import {
 import { Icon } from "@gluestack-ui/themed";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { AntDesign } from "@expo/vector-icons";
-import { WEEKDAYS, WeekDay } from "../types";
+import { WEEKDAYS, WeekDay } from "../types/base";
 import { ProgramSplit, ProgramEditMode } from "../types/ui";
 
 // Helper function to get abbreviated day names

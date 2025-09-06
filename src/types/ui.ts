@@ -1,4 +1,5 @@
-import { WeekDay } from ".";
+// Import foundational primitive types/constants
+import { WeekDay } from "./base";
 
 // UI types used by Program Builder screens
 
@@ -26,4 +27,10 @@ export type ProgramExerciseLite = {
 // Split shape enriched with exercises for the MyExercises component
 export type ProgramSplitWithExercises = ProgramSplit & {
   exercises: ProgramExerciseLite[];
+};
+
+// Calendar entry used by Progress & calendar UI
+export type WorkoutCalendarEntry = {
+  date: string;      // YYYY-MM-DD
+  completed: boolean;
 };
