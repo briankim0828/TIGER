@@ -1,17 +1,29 @@
 import { sqliteTable, text, integer, uniqueIndex, index, real } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
-// SQLite schema mirroring the current local tables used by Program Builder
-
-export const exercises = sqliteTable('exercises', {
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  kind: text('kind'),
-  modality: text('modality'),
-  defaultRestSec: integer('default_rest_sec'),
-  bodyPart: text('body_part'),
-  createdAt: text('created_at'),
-});
+// Harmonized exercise catalog table (exercises -> exercise_catalog) with parity columns
+export const exerciseCatalog = sqliteTable(
+  'exercise_catalog',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug'),
+    kind: text('kind'),
+    modality: text('modality'),
+    bodyPart: text('body_part'),
+    defaultRestSec: integer('default_rest_sec'),
+    mediaThumbUrl: text('media_thumb_url'),
+    mediaVideoUrl: text('media_video_url'),
+    isPublic: integer('is_public').default(1),
+    ownerUserId: text('owner_user_id'),
+    createdAt: text('created_at'),
+    updatedAt: text('updated_at'),
+  },
+  (table) => ({
+    slugUnique: uniqueIndex('exercise_catalog_slug_uq').on(table.slug),
+    ownerIdx: index('idx_exercise_catalog_owner').on(table.ownerUserId),
+  })
+);
 
 export const splits = sqliteTable('splits', {
   id: text('id').primaryKey(),
@@ -51,7 +63,7 @@ export const splitDayAssignments = sqliteTable(
 // Convenience SQL helpers
 export const count = (expr: any) => sql<number>`count(${expr})`;
 
-export type ExerciseRowSqlite = typeof exercises.$inferSelect;
+export type ExerciseRowSqlite = typeof exerciseCatalog.$inferSelect;
 export type SplitRowSqlite = typeof splits.$inferSelect;
 export type SplitExerciseRowSqlite = typeof splitExercises.$inferSelect;
 export type SplitDayAssignmentRowSqlite = typeof splitDayAssignments.$inferSelect;

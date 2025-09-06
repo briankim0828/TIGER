@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, like, or } from 'drizzle-orm';
-import { exercises as exerciseCatalog } from '../sqlite/schema';
+import { exerciseCatalog } from '../sqlite/schema';
 import { generateUUID } from '../../utils/uuid';
 
 export class ExerciseQueries {

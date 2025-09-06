@@ -96,32 +96,44 @@ export class SimpleDataAccess {
         console.warn('SQLite migration (order_pos) may have failed or is unnecessary:', e);
       }
 
-      // Create a simple exercises table
-      await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS exercises (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          kind TEXT DEFAULT 'strength',
-          modality TEXT DEFAULT 'other',
-          default_rest_sec INTEGER,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-
-      // Lightweight migration: add body_part column if missing and backfill
+      // Harmonization migration (data loss acceptable): drop old tables referencing exercises
       try {
-        const cols = await this.db.getAllAsync(`PRAGMA table_info(exercises)`);
-        const hasBodyPart = Array.isArray(cols) && (cols as any[]).some((c) => c.name === 'body_part');
-        if (!hasBodyPart) {
-          await this.db.runAsync(`ALTER TABLE exercises ADD COLUMN body_part TEXT`);
-          // Backfill existing rows using modality as a reasonable default for grouping
-          await this.db.runAsync(`UPDATE exercises SET body_part = modality WHERE body_part IS NULL OR body_part = ''`);
+        const tables: any[] = await this.db.getAllAsync(`SELECT name FROM sqlite_master WHERE type='table'`);
+        const hasExercises = tables.some(t => t.name === 'exercises');
+        if (hasExercises) {
+          await this.db.execAsync(`DROP TABLE IF EXISTS split_exercises;`);
+          await this.db.execAsync(`DROP TABLE IF EXISTS workout_exercises;`);
+          await this.db.execAsync(`DROP TABLE IF EXISTS exercises;`);
+          console.log('[Harmonization] Dropped legacy exercises + dependent tables');
         }
       } catch (e) {
-        console.warn('SQLite migration (add body_part) may have failed or is unnecessary:', e);
+        console.warn('[Harmonization] Pre-drop check failed (safe if fresh):', e);
       }
 
-      // Create split_exercises junction table
+      // Create harmonized exercise_catalog table
+      await this.db.execAsync(`
+        CREATE TABLE IF NOT EXISTS exercise_catalog (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          slug TEXT UNIQUE,
+          kind TEXT DEFAULT 'strength',
+          modality TEXT DEFAULT 'other',
+          body_part TEXT,
+          default_rest_sec INTEGER,
+          media_thumb_url TEXT,
+          media_video_url TEXT,
+          is_public INTEGER DEFAULT 1,
+          owner_user_id TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS exercise_catalog_slug_uq ON exercise_catalog(slug);
+        CREATE INDEX IF NOT EXISTS idx_exercise_catalog_owner ON exercise_catalog(owner_user_id);
+      `);
+
+  // (Removed body_part backfill migration; new table includes column.)
+
+      // Create split_exercises referencing exercise_catalog
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS split_exercises (
           id TEXT PRIMARY KEY,
@@ -131,7 +143,7 @@ export class SimpleDataAccess {
           rest_sec_default INTEGER,
           notes TEXT,
           FOREIGN KEY (split_id) REFERENCES splits (id),
-          FOREIGN KEY (exercise_id) REFERENCES exercises (id)
+          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id)
         );
       `);
 
@@ -150,7 +162,7 @@ export class SimpleDataAccess {
         );
       `);
 
-      // Create workout_exercises table
+      // Create workout_exercises referencing exercise_catalog
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS workout_exercises (
           id TEXT PRIMARY KEY,
@@ -161,7 +173,7 @@ export class SimpleDataAccess {
           notes TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (session_id) REFERENCES workout_sessions (id),
-          FOREIGN KEY (exercise_id) REFERENCES exercises (id)
+          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id)
         );
       `);
 
@@ -334,7 +346,7 @@ export class SimpleDataAccess {
   async getAllExercises(): Promise<ExerciseRow[]> {
     try {
       const rows = await this.db.getAllAsync(
-        'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercises ORDER BY name'
+  'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercise_catalog ORDER BY name'
       );
       return (rows as any[]).map((r) => ({
         id: r.id as string,
@@ -353,7 +365,7 @@ export class SimpleDataAccess {
   async getExerciseById(exerciseId: string): Promise<ExerciseRow | undefined> {
     try {
       const r = await this.db.getFirstAsync(
-        'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercises WHERE id = ?',
+  'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercise_catalog WHERE id = ?',
         [exerciseId]
       );
       if (!r) return undefined;
@@ -377,7 +389,7 @@ export class SimpleDataAccess {
       const id = newUuid();
       // Ensure body_part column exists before insert
       await this.db.runAsync(
-        'INSERT INTO exercises (id, name, kind, modality, body_part) VALUES (?, ?, ?, ?, ?)',
+  'INSERT INTO exercise_catalog (id, name, kind, modality, body_part) VALUES (?, ?, ?, ?, ?)',
         [id, data.name, data.kind || 'strength', data.modality || 'other', data.bodyPart || null]
       );
       return { id, ...data };
@@ -395,10 +407,10 @@ export class SimpleDataAccess {
   async getSplitExercises(splitId: string): Promise<SplitExerciseJoin[]> {
     try {
   const rows = await this.db.getAllAsync(
-        `SELECT se.id as split_exercise_id, se.order_pos, se.rest_sec_default, se.notes,
-        e.id as exercise_id, e.name, e.kind, e.modality, e.default_rest_sec, e.body_part
-           FROM split_exercises se
-           JOIN exercises e ON e.id = se.exercise_id
+  `SELECT se.id as split_exercise_id, se.order_pos, se.rest_sec_default, se.notes,
+  e.id as exercise_id, e.name, e.kind, e.modality, e.default_rest_sec, e.body_part
+     FROM split_exercises se
+     JOIN exercise_catalog e ON e.id = se.exercise_id
           WHERE se.split_id = ?
           ORDER BY se.order_pos ASC`,
         [splitId]
@@ -605,7 +617,7 @@ export class SimpleDataAccess {
       // Map legacy body parts into this local model by placing them in the `modality` column
       // so ExerciseSelectionView groups them under BODY_PARTS.
       for (const item of INTERNAL_SEED_EXERCISES) {
-        const existing = await this.db.getFirstAsync('SELECT id FROM exercises WHERE name = ?', [item.name]);
+  const existing = await this.db.getFirstAsync('SELECT id FROM exercise_catalog WHERE name = ?', [item.name]);
         if (!existing) {
           await this.createExercise({ name: item.name, kind: item.kind ?? 'strength', modality: 'other', bodyPart: item.bodyPart });
         }

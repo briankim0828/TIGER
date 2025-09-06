@@ -80,7 +80,8 @@ export class WorkoutHistoryDataAccess {
 
   /** Clear all workout history for a user. */
   async deleteAllWorkouts(userId: string): Promise<number> {
-    const res = await this.sqlite.execAsync('DELETE FROM workout_sessions WHERE user_id = ?;', [userId]);
+  // execAsync does not support parameter binding; use runAsync for parametrized delete
+  await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
     // SQLite execAsync does not return affected rows; do a count after.
     const remain = await this.db
       .select({ c: sql<number>`COUNT(*)`.as('c') })

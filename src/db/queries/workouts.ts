@@ -2,8 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, desc, and } from 'drizzle-orm';
-import { workoutSessions, workoutExercises } from '../sqlite/schema';
-import { exercises as exerciseCatalog } from '../sqlite/schema';
+import { workoutSessions, workoutExercises, exerciseCatalog } from '../sqlite/schema';
 import { generateUUID } from '../../utils/uuid';
 
 export class WorkoutQueries {

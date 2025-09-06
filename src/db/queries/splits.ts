@@ -2,7 +2,7 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, desc } from 'drizzle-orm';
-import { splits, exercises as exerciseCatalog, splitExercises } from '../sqlite/schema';
+import { splits, exerciseCatalog, splitExercises } from '../sqlite/schema';
 import { generateUUID } from '../../utils/uuid';
 
 export class SplitQueries {

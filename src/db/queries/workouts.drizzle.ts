@@ -5,7 +5,7 @@ import {
   workoutSessions,
   workoutExercises,
   workoutSets,
-  exercises as exerciseTable,
+  exerciseCatalog as exerciseTable,
   splitExercises as splitExercisesTable,
   splits as splitsTable,
 } from '../sqlite/schema';

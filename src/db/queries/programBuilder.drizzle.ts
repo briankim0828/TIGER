@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
-import { exercises, splits, splitDayAssignments, splitExercises, count } from '../sqlite/schema';
+import { exerciseCatalog, splits, splitDayAssignments, splitExercises, count } from '../sqlite/schema';
 import { SimpleDataAccess } from './simple';
 import { newUuid } from '../../utils/ids';
 import type { ExerciseRow, SplitExerciseJoin, SplitWithCountRow, SplitRow } from './simple';
@@ -37,7 +37,7 @@ export class ProgramBuilderDataAccess {
   }
 
   async getAllExercises(): Promise<ExerciseRow[]> {
-    const rows = await this.db.select().from(exercises).orderBy(asc(exercises.name));
+  const rows = await this.db.select().from(exerciseCatalog).orderBy(asc(exerciseCatalog.name));
     // Map Drizzle row -> existing ExerciseRow shape (camelCase to legacy fields where needed)
     return rows.map((r) => ({
       id: r.id,
@@ -52,8 +52,8 @@ export class ProgramBuilderDataAccess {
   async getExerciseById(exerciseId: string): Promise<ExerciseRow | undefined> {
     const rows = await this.db
       .select()
-      .from(exercises)
-      .where(eq(exercises.id, exerciseId))
+  .from(exerciseCatalog)
+  .where(eq(exerciseCatalog.id, exerciseId))
       .limit(1);
     const r = rows[0];
     if (!r) return undefined;
@@ -117,15 +117,15 @@ export class ProgramBuilderDataAccess {
         order_pos: splitExercises.orderPos,
         rest_sec_default: splitExercises.restSecDefault,
         notes: splitExercises.notes,
-        exercise_id: exercises.id,
-        name: exercises.name,
-        kind: exercises.kind,
-        modality: exercises.modality,
-        default_rest_sec: exercises.defaultRestSec,
-        body_part: exercises.bodyPart,
+        exercise_id: exerciseCatalog.id,
+        name: exerciseCatalog.name,
+        kind: exerciseCatalog.kind,
+        modality: exerciseCatalog.modality,
+        default_rest_sec: exerciseCatalog.defaultRestSec,
+        body_part: exerciseCatalog.bodyPart,
       })
       .from(splitExercises)
-      .innerJoin(exercises, eq(splitExercises.exerciseId, exercises.id))
+      .innerJoin(exerciseCatalog, eq(splitExercises.exerciseId, exerciseCatalog.id))
       .where(eq(splitExercises.splitId, splitId))
       .orderBy(asc(splitExercises.orderPos));
 
@@ -285,7 +285,7 @@ export class ProgramBuilderDataAccess {
 
   async createExercise(data: { name: string; kind?: string; modality?: string; bodyPart?: string }) {
     const id = newUuid();
-    await this.db.insert(exercises).values({
+  await this.db.insert(exerciseCatalog).values({
       id,
       name: data.name,
       kind: data.kind ?? 'strength',
