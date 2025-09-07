@@ -11,9 +11,13 @@ import { relations, sql } from "drizzle-orm";
 export const sessionState = pgEnum("session_state", ["planned","active","completed","discarded"]);
 export const mediaType = pgEnum("media_type", ["photo","video"]);
 export const goalType = pgEnum("goal_type", ["max_weight","est_1rm","volume","reps_at_weight"]);
-export const exerciseKind = pgEnum("exercise_kind", ["strength","cardio","mobility","other"]);
+// Consolidated modality enum (replaces prior separate exercise_kind + modality concepts)
 export const modality = pgEnum("modality", [
-  "barbell","dumbbell","machine","bodyweight","cable","kettlebell","band","cardio","other"
+  "barbell","dumbbell","kettlebell","machine","smith","cable","bodyweight"
+]);
+// Body part enum (broad grouping – taxonomy tables may supersede later)
+export const bodyPartEnum = pgEnum("body_part", [
+  "chest","back","leg","shoulder","triceps","biceps","core","forearm","cardio"
 ]);
 export const muscleRole = pgEnum("muscle_role", ["primary","secondary","stabilizer"]);
 export const unitSystem = pgEnum("unit_system", ["metric","imperial"]);
@@ -43,11 +47,10 @@ export const exerciseCatalog = pgTable("exercise_catalog", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").unique(),
-  kind: exerciseKind("kind").notNull().default("strength"),
-  modality: modality("modality").notNull().default("other"),
-  // UI grouping helper (parity with current SQLite Program Builder). Optional for now; can later
-  // be enforced via an enum or derived from taxonomy (exercise_muscles/muscle_groups).
-  bodyPart: text("body_part"),
+  // Single modality dimension (combines previous kind + modality semantics)
+  modality: modality("modality").notNull(),
+  // Broad body part grouping – optional; future taxonomy may replace
+  bodyPart: bodyPartEnum("body_part"),
   defaultRestSec: integer("default_rest_sec"),
   mediaThumbUrl: text("media_thumb_url"),
   mediaVideoUrl: text("media_video_url"),

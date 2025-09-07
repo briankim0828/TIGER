@@ -7,8 +7,8 @@ export const SYNC_TABLES = [
   'splits',
   'split_day_assignments',
   'split_exercises',
-  // Exercise catalog intentionally deferred until local schema aligned (naming & columns)
-  // 'exercise_catalog',
+  // Exercise catalog now aligned & seeded
+  'exercise_catalog',
   // Active workout flow (subset; columns not yet fully aligned, see Phase B notes)
   'workout_sessions',
   'workout_exercises',
@@ -22,4 +22,4 @@ export type SyncTable = typeof SYNC_TABLES[number];
 // - exercise_muscles, muscle_groups, user_favorite_exercises, user_exercise_prefs
 // - split_exercise_sets (template sets) // not yet used by UI
 // - session_media, user_exercise_goals, milestone_events
-// - exercise_catalog (deferred until local table/column alignment)
+// - taxonomy tables pending: exercise_muscles, muscle_groups, etc.

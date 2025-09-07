@@ -56,11 +56,10 @@ export class WorkoutQueries {
           id: workoutExercises.id,
           exerciseId: workoutExercises.exerciseId,
           exerciseName: exerciseCatalog.name,
-          kind: exerciseCatalog.kind,
           modality: exerciseCatalog.modality,
           orderPos: workoutExercises.orderPos,
           restSecDefault: workoutExercises.restSecDefault,
-          notes: workoutExercises.notes
+          note: (workoutExercises as any).note
         })
         .from(workoutExercises)
         .innerJoin(exerciseCatalog, eq(workoutExercises.exerciseId, exerciseCatalog.id))
@@ -110,7 +109,7 @@ export class WorkoutQueries {
         .set({
           state: 'completed',
           finishedAt: new Date().toISOString(),
-          notes: note,
+          note: note,
           updatedAt: new Date().toISOString()
         })
         .where(eq(workoutSessions.id, sessionId))
@@ -131,7 +130,7 @@ export class WorkoutQueries {
     exerciseId: string;
     orderPos: number;
     restSecDefault?: number;
-    notes?: string;
+  note?: string;
   }) {
     try {
       const result = await this.db
@@ -142,7 +141,7 @@ export class WorkoutQueries {
           exerciseId: data.exerciseId,
           orderPos: data.orderPos,
           restSecDefault: data.restSecDefault,
-          notes: data.notes
+          note: data.note
         })
         .returning();
       
@@ -159,7 +158,7 @@ export class WorkoutQueries {
   async updateWorkoutExercise(workoutExerciseId: string, data: {
     orderPos?: number;
     restSecDefault?: number;
-    notes?: string;
+  note?: string;
   }) {
     try {
       const result = await this.db

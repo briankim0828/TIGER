@@ -12,7 +12,7 @@ import { useLiveSessionSnapshot } from '../db/live/workouts';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
-type RenderSet = { id: string; weight: number; reps: number; completed: boolean };
+type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
 
 interface ActiveWorkoutModalProps {
@@ -42,9 +42,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       name: ex.exercise.name,
       sets: (snapshot.setsByExercise[ex.sessionExerciseId] || []).map((s) => ({
         id: s.id,
-        weight: (s.weight as number | null | undefined) ? Number(s.weight) : 0,
+        weightKg: (s.weightKg as number | null | undefined) ? Number(s.weightKg) : 0,
         reps: s.reps ?? 0,
-        completed: (s.completed ?? 0) === 1,
+        isCompleted: !!(s as any).isCompleted || (s as any).isCompleted === 1,
       })),
     }));
   }, [snapshot]);
@@ -230,19 +230,19 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, []);
 
   // Create state for TextInput temporary values
-  const [localInputValues, setLocalInputValues] = useState<{[key: string]: {weight: string, reps: string}}>({});
+  const [localInputValues, setLocalInputValues] = useState<{[key: string]: {weightKg: string, reps: string}}>({});
 
   // Initialize localInputValues when exercises change
   useEffect(() => {
     if (currentExercises.length > 0) {
-      const newValues: {[key: string]: {weight: string, reps: string}} = {};
+  const newValues: {[key: string]: {weightKg: string, reps: string}} = {};
       
       currentExercises.forEach((exercise, exerciseIndex) => {
         if (exercise.sets) {
           exercise.sets.forEach((set, setIndex) => {
             const key = `${exercise.id}-${set.id || setIndex}`;
             newValues[key] = {
-              weight: set.weight > 0 ? String(set.weight) : '',
+              weightKg: set.weightKg > 0 ? String(set.weightKg) : '',
               reps: set.reps > 0 ? String(set.reps) : ''
             };
           });
@@ -254,7 +254,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [currentExercises]);
 
   // Handle weight input change locally (no update to context)
-  const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weight' | 'reps', value: string) => {
+  const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weightKg' | 'reps', value: string) => {
     setLocalInputValues(prev => ({
       ...prev,
       [setKey]: {
@@ -265,7 +265,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, []);
 
   // Handle reps input change locally (no update to context)
-  const handleSetFieldBlur = useCallback((exerciseId: string, setIndex: number, field: 'weight' | 'reps') => {
+  const handleSetFieldBlur = useCallback((exerciseId: string, setIndex: number, field: 'weightKg' | 'reps') => {
     const ex = currentExercises.find((e) => e.id === exerciseId);
     if (!ex) return;
     const set = ex.sets[setIndex];
@@ -288,10 +288,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
     const currentValue = localInputValues[setKey]?.[field] || '';
-    const original = set[field as 'weight' | 'reps'] || 0;
+  const original = set[field as 'weightKg' | 'reps'] || 0;
     const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
     if (next !== original) {
-    updateSet(set.id, { [field]: next } as any).catch(console.error);
+  updateSet(set.id, { [field]: next } as any).catch(console.error);
     }
   }, [currentExercises, localInputValues, updateSet, toast, sessionId]);
 
@@ -301,7 +301,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!ex) return;
     const s = ex.sets[setIndex];
     if (!s) return;
-    updateSet(s.id, { completed: s.completed ? 0 : 1 } as any).catch(console.error);
+  updateSet(s.id, { isCompleted: !s.isCompleted } as any).catch(console.error);
   }, [currentExercises, updateSet, sessionId]);
   
   // Handle Add Set button click
@@ -391,24 +391,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     
     const setKey = `${exerciseId}-${set.id || setIndex}`;
-    const localValue = localInputValues[setKey] || { weight: '', reps: '' };
+  const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
 
     return (
       <HStack key={set.id || setIndex} alignItems="center" space="sm" my="$1" px="$1">
         <Pressable onPress={() => handleToggleSetCompletion(exerciseId, setIndex)} p="$2">
           <MaterialCommunityIcons
-            name={set.completed ? "check-circle" : "checkbox-blank-circle-outline"}
+            name={set.isCompleted ? "check-circle" : "checkbox-blank-circle-outline"}
             size={24}
-            color={set.completed ? "#22c55e" : "#71717a"}
+            color={set.isCompleted ? "#22c55e" : "#71717a"}
           />
         </Pressable>
         <Text w="$10" textAlign="center" color="$textLight400" fontWeight="$medium">Set {setIndex + 1}</Text>
         <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
           <InputField
-            placeholder="Weight"
-            value={localValue.weight}
-            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weight', text)}
-            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weight')}
+            placeholder="Weight (kg)"
+            value={localValue.weightKg}
+            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
+            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
             keyboardType="numeric"
             color="$textLight50"
             placeholderTextColor="$textLight600"

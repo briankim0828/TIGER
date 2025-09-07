@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
   "typecheck": "tsc --noEmit",
+  "db:reset:sqlite": "tsx scripts/resetLocalSqlite.ts",
+  "db:seed:remote:catalog": "echo 'Run this with psql: psql $DATABASE_URL -f sql/seed/exercise_catalog_public_seed.sql'",
   "validate": "npm run -s typecheck",
   "postinstall": "patch-package"
   },

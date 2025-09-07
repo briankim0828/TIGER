@@ -6,8 +6,7 @@ import { useDatabase } from '../db/queries';
 interface Exercise {
   id: string;
   name: string;
-  kind: string;
-  modality: string;
+  modality: string | null;
 }
 
 export function DatabaseDemo() {
@@ -75,7 +74,7 @@ export function DatabaseDemo() {
         renderItem={({ item }) => (
           <View style={styles.item}>
             <Text style={styles.itemName}>{item.name}</Text>
-            <Text style={styles.itemDetails}>{item.kind} • {item.modality}</Text>
+            <Text style={styles.itemDetails}>{item.modality || '—'}</Text>
           </View>
         )}
         style={styles.list}

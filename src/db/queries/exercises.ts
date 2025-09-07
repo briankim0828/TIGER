@@ -3,6 +3,8 @@ import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { eq, like, or } from 'drizzle-orm';
 import { exerciseCatalog } from '../sqlite/schema';
+import { normalizeExerciseInput } from '../catalog/validation';
+import { ensureSlug } from '../../utils/slug';
 import { generateUUID } from '../../utils/uuid';
 
 export class ExerciseQueries {
@@ -30,19 +32,6 @@ export class ExerciseQueries {
   /**
    * Get exercises by kind (strength, cardio, etc.)
    */
-  async getExercisesByKind(kind: string) {
-    try {
-      return await this.db
-        .select()
-        .from(exerciseCatalog)
-  .where(eq(exerciseCatalog.kind, kind))
-        .orderBy(exerciseCatalog.name);
-    } catch (error) {
-      console.error('Error fetching exercises by kind:', error);
-      throw error;
-    }
-  }
-
   /**
    * Get exercises by modality (barbell, dumbbell, etc.)
    */
@@ -105,21 +94,24 @@ export class ExerciseQueries {
    */
   async createExercise(data: {
     name: string;
-    kind: string;
-    modality: string;
+    modality?: string;
+    bodyPart?: string | null;
     slug?: string;
     defaultRestSec?: number;
   }) {
     try {
-      const result = await this.db
+      const normalized = normalizeExerciseInput(data);
+    const result = await this.db
         .insert(exerciseCatalog)
         .values({
           id: generateUUID(),
-          name: data.name,
-          kind: data.kind,
-          modality: data.modality,
-          defaultRestSec: data.defaultRestSec,
-          createdAt: new Date().toISOString()
+          name: normalized.name,
+          modality: normalized.modality,
+          defaultRestSec: normalized.defaultRestSec,
+          bodyPart: normalized.bodyPart,
+      slug: ensureSlug({ slug: normalized.slug, name: normalized.name, isPublic: true }),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
         .returning();
       
@@ -135,14 +127,27 @@ export class ExerciseQueries {
    */
   async updateExercise(exerciseId: string, data: {
     name?: string;
-    kind?: string;
     modality?: string;
     defaultRestSec?: number;
+    bodyPart?: string | null;
   }) {
     try {
+      const merged = normalizeExerciseInput({
+        name: data.name ?? '',
+        modality: data.modality,
+        defaultRestSec: data.defaultRestSec,
+        bodyPart: data.bodyPart,
+        slug: undefined,
+      });
+      // Build partial set (avoid overwriting name if not provided)
+      const toSet: any = { updatedAt: new Date().toISOString() };
+      if (data.name) toSet.name = merged.name;
+      if (data.modality) toSet.modality = merged.modality;
+      if (data.defaultRestSec !== undefined) toSet.defaultRestSec = merged.defaultRestSec;
+      if (data.bodyPart !== undefined) toSet.bodyPart = merged.bodyPart;
       const result = await this.db
         .update(exerciseCatalog)
-        .set(data)
+        .set(toSet)
         .where(eq(exerciseCatalog.id, exerciseId))
         .returning();
       
@@ -183,25 +188,6 @@ export class ExerciseQueries {
         .limit(limit);
     } catch (error) {
       console.error('Error fetching popular exercises:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get unique exercise kinds
-   */
-  async getExerciseKinds() {
-    try {
-      const result = await this.db
-        // expo-sqlite driver supports selectDistinct via select().distinct
-        .select({ kind: exerciseCatalog.kind })
-        .from(exerciseCatalog)
-        .groupBy(exerciseCatalog.kind)
-        .orderBy(exerciseCatalog.kind);
-      
-      return result.map(row => row.kind);
-    } catch (error) {
-      console.error('Error fetching exercise kinds:', error);
       throw error;
     }
   }

@@ -2,14 +2,14 @@
 import * as SQLite from 'expo-sqlite';
 import { newUuid } from '../../utils/ids';
 // Legacy default exercise catalog removed; provide a minimal internal seed set.
-const INTERNAL_SEED_EXERCISES: Array<{ name: string; bodyPart: string; kind?: string }> = [
-  { name: 'Flat Bench Press', bodyPart: 'Chest', kind: 'strength' },
-  { name: 'Barbell Row', bodyPart: 'Back', kind: 'strength' },
-  { name: 'Squats', bodyPart: 'Legs', kind: 'strength' },
-  { name: 'Bicep Curls', bodyPart: 'Arms', kind: 'strength' },
-  { name: 'Dumbbell Shoulder Press', bodyPart: 'Shoulders', kind: 'strength' },
-  { name: 'Crunches', bodyPart: 'Core', kind: 'strength' },
-  { name: 'Treadmill', bodyPart: 'Cardio', kind: 'cardio' },
+const INTERNAL_SEED_EXERCISES: Array<{ name: string; bodyPart: string; modality?: string }> = [
+  { name: 'Flat Bench Press', bodyPart: 'chest', modality: 'barbell' },
+  { name: 'Barbell Row', bodyPart: 'back', modality: 'barbell' },
+  { name: 'Squats', bodyPart: 'leg', modality: 'barbell' },
+  { name: 'Bicep Curls', bodyPart: 'biceps', modality: 'dumbbell' },
+  { name: 'Dumbbell Shoulder Press', bodyPart: 'shoulder', modality: 'dumbbell' },
+  { name: 'Crunches', bodyPart: 'core', modality: 'bodyweight' },
+  { name: 'Treadmill', bodyPart: 'cardio', modality: 'bodyweight' },
 ];
 
 // Typed result shapes for this lightweight SQLite layer
@@ -32,7 +32,6 @@ export type SplitWithCountRow = SplitRow & {
 export type ExerciseRow = {
   id: string;
   name: string;
-  kind: string | null;
   modality: string | null;
   default_rest_sec: number | null;
   bodyPart: string | null;
@@ -116,8 +115,7 @@ export class SimpleDataAccess {
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           slug TEXT UNIQUE,
-          kind TEXT DEFAULT 'strength',
-          modality TEXT DEFAULT 'other',
+          modality TEXT,
           body_part TEXT,
           default_rest_sec INTEGER,
           media_thumb_url TEXT,
@@ -346,12 +344,11 @@ export class SimpleDataAccess {
   async getAllExercises(): Promise<ExerciseRow[]> {
     try {
       const rows = await this.db.getAllAsync(
-  'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercise_catalog ORDER BY name'
+  'SELECT id, name, modality, default_rest_sec, body_part FROM exercise_catalog ORDER BY name'
       );
       return (rows as any[]).map((r) => ({
         id: r.id as string,
         name: r.name as string,
-        kind: (r.kind ?? null) as string | null,
         modality: (r.modality ?? null) as string | null,
         default_rest_sec: (r.default_rest_sec ?? null) as number | null,
         bodyPart: (r.body_part ?? null) as string | null,
@@ -365,14 +362,13 @@ export class SimpleDataAccess {
   async getExerciseById(exerciseId: string): Promise<ExerciseRow | undefined> {
     try {
       const r = await this.db.getFirstAsync(
-  'SELECT id, name, kind, modality, default_rest_sec, body_part FROM exercise_catalog WHERE id = ?',
+  'SELECT id, name, modality, default_rest_sec, body_part FROM exercise_catalog WHERE id = ?',
         [exerciseId]
       );
       if (!r) return undefined;
       const row: ExerciseRow = {
         id: (r as any).id,
         name: (r as any).name,
-        kind: ((r as any).kind ?? null),
         modality: ((r as any).modality ?? null),
         default_rest_sec: ((r as any).default_rest_sec ?? null),
         bodyPart: ((r as any).body_part ?? null),
@@ -384,15 +380,18 @@ export class SimpleDataAccess {
     }
   }
 
-  async createExercise(data: { name: string; kind?: string; modality?: string; bodyPart?: string }) {
+  async createExercise(data: { name: string; modality?: string; bodyPart?: string }) {
     try {
       const id = newUuid();
-      // Ensure body_part column exists before insert
+      const { normalizeExerciseInput } = await import('../catalog/validation');
+      const { ensureSlug } = await import('../../utils/slug');
+      const normalized = normalizeExerciseInput({ name: data.name, modality: data.modality, bodyPart: data.bodyPart });
+      const slug = ensureSlug({ name: normalized.name, isPublic: true });
       await this.db.runAsync(
-  'INSERT INTO exercise_catalog (id, name, kind, modality, body_part) VALUES (?, ?, ?, ?, ?)',
-        [id, data.name, data.kind || 'strength', data.modality || 'other', data.bodyPart || null]
+        'INSERT INTO exercise_catalog (id, name, slug, modality, body_part) VALUES (?, ?, ?, ?, ?)',
+        [id, normalized.name, slug, normalized.modality, normalized.bodyPart || null]
       );
-      return { id, ...data };
+      return { id, name: normalized.name, modality: normalized.modality, bodyPart: normalized.bodyPart };
     } catch (error) {
       console.error('Error creating exercise:', error);
       throw error;
@@ -408,7 +407,7 @@ export class SimpleDataAccess {
     try {
   const rows = await this.db.getAllAsync(
   `SELECT se.id as split_exercise_id, se.order_pos, se.rest_sec_default, se.notes,
-  e.id as exercise_id, e.name, e.kind, e.modality, e.default_rest_sec, e.body_part
+  e.id as exercise_id, e.name, e.modality, e.default_rest_sec, e.body_part
      FROM split_exercises se
      JOIN exercise_catalog e ON e.id = se.exercise_id
           WHERE se.split_id = ?
@@ -423,7 +422,6 @@ export class SimpleDataAccess {
         exercise: {
           id: r.exercise_id as string,
           name: r.name as string,
-          kind: (r.kind ?? null) as string | null,
           modality: (r.modality ?? null) as string | null,
           default_rest_sec: (r.default_rest_sec ?? null) as number | null,
       bodyPart: (r.body_part ?? null) as string | null,
@@ -619,7 +617,7 @@ export class SimpleDataAccess {
       for (const item of INTERNAL_SEED_EXERCISES) {
   const existing = await this.db.getFirstAsync('SELECT id FROM exercise_catalog WHERE name = ?', [item.name]);
         if (!existing) {
-          await this.createExercise({ name: item.name, kind: item.kind ?? 'strength', modality: 'other', bodyPart: item.bodyPart });
+          await this.createExercise({ name: item.name, modality: item.modality || undefined, bodyPart: item.bodyPart });
         }
       }
 

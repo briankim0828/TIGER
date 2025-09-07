@@ -15,11 +15,11 @@ export interface WorkoutContextType {
   endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled' }) => Promise<boolean>;
   addSet: (
     sessionExerciseId: string,
-    data: { weight?: number | null; reps?: number | null; rpe?: number | null; notes?: string | null }
+    data: { weightKg?: number | null; reps?: number | null; durationSec?: number | null; distanceM?: number | null; restSec?: number | null; isWarmup?: boolean | null }
   ) => Promise<WorkoutSetRow>;
   updateSet: (
     setId: string,
-    patch: Partial<Pick<WorkoutSetRow, 'weight' | 'reps' | 'rpe' | 'notes' | 'completed' | 'startedAt' | 'completedAt'>>
+    patch: Partial<Pick<WorkoutSetRow, 'weightKg' | 'reps' | 'durationSec' | 'distanceM' | 'restSec' | 'isWarmup' | 'isCompleted'>>
   ) => Promise<boolean>;
   deleteSet: (setId: string) => Promise<boolean>;
   addExerciseToSession: (sessionId: string, exerciseId: string) => Promise<{ id: string }>;

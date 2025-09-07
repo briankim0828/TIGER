@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SQLite from 'expo-sqlite';
 import { SimpleDataAccess } from '../db/queries/simple';
+import { seedExerciseCatalog } from '../db/seed/exerciseCatalogSeed';
 
 interface ElectricContextType {
   db: SQLite.SQLiteDatabase | null;
@@ -60,8 +61,8 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
         const dataAccess = new SimpleDataAccess(database);
         await dataAccess.initializeTables();
         
-        // Seed sample data
-        await dataAccess.seedSampleData();
+  // Seed canonical exercise catalog (idempotent)
+  await seedExerciseCatalog(database, { log: true });
         
         setIsInitialized(true);
   // Local-only live capability is available immediately; real Electric wiring can replace this later.

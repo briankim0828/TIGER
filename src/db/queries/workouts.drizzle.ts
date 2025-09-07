@@ -17,14 +17,13 @@ export type WorkoutExerciseRow = typeof workoutExercises.$inferSelect;
 export type WorkoutSetRow = typeof workoutSets.$inferSelect;
 
 export type SessionExerciseJoin = {
-  sessionExerciseId: string;
+  sessionExerciseId: string; // keep legacy field name for UI compatibility
   orderPos: number;
   restSecDefault: number | null;
-  notes: string | null;
+  note: string | null; // renamed in schema; expose as note
   exercise: {
     id: string;
     name: string;
-    kind: string | null;
     modality: string | null;
     default_rest_sec: number | null;
     bodyPart: string | null;
@@ -74,16 +73,15 @@ export class WorkoutsDataAccess {
   }
 
   async getSessionExercises(sessionId: string): Promise<SessionExerciseJoin[]> {
-  console.debug('[WorkoutsDA] getSessionExercises:', { sessionId });
+    console.debug('[WorkoutsDA] getSessionExercises:', { sessionId });
     const rows = await this.db
       .select({
         session_exercise_id: workoutExercises.id,
         order_pos: workoutExercises.orderPos,
         rest_sec_default: workoutExercises.restSecDefault,
-        notes: workoutExercises.notes,
+        note: workoutExercises.note,
         exercise_id: exerciseTable.id,
         name: exerciseTable.name,
-        kind: exerciseTable.kind,
         modality: exerciseTable.modality,
         default_rest_sec: exerciseTable.defaultRestSec,
         body_part: exerciseTable.bodyPart,
@@ -93,30 +91,29 @@ export class WorkoutsDataAccess {
       .where(eq(workoutExercises.sessionId, sessionId))
       .orderBy(asc(workoutExercises.orderPos));
 
-  const mapped = rows.map((r) => ({
+    const mapped = rows.map((r) => ({
       sessionExerciseId: r.session_exercise_id as string,
       orderPos: typeof r.order_pos === 'string' ? parseInt(r.order_pos as unknown as string, 10) : (r.order_pos as number),
       restSecDefault: (r.rest_sec_default ?? null) as number | null,
-      notes: (r.notes ?? null) as string | null,
+      note: (r.note ?? null) as string | null,
       exercise: {
         id: r.exercise_id as string,
         name: r.name as string,
-        kind: (r.kind ?? null) as string | null,
         modality: (r.modality ?? null) as string | null,
         default_rest_sec: (r.default_rest_sec ?? null) as number | null,
         bodyPart: (r.body_part ?? null) as string | null,
       },
     }));
-  console.debug('[WorkoutsDA] getSessionExercises result:', { count: mapped.length });
-  return mapped;
+    console.debug('[WorkoutsDA] getSessionExercises result:', { count: mapped.length });
+    return mapped;
   }
 
   async getSetsForSessionExercise(sessionExerciseId: string): Promise<WorkoutSetRow[]> {
     const rows = await this.db
       .select()
       .from(workoutSets)
-      .where(eq(workoutSets.sessionExerciseId, sessionExerciseId))
-      .orderBy(asc(workoutSets.setIndex));
+      .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+      .orderBy(asc(workoutSets.setOrder));
     return rows as WorkoutSetRow[];
   }
 
@@ -174,7 +171,7 @@ export class WorkoutsDataAccess {
 
   async addSet(
     sessionExerciseId: string,
-    data: { weight?: number | null; reps?: number | null; rpe?: number | null; notes?: string | null }
+    data: { weightKg?: number | null; reps?: number | null; durationSec?: number | null; distanceM?: number | null; restSec?: number | null; isWarmup?: boolean | null }
   ): Promise<WorkoutSetRow> {
     // Retry a few times in case of a transient UNIQUE violation from concurrent inserts.
     const maxAttempts = 5;
@@ -185,15 +182,17 @@ export class WorkoutsDataAccess {
           const id = newUuid();
           // Atomic compute of next set_index using INSERT ... SELECT with aggregate
           await this.sqlite.runAsync(
-            `INSERT INTO workout_sets (id, session_exercise_id, set_index, weight, reps, rpe, notes)
-             SELECT ?, ?, COALESCE(MAX(set_index) + 1, 0), ?, ?, ?, ?
-             FROM workout_sets WHERE session_exercise_id = ?;`,
+            `INSERT INTO workout_sets (id, workout_exercise_id, set_order, is_warmup, weight_kg, reps, duration_sec, distance_m, rest_sec, is_completed)
+             SELECT ?, ?, COALESCE(MAX(set_order) + 1, 0), ?, ?, ?, ?, ?, ?, 0
+             FROM workout_sets WHERE workout_exercise_id = ?;`,
             id,
             sessionExerciseId,
-            data.weight ?? null,
+            (data.isWarmup ? 1 : 0),
+            data.weightKg ?? null,
             data.reps ?? null,
-            data.rpe ?? null,
-            data.notes ?? null,
+            data.durationSec ?? null,
+            data.distanceM ?? null,
+            data.restSec ?? null,
             sessionExerciseId
           );
           const rows = await this.db.select().from(workoutSets).where(eq(workoutSets.id, id)).limit(1);
@@ -212,27 +211,27 @@ export class WorkoutsDataAccess {
     throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   }
 
-  async updateSet(setId: string, patch: Partial<Pick<WorkoutSetRow, 'weight' | 'reps' | 'rpe' | 'notes' | 'completed' | 'startedAt' | 'completedAt'>>): Promise<boolean> {
+  async updateSet(setId: string, patch: Partial<Pick<WorkoutSetRow, 'weightKg' | 'reps' | 'durationSec' | 'distanceM' | 'restSec' | 'isWarmup' | 'isCompleted'>>): Promise<boolean> {
     await this.db.update(workoutSets).set(patch).where(eq(workoutSets.id, setId)).run();
-  this.bumpTables?.(['workout_sets']);
+    this.bumpTables?.(['workout_sets']);
     return true;
   }
 
   async deleteSet(setId: string): Promise<boolean> {
     return this.inTx(async () => {
       // Find owning session_exercise_id
-      const row = await this.db.select().from(workoutSets).where(eq(workoutSets.id, setId)).limit(1);
-      const sessionExerciseId = row[0]?.sessionExerciseId as string | undefined;
+  const row = await this.db.select().from(workoutSets).where(eq(workoutSets.id, setId)).limit(1);
+  const sessionExerciseId = row[0]?.workoutExerciseId as string | undefined;
       await this.db.delete(workoutSets).where(eq(workoutSets.id, setId)).run();
       if (sessionExerciseId) {
         const sets = await this.db
           .select({ id: workoutSets.id })
           .from(workoutSets)
-          .where(eq(workoutSets.sessionExerciseId, sessionExerciseId))
-          .orderBy(asc(workoutSets.setIndex));
+          .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+          .orderBy(asc(workoutSets.setOrder));
         let pos = 0;
         for (const s of sets) {
-          await this.db.update(workoutSets).set({ setIndex: pos }).where(eq(workoutSets.id, s.id)).run();
+          await this.db.update(workoutSets).set({ setOrder: pos }).where(eq(workoutSets.id, s.id)).run();
           pos += 1;
         }
       }
@@ -286,7 +285,7 @@ export class WorkoutsDataAccess {
         .where(eq(workoutExercises.sessionId, sessionId));
       // Delete sets for each exercise
       for (const ex of exRows) {
-        await this.db.delete(workoutSets).where(eq(workoutSets.sessionExerciseId, ex.id as any)).run();
+        await this.db.delete(workoutSets).where(eq(workoutSets.workoutExerciseId, ex.id as any)).run();
       }
       // Delete exercises
       await this.db.delete(workoutExercises).where(eq(workoutExercises.sessionId, sessionId)).run();
@@ -328,7 +327,7 @@ export class WorkoutsDataAccess {
   async removeExerciseFromSession(sessionExerciseId: string): Promise<boolean> {
     return this.inTx(async () => {
       // Delete child sets first (no FK cascades guaranteed)
-      await this.db.delete(workoutSets).where(eq(workoutSets.sessionExerciseId, sessionExerciseId)).run();
+  await this.db.delete(workoutSets).where(eq(workoutSets.workoutExerciseId, sessionExerciseId)).run();
       // Find session id and remove the exercise row
       const row = await this.db.select().from(workoutExercises).where(eq(workoutExercises.id, sessionExerciseId)).limit(1);
       const sessionId = row[0]?.sessionId as string | undefined;

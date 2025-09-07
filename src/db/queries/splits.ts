@@ -55,7 +55,6 @@ export class SplitQueries {
         .select({
           id: exerciseCatalog.id,
           name: exerciseCatalog.name,
-          kind: exerciseCatalog.kind,
           modality: exerciseCatalog.modality,
           splitExerciseId: splitExercises.id,
           orderPos: splitExercises.orderPos,

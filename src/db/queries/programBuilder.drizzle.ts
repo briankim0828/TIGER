@@ -2,6 +2,8 @@ import * as SQLite from 'expo-sqlite';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { exerciseCatalog, splits, splitDayAssignments, splitExercises, count } from '../sqlite/schema';
+import { normalizeExerciseInput } from '../catalog/validation';
+import { ensureSlug } from '../../utils/slug';
 import { SimpleDataAccess } from './simple';
 import { newUuid } from '../../utils/ids';
 import type { ExerciseRow, SplitExerciseJoin, SplitWithCountRow, SplitRow } from './simple';
@@ -42,7 +44,6 @@ export class ProgramBuilderDataAccess {
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      kind: r.kind ?? null,
       modality: r.modality ?? null,
       default_rest_sec: (r.defaultRestSec ?? null) as number | null,
       bodyPart: r.bodyPart ?? null,
@@ -60,7 +61,6 @@ export class ProgramBuilderDataAccess {
     return {
       id: r.id,
       name: r.name,
-      kind: r.kind ?? null,
       modality: r.modality ?? null,
       default_rest_sec: (r.defaultRestSec ?? null) as number | null,
       bodyPart: r.bodyPart ?? null,
@@ -119,7 +119,6 @@ export class ProgramBuilderDataAccess {
         notes: splitExercises.notes,
         exercise_id: exerciseCatalog.id,
         name: exerciseCatalog.name,
-        kind: exerciseCatalog.kind,
         modality: exerciseCatalog.modality,
         default_rest_sec: exerciseCatalog.defaultRestSec,
         body_part: exerciseCatalog.bodyPart,
@@ -137,7 +136,6 @@ export class ProgramBuilderDataAccess {
       exercise: {
         id: r.exercise_id,
         name: r.name,
-        kind: (r.kind ?? null) as string | null,
         modality: (r.modality ?? null) as string | null,
         default_rest_sec: (r.default_rest_sec ?? null) as number | null,
         bodyPart: (r.body_part ?? null) as string | null,
@@ -145,12 +143,12 @@ export class ProgramBuilderDataAccess {
     }));
   }
 
-  async getDayAssignments(userId: string): Promise<Array<{ weekday: string; split_id: string }>> {
+  async getDayAssignments(userId: string): Promise<Array<{ weekday: number; split_id: string }>> {
     const rows = await this.db
       .select({ weekday: splitDayAssignments.weekday, split_id: splitDayAssignments.splitId })
       .from(splitDayAssignments)
       .where(eq(splitDayAssignments.userId, userId));
-    return rows as Array<{ weekday: string; split_id: string }>;
+  return rows as Array<{ weekday: number; split_id: string }>;
   }
 
   // Delegate remaining operations (writes and any reads not yet migrated) to SimpleDataAccess
@@ -173,15 +171,9 @@ export class ProgramBuilderDataAccess {
   }
 
   async updateSplit(data: { id: string; name?: string; color?: string; isActive?: boolean; orderPos?: number }) {
-    const fields: Partial<{
-      name: string;
-      color: string | null;
-      isActive: number | null;
-      updatedAt: string;
-      orderPos: number;
-    }> = {};
+  const fields: any = {};
     if (typeof data.name === 'string') fields.name = data.name;
-    if (typeof data.color === 'string') fields.color = data.color;
+  if (typeof data.color === 'string') fields.color = data.color as any;
     if (typeof data.isActive === 'boolean') fields.isActive = data.isActive ? 1 : 0;
   if (typeof data.orderPos === 'number') fields.orderPos = data.orderPos;
     fields.updatedAt = sql`CURRENT_TIMESTAMP` as unknown as string;
@@ -198,14 +190,19 @@ export class ProgramBuilderDataAccess {
   }
 
   async setDayAssignment(userId: string, weekday: string, splitId: string | null) {
+    // Normalize and validate weekday (expect numeric 0..6)
+    const wNum = typeof weekday === 'string' ? parseInt(weekday, 10) : (weekday as unknown as number);
+    if (Number.isNaN(wNum) || wNum < 0 || wNum > 6) {
+      throw new Error(`Invalid weekday '${weekday}' (expected 0..6)`);
+    }
     if (!splitId) {
-      await this.db.delete(splitDayAssignments).where(and(eq(splitDayAssignments.userId, userId), eq(splitDayAssignments.weekday, weekday))).run();
+      await this.db.delete(splitDayAssignments).where(and(eq(splitDayAssignments.userId, userId), eq(splitDayAssignments.weekday, wNum))).run();
       return true;
     }
     const id = newUuid();
     await this.db
       .insert(splitDayAssignments)
-      .values({ id, userId, weekday, splitId })
+      .values({ id, userId, weekday: wNum, splitId })
       .onConflictDoUpdate({
         target: [splitDayAssignments.userId, splitDayAssignments.weekday],
         set: { splitId },
@@ -283,16 +280,20 @@ export class ProgramBuilderDataAccess {
     return true;
   }
 
-  async createExercise(data: { name: string; kind?: string; modality?: string; bodyPart?: string }) {
+  async createExercise(data: { name: string; modality?: string; bodyPart?: string }) {
     const id = newUuid();
-  await this.db.insert(exerciseCatalog).values({
+    const normalized = normalizeExerciseInput({ name: data.name, modality: data.modality, bodyPart: data.bodyPart });
+    const slug = ensureSlug({ name: normalized.name, isPublic: true });
+    await this.db.insert(exerciseCatalog).values({
       id,
-      name: data.name,
-      kind: data.kind ?? 'strength',
-      modality: data.modality ?? 'other',
-      bodyPart: data.bodyPart ?? null,
+      name: normalized.name,
+      modality: normalized.modality,
+      bodyPart: normalized.bodyPart ?? null,
+      slug,
+      createdAt: sql`CURRENT_TIMESTAMP` as any,
+      updatedAt: sql`CURRENT_TIMESTAMP` as any,
     }).run();
-    return { id, ...data };
+    return { id, name: normalized.name, modality: normalized.modality, bodyPart: normalized.bodyPart };
   }
 
   async getSplitById(splitId: string): Promise<SplitRow | undefined> {
