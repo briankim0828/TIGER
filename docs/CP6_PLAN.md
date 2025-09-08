@@ -51,7 +51,7 @@ Decisions & Outcomes:
 - updated_at maintenance: Explicitly set on mutation paths where needed. DONE (MVP scope)
 - Sync manifest: `exercise_catalog` re-added to `SYNC_TABLES`. DONE
 - Smoke test: Script `scripts/dev/smokeExerciseCatalog.ts` validates modality/bodyPart + slug format. DONE
-- RLS templates: Added `docs/rls/exercise_catalog_policies.sql` for Phase C. DONE (prep only)
+- RLS policy scripts consolidated under `sql/rls/` (old single-table template removed).
 - Rollback safety: Re-runnable seed + destructive recreation acceptable (test data only). DONE
 - Deferred: taxonomy tables, search indexing, workout_sets rich metric parity. PENDING
 
@@ -122,7 +122,7 @@ Phase B Completion Snapshot (2025-09-07): Catalog fully harmonized (modality/bod
 ## Phase B Status Update (Delta)
 - Added `src/db/schema.sync.ts` (MVP slice: exercise_catalog, splits, split_day_assignments, split_exercises, workout_sessions, workout_exercises, workout_sets + required enums)
 - Added `drizzle.sync.config.ts` for generating focused migrations under `drizzle/sync/`
-- Baseline regeneration after all drift remediation: `drizzle/sync/0000_steady_talkback.sql` (supersedes earlier transient baselines not pushed).
+- Baseline regeneration after all drift remediation: `drizzle/sync/0000_cp6_baseline.sql` (authoritative CP6 starting point).
 - Next Step: Apply fresh baseline to remote once Supabase project provisioned.
 
 ## Migration Strategy Decision (Baseline vs Incremental)
@@ -131,7 +131,7 @@ Rationale: Remote Supabase project not yet created (no persisted data), narrowin
 Artifacts:
 - Slice schema: `src/db/schema.sync.ts`
 - Drizzle sync config: `drizzle.sync.config.ts`
-- Baseline migration generated: `drizzle/sync/0000_steady_talkback.sql`
+- Baseline migration generated: `drizzle/sync/0000_cp6_baseline.sql`
 Rules:
 - Do NOT edit the generated baseline file after it is applied; future changes append new numbered migrations.
 - Only tables in `SYNC_TABLES` may be added here until Phase N success criteria met.
@@ -202,7 +202,7 @@ Properties:
 - Safe to extend with more rows; maintain deterministic `name` -> `slug` mapping.
 Execution Example:
 ```
-psql $DATABASE_URL -f drizzle/sync/0000_steady_talkback.sql   # baseline (once)
+psql $DATABASE_URL -f drizzle/sync/0000_cp6_baseline.sql   # baseline (once)
 psql $DATABASE_URL -f sql/seed/exercise_catalog_public_seed.sql
 ```
 NPM helper: `npm run db:seed:remote:catalog` (prints instructions; does not execute).

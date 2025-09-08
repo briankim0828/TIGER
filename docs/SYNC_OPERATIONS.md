@@ -10,7 +10,7 @@ Set (never commit service key):
 
 ## 2. Apply Baseline Schema
 ```
-psql $DATABASE_URL -f drizzle/sync/0000_steady_talkback.sql
+psql $DATABASE_URL -f drizzle/sync/0000_cp6_baseline.sql
 ```
 Verify tables:
 ```
