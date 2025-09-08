@@ -57,6 +57,19 @@ export class SimpleDataAccess {
    */
   async initializeTables() {
     try {
+      // Hard reset strategy (CP6): legacy data & schema are discarded.
+      // This is acceptable per product decision: dev/test data only.
+      await this.db.execAsync(`
+        PRAGMA foreign_keys=OFF;
+        DROP TABLE IF EXISTS workout_sets;
+        DROP TABLE IF EXISTS workout_exercises;
+        DROP TABLE IF EXISTS workout_sessions;
+        DROP TABLE IF EXISTS split_day_assignments;
+        DROP TABLE IF EXISTS split_exercises;
+        DROP TABLE IF EXISTS splits;
+        DROP TABLE IF EXISTS exercise_catalog;
+        PRAGMA foreign_keys=ON;
+      `);
       // Create a simple splits table
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS splits (
@@ -95,19 +108,7 @@ export class SimpleDataAccess {
         console.warn('SQLite migration (order_pos) may have failed or is unnecessary:', e);
       }
 
-      // Harmonization migration (data loss acceptable): drop old tables referencing exercises
-      try {
-        const tables: any[] = await this.db.getAllAsync(`SELECT name FROM sqlite_master WHERE type='table'`);
-        const hasExercises = tables.some(t => t.name === 'exercises');
-        if (hasExercises) {
-          await this.db.execAsync(`DROP TABLE IF EXISTS split_exercises;`);
-          await this.db.execAsync(`DROP TABLE IF EXISTS workout_exercises;`);
-          await this.db.execAsync(`DROP TABLE IF EXISTS exercises;`);
-          console.log('[Harmonization] Dropped legacy exercises + dependent tables');
-        }
-      } catch (e) {
-        console.warn('[Harmonization] Pre-drop check failed (safe if fresh):', e);
-      }
+  // Legacy harmonization logic removed: we now always recreate from CP6 shape.
 
       // Create harmonized exercise_catalog table
       await this.db.execAsync(`
@@ -145,56 +146,59 @@ export class SimpleDataAccess {
         );
       `);
 
-      // Create workout_sessions table
+      // Create workout_sessions (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS workout_sessions (
+        CREATE TABLE workout_sessions (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
           split_id TEXT,
           state TEXT DEFAULT 'active',
-          started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          started_at TEXT,
           finished_at TEXT,
-          notes TEXT,
+          note TEXT,
+          energy_kcal INTEGER,
+          total_volume_kg INTEGER,
+          total_sets INTEGER,
+          duration_sec INTEGER,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);
 
-      // Create workout_exercises referencing exercise_catalog
+      // Create workout_exercises (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS workout_exercises (
+        CREATE TABLE workout_exercises (
           id TEXT PRIMARY KEY,
           session_id TEXT NOT NULL,
           exercise_id TEXT NOT NULL,
           order_pos INTEGER NOT NULL,
           rest_sec_default INTEGER,
-          notes TEXT,
+          from_split_exercise_id TEXT,
+          note TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (session_id) REFERENCES workout_sessions (id),
           FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id)
         );
       `);
 
-      // Create workout_sets table
+      // Create workout_sets (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE IF NOT EXISTS workout_sets (
+        CREATE TABLE workout_sets (
           id TEXT PRIMARY KEY,
-          session_exercise_id TEXT NOT NULL,
-          set_index INTEGER NOT NULL,
-          weight REAL,
+          workout_exercise_id TEXT NOT NULL,
+          set_order INTEGER NOT NULL,
+          is_warmup INTEGER NOT NULL DEFAULT 0,
+          weight_kg INTEGER,
           reps INTEGER,
-          rpe REAL,
-          completed INTEGER DEFAULT 0,
-          started_at TEXT,
-          completed_at TEXT,
-          notes TEXT,
+          duration_sec INTEGER,
+          distance_m INTEGER,
+          rest_sec INTEGER,
+          is_completed INTEGER NOT NULL DEFAULT 0,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (session_exercise_id) REFERENCES workout_exercises (id)
+          FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id)
         );
-        CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_session_exercise_setidx_uq
-          ON workout_sets (session_exercise_id, set_index);
-        CREATE INDEX IF NOT EXISTS idx_workout_sets_session_exercise
-          ON workout_sets (session_exercise_id);
+        CREATE UNIQUE INDEX workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
+        CREATE INDEX idx_workout_sets_ex ON workout_sets (workout_exercise_id);
       `);
 
       // Create split_day_assignments table for program days
@@ -202,11 +206,13 @@ export class SimpleDataAccess {
         CREATE TABLE IF NOT EXISTS split_day_assignments (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
-          weekday TEXT NOT NULL, -- e.g., 'Mon','Tue', ...
+          weekday INTEGER NOT NULL, -- 0=Mon .. 6=Sun
           split_id TEXT NOT NULL,
           UNIQUE(user_id, weekday)
         );
       `);
+
+  // No legacy migrations retained: tables always rebuilt fresh per CP6.
 
       console.log('Database tables initialized successfully');
     } catch (error) {

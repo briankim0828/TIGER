@@ -5,7 +5,7 @@
 // If you need to add a new table to replication, FIRST add it to SYNC_TABLES in sync/manifest.ts,
 // then add its definition here, regenerate migrations, and apply.
 
-import { pgTable, uuid, text, boolean, integer, timestamp, date, pgEnum, index, unique } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, integer, timestamp, date, pgEnum, index, unique, pgSchema } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /* =========================
@@ -23,8 +23,11 @@ export const bodyPartEnum = pgEnum('body_part', [
 /* =========================
    AUTH REFERENCE (shadow only)
    ========================= */
-// NOTE: We DO NOT migrate / own auth.users; Supabase supplies it. This is a shadow for FK refs.
-export const authUsers = pgTable('auth.users', {
+// NOTE: We DO NOT create or migrate the Supabase auth.users table. Use schema-qualified reference.
+// IMPORTANT: The baseline migration must NOT include a CREATE TABLE for auth.users.
+// If a generated migration includes that, remove it manually before applying.
+const auth = pgSchema('auth');
+export const authUsers = auth.table('users', {
   id: uuid('id').primaryKey(),
 });
 

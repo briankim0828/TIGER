@@ -1,10 +1,6 @@
 CREATE TYPE "public"."body_part" AS ENUM('chest', 'back', 'leg', 'shoulder', 'triceps', 'biceps', 'core', 'forearm', 'cardio');--> statement-breakpoint
 CREATE TYPE "public"."modality" AS ENUM('barbell', 'dumbbell', 'kettlebell', 'machine', 'smith', 'cable', 'bodyweight');--> statement-breakpoint
 CREATE TYPE "public"."session_state" AS ENUM('active', 'completed');--> statement-breakpoint
-CREATE TABLE "auth.users" (
-	"id" uuid PRIMARY KEY NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "exercise_catalog" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
@@ -94,16 +90,17 @@ CREATE TABLE "workout_sets" (
 	CONSTRAINT "workout_sets_workout_exercise_id_set_order_unique" UNIQUE("workout_exercise_id","set_order")
 );
 --> statement-breakpoint
-ALTER TABLE "exercise_catalog" ADD CONSTRAINT "exercise_catalog_owner_user_id_auth.users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "public"."auth.users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "split_day_assignments" ADD CONSTRAINT "split_day_assignments_user_id_auth.users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."auth.users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+-- NOTE: auth.users table is managed by Supabase; do NOT create it here.
+ALTER TABLE "exercise_catalog" ADD CONSTRAINT "exercise_catalog_owner_user_id_auth_users_id_fk" FOREIGN KEY ("owner_user_id") REFERENCES "auth"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "split_day_assignments" ADD CONSTRAINT "split_day_assignments_user_id_auth_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "split_day_assignments" ADD CONSTRAINT "split_day_assignments_split_id_splits_id_fk" FOREIGN KEY ("split_id") REFERENCES "public"."splits"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "split_exercises" ADD CONSTRAINT "split_exercises_split_id_splits_id_fk" FOREIGN KEY ("split_id") REFERENCES "public"."splits"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "split_exercises" ADD CONSTRAINT "split_exercises_exercise_id_exercise_catalog_id_fk" FOREIGN KEY ("exercise_id") REFERENCES "public"."exercise_catalog"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "splits" ADD CONSTRAINT "splits_user_id_auth.users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."auth.users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "splits" ADD CONSTRAINT "splits_user_id_auth_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_exercises" ADD CONSTRAINT "workout_exercises_session_id_workout_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."workout_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_exercises" ADD CONSTRAINT "workout_exercises_exercise_id_exercise_catalog_id_fk" FOREIGN KEY ("exercise_id") REFERENCES "public"."exercise_catalog"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_exercises" ADD CONSTRAINT "workout_exercises_from_split_exercise_id_split_exercises_id_fk" FOREIGN KEY ("from_split_exercise_id") REFERENCES "public"."split_exercises"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workout_sessions" ADD CONSTRAINT "workout_sessions_user_id_auth.users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."auth.users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workout_sessions" ADD CONSTRAINT "workout_sessions_user_id_auth_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "auth"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_sessions" ADD CONSTRAINT "workout_sessions_split_id_splits_id_fk" FOREIGN KEY ("split_id") REFERENCES "public"."splits"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workout_sets" ADD CONSTRAINT "workout_sets_workout_exercise_id_workout_exercises_id_fk" FOREIGN KEY ("workout_exercise_id") REFERENCES "public"."workout_exercises"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_exercise_catalog_owner" ON "exercise_catalog" USING btree ("owner_user_id");--> statement-breakpoint

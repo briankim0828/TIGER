@@ -10,6 +10,13 @@
   "typecheck": "tsc --noEmit",
   "db:reset:sqlite": "tsx scripts/resetLocalSqlite.ts",
   "db:seed:remote:catalog": "echo 'Run this with psql: psql $DATABASE_URL -f sql/seed/exercise_catalog_public_seed.sql'",
+  "db:apply:baseline": "psql $DATABASE_URL -f drizzle/sync/0000_cp6_baseline.sql",
+  "db:apply:baseline:node": "tsx scripts/applyBaseline.ts",
+  "db:verify:tables": "psql $DATABASE_URL -c \"\\dt\"",
+  "db:verify:constraints": "psql $DATABASE_URL -c \"SELECT conname FROM pg_constraint WHERE conname ILIKE '%workout_sets%'\"",
+  "db:seed:catalog": "psql $DATABASE_URL -f sql/seed/exercise_catalog_public_seed.sql",
+  "db:rls:enable": "psql $DATABASE_URL -f sql/rls/mvp_enable_rls.sql",
+  "db:rls:policies": "psql $DATABASE_URL -f sql/rls/mvp_policies.sql",
   "validate": "npm run -s typecheck",
   "postinstall": "patch-package"
   },
