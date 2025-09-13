@@ -1,13 +1,5 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useCallback,
-} from "react";
-import {
-  Box,
-  VStack,
-} from "@gluestack-ui/themed";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { Box, VStack } from "@gluestack-ui/themed";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,7 +10,12 @@ import {
   ListRenderItemInfo,
 } from "react-native";
 import { WeekDay } from "../types/base";
-import { ProgramSplit, ProgramEditMode, ProgramSplitWithExercises, ProgramExerciseLite } from "../types/ui";
+import {
+  ProgramSplit,
+  ProgramEditMode,
+  ProgramSplitWithExercises,
+  ProgramExerciseLite,
+} from "../types/ui";
 import type { SplitExerciseJoin } from "../db/queries/simple";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -27,6 +24,7 @@ import MySplits from "../components/MySplits";
 import MyExercises from "../components/MyExercises";
 import MyProgram from "../components/MyProgram";
 import { useDatabase } from "../db/queries";
+import { supabase } from "../utils/supabaseClient";
 import Animated, { Layout } from "react-native-reanimated";
 
 // We now use ProgramSplit for Program/Splits UIs
@@ -38,7 +36,7 @@ const WorkoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const scrollViewRef = useRef<FlatList<any>>(null);
   const db = useDatabase();
-  const USER_ID = 'local-user'; // TODO: wire to auth when available
+  const [AUTH_USER_ID, setAUTH_USER_ID] = useState<string | null>(null);
 
   const [editMode, setEditMode] = useState<EditMode>("none");
   const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
@@ -60,22 +58,25 @@ const WorkoutScreen = () => {
 
   const fetchSplits = useCallback(async () => {
     try {
-      console.log("WorkoutScreen: Fetching user splits from local DB...");
-  const [rows, dayAssigns] = await Promise.all([
-        db.getUserSplitsWithExerciseCounts(USER_ID),
-        db.getDayAssignments(USER_ID)
+      // Fetch splits + day assignments
+        const [rows, dayAssigns] = await Promise.all([
+  db.getUserSplitsWithExerciseCounts(AUTH_USER_ID ?? 'local-user'),
+  db.getDayAssignments(AUTH_USER_ID ?? 'local-user')
       ]);
-      const assignBySplit = new Map<string, string[]>();
+      const assignBySplit = new Map<string, WeekDay[]>();
+      const NUM_TO_LABEL: Record<number, WeekDay> = { 0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun' } as const;
       for (const a of dayAssigns as any[]) {
         const list = assignBySplit.get(a.split_id) ?? [];
-        list.push(a.weekday);
+        const n = typeof a.weekday === 'string' ? parseInt(a.weekday, 10) : (a.weekday as number);
+        const label = NUM_TO_LABEL[n as keyof typeof NUM_TO_LABEL];
+        if (label) list.push(label);
         assignBySplit.set(a.split_id, list);
       }
-    const ui = rows.map((r: any) => {
-  const base = mapRowToProgramSplit(r);
-  return { ...base, days: (assignBySplit.get(r.id) ?? []) as WeekDay[] };
-      });
-  setSplits(ui);
+        const ui = rows.map((r: any) => {
+          const base = mapRowToProgramSplit(r);
+          return { ...base, days: (assignBySplit.get(r.id) ?? []) };
+        });
+        setSplits(ui);
     // Hydrate exercises per split for MyExercises panel (derived lightweight shape)
     try {
       const detailed: ProgramSplitWithExercises[] = [];
@@ -102,9 +103,15 @@ const WorkoutScreen = () => {
     } catch (e) {
       console.error('WorkoutScreen: Failed to fetch splits from DB', e);
     }
-  }, [db, USER_ID, mapRowToProgramSplit, editMode]);
+  }, [db, AUTH_USER_ID, mapRowToProgramSplit, editMode]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setAUTH_USER_ID(user?.id ?? null);
+      } catch {}
+    })();
     if (isFirstMount) {
       fetchSplits();
       setIsFirstMount(false);
@@ -160,16 +167,29 @@ const WorkoutScreen = () => {
   // Deprecated by weekday-tap entry; keep no-op for safety if referenced.
   }, [editMode, setEditModeWithDebug]);
 
+  // Persist name changes only when exiting edit mode
+
   const toggleSplitsEditMode = useCallback(async () => {
-    const currentEditedSplits = editedSplitsRef.current;
     if (editMode === "splits") {
-      // On exit, we already persist on change; just refresh UI
+      // On exit, commit any edited names once
+      try {
+        const originals = new Map<string, ProgramSplit>(splits.map(s => [s.id, s]));
+        const edited = editedSplitsRef.current ?? [];
+        for (const s of edited) {
+          const orig = originals.get(s.id);
+          if (orig && s.name !== orig.name) {
+            await db.updateSplit({ id: s.id, name: s.name });
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to persist name edits on exit', e);
+      }
       await fetchSplits();
       setEditModeWithDebug("none");
     } else {
       setEditModeWithDebug("splits");
     }
-  }, [editMode, setEditModeWithDebug, fetchSplits]);
+  }, [editMode, setEditModeWithDebug, fetchSplits, db, splits]);
 
   const handleSplitNameEdit = useCallback((id: string, newName: string) => {
     // Update local edited state for UI responsiveness
@@ -178,11 +198,9 @@ const WorkoutScreen = () => {
       editedSplitsRef.current = newState;
       return newState;
     });
-    // Persist immediately
-    db.updateSplit({ id, name: newName })
-      .then(() => fetchSplits())
-      .catch(err => console.error('Failed to update split name', err));
-  }, [db, fetchSplits]);
+  }, []);
+
+  // No onBlur commit; only commit on exiting edit mode.
 
   const handleColorSelect = useCallback((id: string, color: string) => {
     setEditedSplits(prev => {
@@ -190,23 +208,27 @@ const WorkoutScreen = () => {
       editedSplitsRef.current = newState;
       return newState;
     });
+    // Persist color immediately; UI already reflects local state. Avoid extra fetch.
     db.updateSplit({ id, color })
-      .then(() => fetchSplits())
       .catch(err => console.error('Failed to update split color', err));
-  }, [db, fetchSplits]);
+  }, [db]);
 
   const handleAddSplit = useCallback(() => {
     // Default name should be "Split {current # of splits + 1}"
     const list = (editMode === 'splits' ? (editedSplitsRef.current ?? splits) : splits) || [];
     const nextName = `Split ${list.length + 1}`;
-    db.createSplit({ userId: USER_ID, name: nextName, color: "#FF5733" })
+    if (!AUTH_USER_ID) {
+      console.warn('Cannot create split: user not authenticated');
+      return;
+    }
+    db.createSplit({ userId: AUTH_USER_ID, name: nextName, color: "#FF5733" })
       .then(async (created) => {
         setEditingSplitId(created.id);
         await fetchSplits();
         // editedSplits is synced by fetchSplits when in 'splits' mode
       })
       .catch(err => console.error('Failed to create split', err));
-  }, [db, USER_ID, splits, fetchSplits, editMode]);
+  }, [db, AUTH_USER_ID, splits, fetchSplits, editMode]);
 
   const handleDeleteSplit = useCallback((id: string) => {
     db.deleteSplit(id)
@@ -220,7 +242,6 @@ const WorkoutScreen = () => {
   // Persist reordered split IDs to DB using 1-based order positions
   const handlePersistSplitOrder = useCallback(async (orderedIds: string[]) => {
     try {
-      // Batch updates sequentially
       let pos = 1;
       for (const id of orderedIds) {
         await db.updateSplit({ id, orderPos: pos });
@@ -233,88 +254,73 @@ const WorkoutScreen = () => {
   }, [db, fetchSplits]);
 
   const handleDaySelect = useCallback((day: WeekDay) => {
-      // New behavior: tapping any weekday enters program mode and selects the day.
-      if (editMode !== "program") {
-        setEditModeWithDebug("program");
-        setSelectedDay(day);
-        setSelectedSplit(null);
-        return;
-      }
-      // If already in program mode: tap same day to exit, different day to switch.
-      if (selectedDay === day) {
-        setSelectedDay(null);
-        setSelectedSplit(null);
-        setEditModeWithDebug("none");
-      } else {
-        setSelectedDay(day);
-        setSelectedSplit(null);
-      }
+    if (editMode !== 'program') {
+      setEditModeWithDebug('program');
+      setSelectedDay(day);
+      setSelectedSplit(null);
+      return;
+    }
+    if (selectedDay === day) {
+      setSelectedDay(null);
+      setSelectedSplit(null);
+      setEditModeWithDebug('none');
+    } else {
+      setSelectedDay(day);
+      setSelectedSplit(null);
+    }
   }, [selectedDay, editMode, setEditModeWithDebug]);
 
   const handleSplitSelect = useCallback(async (splitToAssign: ProgramSplit) => {
-      if (!selectedDay || editMode !== "program") return;
-
-      // Toggle assignment in DB: if this split already has the day, unassign, else assign
-      const currentlyAssigned = splitToAssign.days.includes(selectedDay);
-      try {
-        await db.setDayAssignment(USER_ID, selectedDay, currentlyAssigned ? null : splitToAssign.id);
-        await fetchSplits();
-      } catch (e) {
-        console.error('Failed to set day assignment', e);
-      }
-  // Keep selection and program mode active; user can continue assigning
-  }, [selectedDay, editMode, db, USER_ID, fetchSplits]);
-
-  const handleSplitPress = useCallback((split: ProgramSplit) => {
-      if (selectedDay && editMode === "program") {
-        handleSplitSelect(split);
-        return;
-      }
-      if (editMode === "splits") {
-        setEditingSplitId(prevId => prevId === split.id ? null : split.id);
-        return;
-      }
-      if (editMode === "none") {
-        navigation.navigate("SplitDetail", { split });
-      }
-    },
-    [selectedDay, editMode, handleSplitSelect, navigation, setEditingSplitId]
-  );
-
-  const handleSplitDetailUpdate = useCallback(async (updatedSplit: ProgramSplit) => {
-      console.log("WorkoutScreen: Receiving update from SplitDetail:", updatedSplit);
-  const updatedSplits = splits.map((split: ProgramSplit) =>
-        split.id === updatedSplit.id ? updatedSplit : split
-      );
-      // For now, only update local state; persistence is handled within detail screen in next step
-      setSplits(updatedSplits);
-    },
-    [splits]
-  );
-
-  const toggleExerciseExpansion = useCallback((exerciseId: string) => {
-    if (editMode !== "none") {
+    if (!selectedDay || editMode !== 'program') return;
+    if (!AUTH_USER_ID) {
+      console.warn('Cannot set day assignment: user not authenticated');
       return;
     }
-    setExpandedExercises((prev) =>
-      prev.includes(exerciseId)
-        ? prev.filter((id) => id !== exerciseId)
-        : [...prev, exerciseId]
+    const currentlyAssigned = splitToAssign.days.includes(selectedDay);
+    try {
+      await db.setDayAssignment(AUTH_USER_ID, selectedDay, currentlyAssigned ? null : splitToAssign.id);
+      await fetchSplits();
+    } catch (e) {
+      console.error('Failed to set day assignment', e);
+    }
+  }, [selectedDay, editMode, db, AUTH_USER_ID, fetchSplits]);
+
+  const handleSplitPress = useCallback((split: ProgramSplit) => {
+    if (selectedDay && editMode === 'program') {
+      handleSplitSelect(split);
+      return;
+    }
+    if (editMode === 'splits') {
+      setEditingSplitId(prevId => prevId === split.id ? null : split.id);
+      return;
+    }
+    if (editMode === 'none') {
+      navigation.navigate('SplitDetail', { split });
+    }
+  }, [selectedDay, editMode, handleSplitSelect, navigation, setEditingSplitId]);
+
+  const handleSplitDetailUpdate = useCallback(async (updatedSplit: ProgramSplit) => {
+    console.log('WorkoutScreen: Receiving update from SplitDetail:', updatedSplit);
+    const updatedSplits = splits.map((split: ProgramSplit) =>
+      split.id === updatedSplit.id ? updatedSplit : split
     );
+    setSplits(updatedSplits);
+  }, [splits]);
+
+  const toggleExerciseExpansion = useCallback((exerciseId: string) => {
+    if (editMode !== 'none') return;
+    setExpandedExercises(prev => prev.includes(exerciseId) ? prev.filter(id => id !== exerciseId) : [...prev, exerciseId]);
   }, [editMode]);
 
-  // Close program edit mode when tapping on background/empty spaces
+  // Dismiss keyboard on background press; do not persist edits here
   const handleBackgroundPress = useCallback(() => {
     Keyboard.dismiss();
-    if (editMode === 'program') {
-      setEditModeWithDebug('none');
-    }
-  }, [editMode, setEditModeWithDebug]);
+  }, []);
 
-  const handleFocusScroll = (inputY: number, inputHeight: number) => {
-  if (editMode !== "splits" || !scrollViewRef.current) return;
-
-    const screenHeight = Dimensions.get("window").height;
+  // Ensure focused TextInput is visible above keyboard during splits editing
+  const handleFocusScroll = useCallback((inputY: number, inputHeight: number) => {
+    if (editMode !== 'splits' || !scrollViewRef.current) return;
+    const screenHeight = Dimensions.get('window').height;
     const estimatedKeyboardHeight = Platform.OS === 'ios' ? keyboardHeight : keyboardHeight + 50;
     if (estimatedKeyboardHeight <= 0) return;
 
@@ -326,17 +332,17 @@ const WorkoutScreen = () => {
     const inputAbsoluteBottom = inputAbsoluteTop + inputHeight;
 
     let scrollToY = scrollOffsetY;
-
     if (inputAbsoluteTop < visibleAreaTop + 10) {
-        scrollToY = inputAbsoluteTop - 10;
+      scrollToY = Math.max(0, inputAbsoluteTop - 10);
     } else if (inputAbsoluteBottom > visibleAreaBottom - 10) {
-        scrollToY = inputAbsoluteBottom - (screenHeight - estimatedKeyboardHeight) + 10;
+      scrollToY = Math.max(0, inputAbsoluteBottom - (screenHeight - estimatedKeyboardHeight) + 10);
     } else {
-        return;
+      return; // Already visible
     }
-
-  scrollViewRef.current.scrollToOffset({ offset: scrollToY, animated: true });
-  };
+    try {
+      scrollViewRef.current.scrollToOffset({ offset: scrollToY, animated: true });
+    } catch {}
+  }, [editMode, keyboardHeight, scrollY]);
 
   return (
     <KeyboardAvoidingView
@@ -365,6 +371,7 @@ const WorkoutScreen = () => {
                   editingSplitId={editingSplitId}
                   onSplitPress={handleSplitPress}
                   onNameEdit={handleSplitNameEdit}
+                  
                   onColorSelect={handleColorSelect}
                   onDeleteSplit={handleDeleteSplit}
                   onAddSplit={handleAddSplit}

@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo } from 'react';
 import { Box, HStack, VStack, Text, Button, ButtonText } from '@gluestack-ui/themed';
+import { supabase } from '../utils/supabaseClient';
 import { useLiveActiveSession, useLiveSessionSnapshot } from '../db/live/workouts';
 
-const USER_ID = 'local-user';
-
 const LiveWorkoutDebug: React.FC = () => {
-  const { session, loading: loadingSession, isLive } = useLiveActiveSession(USER_ID);
+  const [userId, setUserId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setUserId(user?.id ?? null);
+      } catch {}
+    })();
+  }, []);
+
+  const { session, loading: loadingSession, isLive } = useLiveActiveSession(userId ?? '');
   const sessionId = session?.id ?? null;
   const { snapshot, loading: loadingSnap } = useLiveSessionSnapshot(sessionId);
 

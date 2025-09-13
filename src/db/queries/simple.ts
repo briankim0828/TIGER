@@ -55,21 +55,24 @@ export class SimpleDataAccess {
   /**
    * Initialize basic tables for local storage
    */
-  async initializeTables() {
+  async initializeTables(options?: { reset?: boolean }) {
     try {
-      // Hard reset strategy (CP6): legacy data & schema are discarded.
-      // This is acceptable per product decision: dev/test data only.
-      await this.db.execAsync(`
-        PRAGMA foreign_keys=OFF;
-        DROP TABLE IF EXISTS workout_sets;
-        DROP TABLE IF EXISTS workout_exercises;
-        DROP TABLE IF EXISTS workout_sessions;
-        DROP TABLE IF EXISTS split_day_assignments;
-        DROP TABLE IF EXISTS split_exercises;
-        DROP TABLE IF EXISTS splits;
-        DROP TABLE IF EXISTS exercise_catalog;
-        PRAGMA foreign_keys=ON;
-      `);
+      if (options?.reset) {
+        // Destructive reset for development: drop all tables before recreation
+        await this.db.execAsync(`
+          PRAGMA foreign_keys=OFF;
+          DROP TABLE IF EXISTS workout_sets;
+          DROP TABLE IF EXISTS workout_exercises;
+          DROP TABLE IF EXISTS workout_sessions;
+          DROP TABLE IF EXISTS split_day_assignments;
+          DROP TABLE IF EXISTS split_exercises;
+          DROP TABLE IF EXISTS splits;
+          DROP TABLE IF EXISTS exercise_catalog;
+          DROP TABLE IF EXISTS outbox;
+          DROP TABLE IF EXISTS sync_state;
+          PRAGMA foreign_keys=ON;
+        `);
+      }
       // Create a simple splits table
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS splits (
@@ -148,7 +151,7 @@ export class SimpleDataAccess {
 
       // Create workout_sessions (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE workout_sessions (
+        CREATE TABLE IF NOT EXISTS workout_sessions (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
           split_id TEXT,
@@ -167,7 +170,7 @@ export class SimpleDataAccess {
 
       // Create workout_exercises (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE workout_exercises (
+        CREATE TABLE IF NOT EXISTS workout_exercises (
           id TEXT PRIMARY KEY,
           session_id TEXT NOT NULL,
           exercise_id TEXT NOT NULL,
@@ -183,7 +186,7 @@ export class SimpleDataAccess {
 
       // Create workout_sets (CP6 shape)
       await this.db.execAsync(`
-        CREATE TABLE workout_sets (
+        CREATE TABLE IF NOT EXISTS workout_sets (
           id TEXT PRIMARY KEY,
           workout_exercise_id TEXT NOT NULL,
           set_order INTEGER NOT NULL,
@@ -197,8 +200,8 @@ export class SimpleDataAccess {
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id)
         );
-        CREATE UNIQUE INDEX workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
-        CREATE INDEX idx_workout_sets_ex ON workout_sets (workout_exercise_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
+        CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id);
       `);
 
       // Create split_day_assignments table for program days
@@ -213,6 +216,33 @@ export class SimpleDataAccess {
       `);
 
   // No legacy migrations retained: tables always rebuilt fresh per CP6.
+
+      // Sync state table: single row per user (or global for MVP) tracking pull/flush
+      await this.db.execAsync(`
+        CREATE TABLE IF NOT EXISTS sync_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          last_pull_at TEXT,
+          last_flush_at TEXT,
+          is_online INTEGER DEFAULT 1,
+          last_error TEXT
+        );
+        INSERT OR IGNORE INTO sync_state (id, is_online) VALUES (1, 1);
+      `);
+
+      // Outbox for background flush to Supabase
+      await this.db.execAsync(`
+        CREATE TABLE IF NOT EXISTS outbox (
+          id TEXT PRIMARY KEY,
+          table_name TEXT NOT NULL,
+          op TEXT NOT NULL CHECK (op IN ('insert','update','delete')),
+          row_id TEXT NOT NULL,
+          payload TEXT, -- JSON string
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          retry_count INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'pending' CHECK (status IN ('pending','processing','done','failed'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox (status, created_at);
+      `);
 
       console.log('Database tables initialized successfully');
     } catch (error) {

@@ -49,7 +49,7 @@ const SplitItem = React.memo(
   dragDisabled,
     selectedDay,
     onPress,
-    onNameEdit,
+  onNameEdit,
     onColorSelect,
     onDelete,
     onFocusScroll,
@@ -60,7 +60,7 @@ const SplitItem = React.memo(
   dragDisabled: boolean;
     selectedDay: WeekDay | null;
     onPress: () => void;
-    onNameEdit: (text: string) => void;
+  onNameEdit: (text: string) => void;
     onColorSelect: (color: string) => void;
     onDelete: () => void;
     onFocusScroll: (y: number, height: number) => void;
@@ -453,13 +453,15 @@ const MySplits: React.FC<MySplitsProps> = ({
                     onDelete={() => onDeleteSplit(item.id)}
                     onFocusScroll={onFocusScroll}
                     />
-                  {/* Drag handle overlay on the menu icon area */}
-                  <Pressable
-                    onLongPress={editMode === 'splits' && !isThisEditing ? drag : undefined}
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 40 }}
-                    hitSlop={8}
-                    pointerEvents={editMode === 'splits' && isThisEditing ? 'none' : 'auto'}
-                  />
+                  {/* Drag handle overlay on the menu icon area (only active in splits edit mode) */}
+                  {editMode === 'splits' && !isThisEditing && (
+                    <Pressable
+                      onLongPress={drag}
+                      style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 40 }}
+                      hitSlop={8}
+                      pointerEvents="auto"
+                    />
+                  )}
                 </ScaleDecorator>
               );
             }}

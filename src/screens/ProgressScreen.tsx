@@ -10,6 +10,7 @@ import WorkoutCalendar from "../components/WorkoutCalendar";
 import { useFocusEffect } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
+import { supabase } from "../utils/supabaseClient";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ScrollView, StyleSheet } from "react-native";
@@ -26,7 +27,15 @@ const ProgressScreen: React.FC = () => {
   const db = useDatabase();
   const history = useWorkoutHistory();
   const { startWorkout, getActiveSessionId } = useWorkout();
-  const USER_ID = 'local-user';
+  const [authUserId, setAuthUserId] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setAuthUserId(user?.id ?? null);
+      } catch {}
+    })();
+  }, []);
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -80,34 +89,35 @@ const ProgressScreen: React.FC = () => {
 
   useFocusEffect(
     useCallback(() => {
-  const processData = async () => {
-        // Pull Program Builder state from SQLite via Drizzle
+      const processData = async () => {
         try {
-          const [rows, dayAssigns] = await Promise.all([
-            db.getUserSplitsWithExerciseCounts(USER_ID),
-            db.getDayAssignments(USER_ID),
-          ]);
-          // Build days per split id
-          const daysBySplit = new Map<string, WeekDay[]>();
-          for (const a of dayAssigns) {
-            const list = daysBySplit.get(a.split_id) ?? [];
-            list.push(a.weekday as WeekDay);
-            daysBySplit.set(a.split_id, list);
+          if (!authUserId) {
+            setSplits([]);
+            setCalendarEntries([]);
+            setWorkouts([]);
+          } else {
+            const [rows, dayAssigns] = await Promise.all([
+              db.getUserSplitsWithExerciseCounts(authUserId),
+              db.getDayAssignments(authUserId),
+            ]);
+            const daysBySplit = new Map<string, WeekDay[]>();
+            for (const a of dayAssigns) {
+              const list = daysBySplit.get(a.split_id) ?? [];
+              list.push((a.weekday as unknown as number) as any as WeekDay);
+              daysBySplit.set(a.split_id, list);
+            }
+            const calendarSplits: ProgramSplit[] = rows.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              color: r.color ?? undefined,
+              days: daysBySplit.get(r.id) ?? [],
+              exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
+            }));
+            setSplits(calendarSplits);
+            const entries = await history.getWorkoutCalendarEntries(authUserId);
+            setCalendarEntries(entries);
+            setWorkouts(entries.map((e: WorkoutCalendarEntry) => ({ date: e.date, completed: e.completed })));
           }
-          // Build simple split objects for calendar
-          const calendarSplits: ProgramSplit[] = rows.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            color: r.color ?? undefined,
-            days: daysBySplit.get(r.id) ?? [],
-            exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
-          }));
-          setSplits(calendarSplits);
-          // Calendar entries (legacy workoutSessions removed)
-          const entries = await history.getWorkoutCalendarEntries(USER_ID);
-          setCalendarEntries(entries);
-          // Mirror to workouts state until calendar component prop is renamed everywhere
-          setWorkouts(entries.map(e => ({ date: e.date, completed: e.completed })));
         } catch (e) {
           console.warn('[ProgressScreen] Failed to build calendar splits from DB', e);
           setSplits([]);
@@ -122,8 +132,8 @@ const ProgressScreen: React.FC = () => {
         setCalendarKey((prev) => prev + 1);
       };
 
-    processData();
-  }, [db, history])
+      processData();
+    }, [db, history, authUserId])
   );
 
   const handleDayPress = useCallback(
@@ -157,7 +167,8 @@ const ProgressScreen: React.FC = () => {
     const joins = await db.getSplitExercises(scheduledSplit.id);
     const fromIds = joins.map((j) => j.exercise.id);
     console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
-    await startWorkout(USER_ID, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
+  if (!authUserId) return;
+  await startWorkout(authUserId, scheduledSplit.id, { fromSplitExerciseIds: fromIds });
   }, [scheduledSplit, startWorkout, db]);
 
   const handleWorkoutPress = useCallback(() => {
@@ -175,13 +186,13 @@ const ProgressScreen: React.FC = () => {
   const handleCloseSummary = useCallback(() => {}, []);
 
   useEffect(() => {
-    // optional: detect an active session for this user
     (async () => {
       try {
-        await getActiveSessionId(USER_ID);
+        if (!authUserId) return;
+        await getActiveSessionId(authUserId);
       } catch {}
     })();
-  }, [getActiveSessionId]);
+  }, [getActiveSessionId, authUserId]);
 
   if (loading) {
     return (

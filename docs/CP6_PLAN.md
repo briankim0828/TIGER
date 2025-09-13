@@ -215,3 +215,60 @@ Future Enhancements:
 - Add a `seed_state` tracking table remotely if multiple seed waves introduced.
 - Provide RLS policies ensuring only public rows visible to unauthenticated users (Phase C).
 
+
+## Updated Phases F–N (Local-First, No ElectricSQL)
+
+Decision: The app is local-first. All mutations write to SQLite and enqueue to the outbox first (even when online). A background flusher syncs with Supabase. Startup performs a server→local pull to converge to the remote source of truth.
+
+### Phase F – Sync Engine (Pull + Background Flush)
+- Startup pull: After auth, for each table in `SYNC_TABLES`, fetch server snapshot (user-scoped or `is_public`) and upsert locally via Drizzle.
+- Strategy: MVP uses full snapshot per user for simplicity; optional future delta pulls via `updated_at > last_pull_at`.
+- Local state: Maintain `last_pull_at` and basic counters in a local `sync_state` table.
+- Background flush: A flusher service continuously drains the outbox when connectivity is available; no foreground blocking on writes.
+- Deletes: Record deletes as outbox ops; startup pull reconciles remote deletions (snapshot truth if no tombstones).
+
+### Phase G – Auth Wiring & User ID Propagation
+- Source: Supabase email auth. Provide `useAuthUserId()`.
+- Gate: Defer startup pull and user-scoped queries until user id present; show loading shell.
+- Ownership: Always set `user_id`/`owner_user_id = auth.uid()` in payloads; RLS enforces.
+- Session changes: On logout, reset `sync_state`; consider partitioning local DB per user if needed.
+
+### Phase H – Outbox (Mandatory Enqueue)
+- Table: Local `outbox` with `id (uuid)`, `table`, `op` (insert|update|delete), `row_id`, `payload (json)`, `created_at`, `retry_count`, `status`.
+- Enqueue-first: DAO layer wraps all mutations to (1) write locally to target table, (2) append an outbox item, regardless of connectivity.
+- Flusher: Runs on app foreground and connectivity regain; processes FIFO with exponential backoff. Marks items done on 2xx (PostgREST upsert/delete). On failure, increments `retry_count`, updates `last_error_at` in `sync_state`.
+- Connectivity signal: Repeated background failures flip an `isOnline=false` flag; UI can render offline state. Success flips it back to true.
+- Idempotency: Deterministic UUIDs for rows and PostgREST upsert allow safe retries.
+
+### Phase I – Conflict Strategy
+- Rule: Last-write-wins by `updated_at` (set by client at mutation time). Tie-break by `id` or server clock if needed.
+- Ordering: Assume single-device writer for order columns during MVP; document this.
+- Deletes: Remote-missing rows removed on pull. Local delete is an outbox op that deletes on server when flushed.
+
+### Phase J – Observability & Health
+- `SyncStatus` component: shows online/offline, last pull, outbox size, last flush result.
+- Logs: `[sync]` for pull, `[outbox]` for enqueue/flush cycles.
+- Metrics: Track `last_pull_at`, `last_flush_at`, `pending_outbox`, `last_error` in `sync_state`.
+
+### Phase K – Test Matrix (E2E)
+- Fresh online: startup pull → local populated; creating entities enqueues outbox, flusher syncs in background.
+- Offline first run: mutations enqueue and update local UI; reconnect triggers flush; next pull converges.
+- Mid-session drop: sets continue locally; background flusher resumes on reconnect without duplicates.
+- RLS: Cross-user reads denied; public catalog readable.
+- Auth switch: Logout/login as new user; `sync_state` reset; fresh pull scopes data correctly.
+
+### Phase L – Decommission Local Emulation
+- Remove custom live/bump utilities. If needed, keep `useLiveQuery` only as a thin alias to local subscriptions (no remote coupling).
+- Ensure all flows rely on startup pull + outbox + background flush.
+
+### Phase M – Documentation & Runbook
+- Update this file with final states and constraints.
+- `docs/SYNC_OPERATIONS.md`: env vars, startup order, reset DB, clear outbox, manual pull, reading status, troubleshooting.
+- README: Local-first model, Supabase as source of truth, background flush.
+
+### Phase N – Success Criteria
+- Local-first UX: mutations instantaneous locally; outbox always enqueued.
+- Background flush keeps remote in sync; offline detection via flusher failures.
+- Startup pull converges local with server; deletions reconciled.
+- No `local-user` references; RLS enforced; debug status present; CP6 docs merged.
+

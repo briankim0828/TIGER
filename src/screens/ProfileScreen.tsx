@@ -74,7 +74,15 @@ const ProfileScreen: React.FC = () => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const cancelRef = React.useRef(null);
   const history = useWorkoutHistory();
-  const USER_ID = 'local-user';
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const current = await getCurrentUser();
+        setAuthUserId(current?.id ?? null);
+      } catch {}
+    })();
+  }, []);
 
   const workoutTabs: WorkoutTab[] = [
     { id: 1, title: 'Workouts', icon: 'fitness-center' },
@@ -174,7 +182,7 @@ const ProfileScreen: React.FC = () => {
 
   const fetchUserStats = async () => {
     try {
-      const s = await history.getWorkoutStats(user?.id ?? USER_ID);
+  const s = await history.getWorkoutStats(user?.id ?? authUserId ?? '');
       setStats(s);
     } catch (error) {
       console.error('Error fetching stats (local DB):', error);
@@ -316,7 +324,8 @@ const ProfileScreen: React.FC = () => {
   const handleClearAllData = async () => {
     try {
       console.log('[ProfileScreen] Clearing workout history (local DB only)');
-      await history.deleteAllWorkouts(user?.id ?? USER_ID);
+      if (!user?.id) throw new Error('Not authenticated');
+      await history.deleteAllWorkouts(user.id);
       setStats({ totalWorkouts: 0, hoursTrained: 0 });
 
       setIsAlertOpen(false);
@@ -529,4 +538,4 @@ const ProfileScreen: React.FC = () => {
   );
 };
 
-export default ProfileScreen; 
+export default ProfileScreen;

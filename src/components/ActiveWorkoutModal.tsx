@@ -9,6 +9,7 @@ import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
+import { supabase } from '../utils/supabaseClient';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -30,7 +31,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // navigation handled via global ref
   const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
-  const USER_ID = 'local-user'; // TODO: replace with auth when available
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setAuthUserId(user?.id ?? null);
+      } catch {}
+    })();
+  }, []);
   
   const [sessionId, setSessionId] = useState<string | null>(null);
   // Live snapshot for current session
@@ -79,7 +88,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     let cancelled = false;
     (async () => {
       if (!isVisible) return;
-      const sid = await getActiveSessionId(USER_ID);
+  if (!authUserId) return;
+  const sid = await getActiveSessionId(authUserId);
       if (!sid) return;
       if (!cancelled) setSessionId(sid);
       // Fetch header info (split title, startedAt)
@@ -93,7 +103,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [isVisible, USER_ID, getActiveSessionId, getSessionInfo, getSplitName]);
+  }, [isVisible, authUserId, getActiveSessionId, getSessionInfo, getSplitName]);
   
   // Open/close bottom sheet based on visibility
   useEffect(() => {
