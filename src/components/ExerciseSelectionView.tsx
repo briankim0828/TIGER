@@ -76,13 +76,33 @@ const ExerciseSelectionView = () => {
         // Load from DB catalog
         const all: ExerciseRow[] = await db.getAllExercises();
         const map: Record<string, { id: string; name: string }[]> = {};
-        BODY_PARTS.forEach(bp => { map[bp] = []; });
+        // Initialize buckets for enum body parts exactly
+        BODY_PARTS.forEach((bp) => { map[bp] = []; });
+
+        // Normalize arbitrary body_part strings to our enum labels
+        const normalizeBodyPart = (val?: string | null): string => {
+          if (!val) return 'Core';
+          const v = String(val).trim().toLowerCase();
+          if (v.startsWith('chest')) return 'Chest';
+          if (v.startsWith('back')) return 'Back';
+          if (v === 'leg' || v.startsWith('legs')) return 'Legs';
+          if (v.startsWith('arm') || v.includes('bicep') || v.includes('tricep')) return 'Arms';
+          if (v.startsWith('shoulder')) return 'Shoulders';
+          if (v.startsWith('core') || v.includes('abs')) return 'Core';
+          if (v.startsWith('cardio') || v.includes('run') || v.includes('treadmill') || v.includes('bike')) return 'Cardio';
+          return 'Core';
+        };
+
         for (const ex of all) {
-          const bp = (ex.bodyPart || ex.modality || 'Other') ?? 'Other';
-          if (!map[bp]) map[bp] = [];
+          const bp = normalizeBodyPart(ex.bodyPart);
           map[bp].push({ id: ex.id, name: ex.name });
         }
-        if (!cancelled) setExercisesByBodyPart(map);
+        if (!cancelled) {
+          setExercisesByBodyPart(map);
+          // Default to first tab with items, else first enum
+          const firstWithItems = BODY_PARTS.find((bp) => map[bp]?.length > 0) ?? BODY_PARTS[0];
+          setSelectedBodyPart(firstWithItems);
+        }
       } catch (e) {
         console.error('ExerciseSelectionView: failed to load exercises', e);
       }
@@ -184,30 +204,6 @@ const ExerciseSelectionView = () => {
                   </Text>
                 </Pressable>
               ))}
-              <Pressable
-                onPress={() => handleBodyPartSelect('My Exercises')}
-                py="$4"
-                px="$3"
-                backgroundColor={
-                  selectedBodyPart === 'My Exercises'
-                    ? "rgba(107, 142, 242, 0.1)"
-                    : "transparent"
-                }
-                sx={{
-                  ":pressed": {
-                    backgroundColor: "rgba(107, 142, 242, 0.05)"
-                  }
-                }}
-              >
-                <Text
-                  color={selectedBodyPart === 'My Exercises' ? "$white" : "$gray400"}
-                  fontWeight={
-                    selectedBodyPart === 'My Exercises' ? "$semibold" : "$normal"
-                  }
-                >
-                  My Exercises
-                </Text>
-              </Pressable>
 
             </ScrollView>
           </Box>
@@ -287,20 +283,13 @@ const ExerciseSelectionView = () => {
                     </Pressable>
                   ))
                 ) : (
-                  selectedBodyPart === 'My Exercises' ?
-                    <HStack space="md">
-                      <Text color="$white" fontSize="$sm">
-                        My Exercises
-                      </Text>
-                    </HStack>
-                    :
-                    <Center flex={1} p="$4">
-                      {/* @ts-ignore Icon typing for vector icons */}
-                      <Icon as={MaterialIcons as any} name="category" color="$gray500" size="xl" mb="$2" />
-                      <Text color="$gray400" textAlign="center">
-                        Select a body part to see available exercises
-                      </Text>
-                    </Center>
+                  <Center flex={1} p="$4">
+                    {/* @ts-ignore Icon typing for vector icons */}
+                    <Icon as={MaterialIcons as any} name="category" color="$gray500" size="xl" mb="$2" />
+                    <Text color="$gray400" textAlign="center">
+                      Select a body part to see available exercises
+                    </Text>
+                  </Center>
                 )}
               </ScrollView>
             </Box>
