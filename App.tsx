@@ -81,11 +81,23 @@ const ActiveWorkoutModalContainer = () => {
   const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [isSuppressed, setIsSuppressed] = useState(false);
-  const USER_ID = 'local-user';
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setAuthUserId(user?.id ?? null);
+      } catch {}
+    })();
+    const { data: listener } = supabase.auth.onAuthStateChange((_evt, session) => {
+      setAuthUserId(session?.user?.id ?? null);
+    });
+    return () => { (listener as any)?.subscription?.unsubscribe?.(); };
+  }, []);
   const prevSessionIdRef = React.useRef<string | null>(null);
 
   // Live active session (no polling)
-  const { session } = useLiveActiveSession(USER_ID);
+  const { session } = useLiveActiveSession(authUserId || '');
 
   useEffect(() => {
     const sid = session?.id ?? null;

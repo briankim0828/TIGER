@@ -29,7 +29,72 @@ async function setOnline(db: SQLite.SQLiteDatabase, online: boolean, lastError?:
   await db.runAsync(`UPDATE sync_state SET is_online = ?, last_error = ?, last_flush_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE last_flush_at END`, [online ? 1 : 0, lastError ?? null, online ? 1 : 0]);
 }
 
-async function pushToServer(item: any) {
+async function fetchLocalExerciseById(db: SQLite.SQLiteDatabase, id: string): Promise<{ slug: string | null; name: string | null; modality: string | null; body_part: string | null } | null> {
+  try {
+    const row: any = await db.getFirstAsync(
+      'SELECT slug, name, modality, body_part FROM exercise_catalog WHERE id = ?',
+      [id]
+    );
+    if (!row) return null;
+    return {
+      slug: row.slug ?? null,
+      name: row.name ?? null,
+      modality: row.modality ?? null,
+      body_part: row.body_part ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function ensureRemoteExerciseIdBySlug(local: { slug: string | null; name: string | null; modality: string | null; body_part: string | null }): Promise<string | null> {
+  if (!local.slug) return null;
+  // Try fetch by slug first
+  try {
+    const { data, error } = await supabase
+      .from('exercise_catalog')
+      .select('id')
+      .eq('slug', local.slug)
+      .limit(1);
+    if (error) {
+      // If RLS blocks or transient, surface null to let caller decide
+      // eslint-disable-next-line no-console
+      console.warn('[outbox] exercise lookup by slug failed', error);
+    }
+    if (data && data.length > 0) return (data[0] as any).id as string;
+  } catch {}
+  // If not found, try inserting a private copy owned by the user
+  try {
+    const { data: sess } = await supabase.auth.getSession();
+    const uid = sess?.session?.user?.id;
+    const insertPayload: any = {
+      name: local.name ?? local.slug,
+      slug: local.slug,
+      modality: local.modality ?? 'bodyweight',
+      body_part: local.body_part ?? null,
+      is_public: false,
+      ...(uid ? { owner_user_id: uid } : {}),
+    };
+    const { data, error } = await supabase
+      .from('exercise_catalog')
+      .insert(insertPayload)
+      .select('id');
+    if (error) {
+      // Unique violation on slug? Try to fetch again.
+      const { data: again } = await supabase
+        .from('exercise_catalog')
+        .select('id')
+        .eq('slug', local.slug)
+        .limit(1);
+      if (again && again.length > 0) return (again[0] as any).id as string;
+      return null;
+    }
+    if (data && data.length > 0) return (data[0] as any).id as string;
+  } catch {}
+  return null;
+}
+
+async function pushToServer(db: SQLite.SQLiteDatabase, item: any) {
   const table = item.table_name as string;
   const op = item.op as string;
   const rowId = item.row_id as string;
@@ -39,6 +104,17 @@ async function pushToServer(item: any) {
     // Remote schema does not have created_at/updated_at
     delete (payload as any).created_at;
     delete (payload as any).updated_at;
+  }
+  // Map local exercise_id to remote by slug for workout_exercises to satisfy FK
+  if (table === 'workout_exercises' && payload && typeof payload === 'object' && (payload as any).exercise_id) {
+    const localId = (payload as any).exercise_id as string;
+    const local = await fetchLocalExerciseById(db, localId);
+    if (local && local.slug) {
+      const remoteId = await ensureRemoteExerciseIdBySlug(local);
+      if (remoteId) {
+        (payload as any).exercise_id = remoteId;
+      }
+    }
   }
   // Verbose trace for diagnostics
   try {
@@ -113,7 +189,7 @@ export async function runFlushOnce(db: SQLite.SQLiteDatabase, opts: FlushOptions
   let ok = 0;
   for (const item of batch) {
     try {
-      await pushToServer(item);
+      await pushToServer(db, item);
       await markDone(db, item.id as string);
       ok++;
     } catch (e: any) {

@@ -74,11 +74,14 @@ const ProgressScreen: React.FC = () => {
     return selectedDate === todayString;
   }, [selectedDate, todayString]);
 
+  // Parse YYYY-MM-DD as a local date to avoid timezone shifting and map to WeekDay label
   const getDayOfWeek = useCallback((dateString: string | null) => {
     if (!dateString) return null;
-    const date = new Date(dateString);
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    return days[date.getDay()];
+    const [y, m, d] = dateString.split('-').map((s) => parseInt(s, 10));
+    if (!y || !m || !d) return null;
+    const date = new Date(y, m - 1, d); // local time
+    const labels: WeekDay[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as any;
+    return labels[date.getDay()];
   }, []);
 
   const scheduledSplit: ProgramSplit | null = useMemo(() => {
@@ -101,9 +104,12 @@ const ProgressScreen: React.FC = () => {
               db.getDayAssignments(authUserId),
             ]);
             const daysBySplit = new Map<string, WeekDay[]>();
+            const NUM_TO_LABEL: Record<number, WeekDay> = { 0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun' } as const;
             for (const a of dayAssigns) {
               const list = daysBySplit.get(a.split_id) ?? [];
-              list.push((a.weekday as unknown as number) as any as WeekDay);
+              const n = typeof (a as any).weekday === 'string' ? parseInt((a as any).weekday, 10) : ((a as any).weekday as number);
+              const label = NUM_TO_LABEL[n as keyof typeof NUM_TO_LABEL];
+              if (label) list.push(label);
               daysBySplit.set(a.split_id, list);
             }
             const calendarSplits: ProgramSplit[] = rows.map((r: any) => ({
@@ -165,6 +171,7 @@ const ProgressScreen: React.FC = () => {
     }
     // Fetch exercises for this split from the DB (Program Builder source of truth)
     const joins = await db.getSplitExercises(scheduledSplit.id);
+    // Use exercise_catalog IDs; remote FK requires exercise_id to exist in exercise_catalog
     const fromIds = joins.map((j) => j.exercise.id);
     console.debug('[ProgressScreen] Starting workout', { splitId: scheduledSplit.id, exerciseCount: fromIds.length });
   if (!authUserId) return;

@@ -24,7 +24,7 @@ export function useLiveSessionExercises(sessionId: string | null) {
       if (!sessionId) return [];
       return await workouts.getSessionExercises(sessionId);
     },
-    { watchTables: ['workout_exercises', 'exercises'], deps: [sessionId] }
+    { watchTables: ['workout_exercises', 'exercise_catalog'], deps: [sessionId] }
   );
   return { exercises: data ?? [], loading, isLive } as const;
 }
@@ -65,7 +65,7 @@ export function useLiveSessionSnapshot(sessionId: string | null) {
       }
       return { exercises, setsByExercise };
     },
-    { watchTables: ['workout_exercises', 'workout_sets', 'exercises'], deps: [sessionId] }
+    { watchTables: ['workout_exercises', 'workout_sets', 'exercise_catalog'], deps: [sessionId] }
   );
   return { snapshot: data ?? { exercises: [], setsByExercise: {} }, loading, isLive } as const;
 }

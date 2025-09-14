@@ -209,6 +209,41 @@ export class ProgramBuilderDataAccess {
     return true;
   }
 
+  /**
+   * Reorder all splits for a user using a two-phase update to avoid remote UNIQUE(user_id, order_pos) conflicts.
+   * Phase 1: bump to temporary high positions (e.g., +1000)
+   * Phase 2: set final contiguous positions 1..n
+   */
+  async reorderSplits(userId: string, orderedIds: string[]): Promise<boolean> {
+    // Phase 1: move all provided ids to temp positions to avoid unique constraint collisions remotely
+    const base = 1000;
+    let tempPos = base + 1;
+    for (const id of orderedIds) {
+      await this.db.update(splits).set({ orderPos: tempPos, updatedAt: sql`CURRENT_TIMESTAMP` as any }).where(and(eq(splits.id, id), eq(splits.userId, userId))).run();
+      await enqueueOutbox(this.sqlite, { table: 'splits', op: 'update', rowId: id, payload: {
+        id,
+        user_id: userId,
+        order_pos: tempPos,
+        updated_at: new Date().toISOString(),
+      }});
+      tempPos += 1;
+    }
+
+    // Phase 2: assign final contiguous order positions
+    let pos = 1;
+    for (const id of orderedIds) {
+      await this.db.update(splits).set({ orderPos: pos, updatedAt: sql`CURRENT_TIMESTAMP` as any }).where(and(eq(splits.id, id), eq(splits.userId, userId))).run();
+      await enqueueOutbox(this.sqlite, { table: 'splits', op: 'update', rowId: id, payload: {
+        id,
+        user_id: userId,
+        order_pos: pos,
+        updated_at: new Date().toISOString(),
+      }});
+      pos += 1;
+    }
+    return true;
+  }
+
   async deleteSplit(splitId: string) {
     // local delete children then parent
     await this.db.delete(splitExercises).where(eq(splitExercises.splitId, splitId)).run();

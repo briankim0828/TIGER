@@ -79,13 +79,43 @@ const WorkoutScreen = () => {
         setSplits(ui);
     // Hydrate exercises per split for MyExercises panel (derived lightweight shape)
     try {
+      const normalizeBodyPart = (bp?: string | null, modality?: string | null): string => {
+        const v = (bp || '').trim();
+        if (v) {
+          const canon = v.charAt(0).toUpperCase() + v.slice(1).toLowerCase();
+          // Map common variants
+          const map: Record<string, string> = {
+            Chest: 'Chest',
+            Back: 'Back',
+            Legs: 'Legs',
+            Leg: 'Legs',
+            Shoulders: 'Shoulders',
+            Shoulder: 'Shoulders',
+            Arms: 'Arms',
+            Biceps: 'Arms',
+            Triceps: 'Arms',
+            Core: 'Core',
+            Abs: 'Core',
+            Abdominals: 'Core',
+            Cardio: 'Cardio',
+          };
+          return map[canon] || canon;
+        }
+        const m = (modality || '').trim();
+        if (m) {
+          const mm = m.toLowerCase();
+          if (mm === 'bodyweight') return 'Core'; // default grouping for bodyweight if body part missing
+        }
+        return 'Uncategorized';
+      };
+
       const detailed: ProgramSplitWithExercises[] = [];
       for (const s of ui) {
         const se: SplitExerciseJoin[] = await db.getSplitExercises(s.id);
         const exs: ProgramExerciseLite[] = se.map((r) => ({
           id: r.exercise.id,
           name: r.exercise.name,
-          bodyPart: (r.exercise.bodyPart || r.exercise.modality || 'Uncategorized') ?? 'Uncategorized',
+          bodyPart: normalizeBodyPart(r.exercise.bodyPart, r.exercise.modality),
         }));
         detailed.push({ ...s, exercises: exs });
       }
@@ -242,16 +272,22 @@ const WorkoutScreen = () => {
   // Persist reordered split IDs to DB using 1-based order positions
   const handlePersistSplitOrder = useCallback(async (orderedIds: string[]) => {
     try {
-      let pos = 1;
-      for (const id of orderedIds) {
-        await db.updateSplit({ id, orderPos: pos });
-        pos += 1;
+      if (AUTH_USER_ID) {
+        // Use two-phase reorder to avoid remote UNIQUE(user_id, order_pos) collisions
+        await db.reorderSplits(AUTH_USER_ID, orderedIds);
+      } else {
+        // Fallback: local only (should rarely happen)
+        let pos = 1;
+        for (const id of orderedIds) {
+          await db.updateSplit({ id, orderPos: pos });
+          pos += 1;
+        }
       }
       await fetchSplits();
     } catch (e) {
       console.error('Failed to persist split order', e);
     }
-  }, [db, fetchSplits]);
+  }, [db, fetchSplits, AUTH_USER_ID]);
 
   const handleDaySelect = useCallback((day: WeekDay) => {
     if (editMode !== 'program') {
@@ -278,7 +314,10 @@ const WorkoutScreen = () => {
     }
     const currentlyAssigned = splitToAssign.days.includes(selectedDay);
     try {
-      await db.setDayAssignment(AUTH_USER_ID, selectedDay, currentlyAssigned ? null : splitToAssign.id);
+      // Map WeekDay label to integer 0=Mon..6=Sun for storage
+      const LABEL_TO_NUM: Record<WeekDay, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 } as const;
+      const weekdayNum = LABEL_TO_NUM[selectedDay];
+      await db.setDayAssignment(AUTH_USER_ID, String(weekdayNum), currentlyAssigned ? null : splitToAssign.id);
       await fetchSplits();
     } catch (e) {
       console.error('Failed to set day assignment', e);

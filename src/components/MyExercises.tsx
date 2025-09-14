@@ -23,7 +23,7 @@ interface BodyPartSectionData {
   exercises: (ProgramExerciseLite & { splitIds: string[] })[];
 }
 
-// Define the desired order of body parts
+// Define the desired order of body parts; other categories will be appended after in alpha order
 const BODY_PART_ORDER: string[] = [
   'Chest',
   'Back',
@@ -278,26 +278,35 @@ const useProcessedExercises = (splits: ProgramSplitWithExercises[]): BodyPartSec
       return acc;
     }, {} as Record<string, (ProgramExerciseLite & { splitIds: string[] })[]>);
 
-    // 3. Create ordered sections based on BODY_PART_ORDER
-    const bodyPartSections = BODY_PART_ORDER.reduce((acc, bodyPart) => {
+    // 3. Create ordered sections based on BODY_PART_ORDER, then append any remaining categories alphabetically
+    const bodyPartSections: BodyPartSectionData[] = [];
+    const consumed = new Set<string>();
+    for (const bodyPart of BODY_PART_ORDER) {
       if (exercisesByBodyPart[bodyPart]) {
-        acc.push({
+        bodyPartSections.push({
           id: bodyPart,
           bodyPart,
-          // Sort exercises alphabetically within each section
           exercises: exercisesByBodyPart[bodyPart].sort((a, b) => a.name.localeCompare(b.name)),
         });
+        consumed.add(bodyPart);
       }
-      return acc;
-    }, [] as BodyPartSectionData[]);
-
-    // Add any remaining uncategorized exercises at the end
+    }
+    const remainingKeys = Object.keys(exercisesByBodyPart)
+      .filter((k) => !consumed.has(k) && k !== 'Uncategorized')
+      .sort((a, b) => a.localeCompare(b));
+    for (const k of remainingKeys) {
+      bodyPartSections.push({
+        id: k,
+        bodyPart: k,
+        exercises: exercisesByBodyPart[k].sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    }
     if (exercisesByBodyPart['Uncategorized']) {
-         bodyPartSections.push({
-            id: 'Uncategorized',
-            bodyPart: 'Uncategorized',
-            exercises: exercisesByBodyPart['Uncategorized'].sort((a, b) => a.name.localeCompare(b.name)),
-         });
+      bodyPartSections.push({
+        id: 'Uncategorized',
+        bodyPart: 'Uncategorized',
+        exercises: exercisesByBodyPart['Uncategorized'].sort((a, b) => a.name.localeCompare(b.name)),
+      });
     }
 
     return bodyPartSections;

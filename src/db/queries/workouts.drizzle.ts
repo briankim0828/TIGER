@@ -381,19 +381,34 @@ export class WorkoutsDataAccess {
   }
 
   async addExerciseToSession(sessionId: string, exerciseId: string): Promise<{ id: string }> {
-    const maxRow = await this.db
-      .select({ maxOrder: sql<string>`COALESCE(MAX(${workoutExercises.orderPos}), -1)` })
-      .from(workoutExercises)
-      .where(eq(workoutExercises.sessionId, sessionId));
-    const nextOrder = (parseInt((maxRow[0]?.maxOrder ?? '-1') as string, 10) || -1) + 1;
-    const id = newUuid();
-    await this.db
-      .insert(workoutExercises)
-      .values({ id, sessionId, exerciseId, orderPos: nextOrder })
-      .run();
-  await enqueueOutbox(this.sqlite, { table: 'workout_exercises', op: 'insert', rowId: id, payload: { id, session_id: sessionId, exercise_id: exerciseId, order_pos: nextOrder } });
-  this.bumpTables?.(['workout_exercises']);
-    return { id };
+    return this.inTx(async () => {
+      const id = newUuid();
+      // Atomic compute + insert to avoid duplicate order_pos under concurrency
+      await this.sqlite.runAsync(
+        `INSERT INTO workout_exercises (id, session_id, exercise_id, order_pos)
+         SELECT ?, ?, ?, COALESCE(MAX(order_pos) + 1, 0)
+         FROM workout_exercises WHERE session_id = ?;`,
+        id,
+        sessionId,
+        exerciseId,
+        sessionId
+      );
+      // Read back to get the actual order_pos we inserted
+      const rows = await this.db
+        .select({ orderPos: workoutExercises.orderPos })
+        .from(workoutExercises)
+        .where(and(eq(workoutExercises.id, id), eq(workoutExercises.sessionId, sessionId)))
+        .limit(1);
+      const insertedOrder = (rows[0]?.orderPos as number | undefined) ?? 0;
+      await enqueueOutbox(this.sqlite, {
+        table: 'workout_exercises',
+        op: 'insert',
+        rowId: id,
+        payload: { id, session_id: sessionId, exercise_id: exerciseId, order_pos: insertedOrder },
+      });
+      this.bumpTables?.(['workout_exercises']);
+      return { id };
+    });
   }
 
   async removeExerciseFromSession(sessionExerciseId: string): Promise<boolean> {
