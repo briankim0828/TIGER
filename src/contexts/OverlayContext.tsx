@@ -11,12 +11,15 @@ interface OverlayContextValue {
   showSessionSummary: (payload: SessionSummaryPayload) => void;
   hideSessionSummary: () => void;
   sessionSummary: SessionSummaryPayload | null;
+  liveDebugEnabled: boolean;
+  setLiveDebugEnabled: (value: boolean) => void;
 }
 
 const OverlayContext = createContext<OverlayContextValue | undefined>(undefined);
 
 export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sessionSummary, setSessionSummary] = useState<SessionSummaryPayload | null>(null);
+  const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
 
   const showSessionSummary = useCallback((payload: SessionSummaryPayload) => {
     setSessionSummary(payload);
@@ -25,7 +28,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const hideSessionSummary = useCallback(() => setSessionSummary(null), []);
 
   return (
-    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary }}>
+    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, liveDebugEnabled, setLiveDebugEnabled }}>
       {children}
     </OverlayContext.Provider>
   );

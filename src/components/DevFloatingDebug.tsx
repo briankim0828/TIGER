@@ -3,22 +3,26 @@ import { StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Box, Pressable, Text } from '@gluestack-ui/themed';
 import LiveWorkoutDebug from '../screens/LiveWorkoutDebug';
+import { useOverlay } from '../contexts/OverlayContext';
 
 const DevFloatingDebug: React.FC = () => {
-  if (!__DEV__) return null;
+  const { liveDebugEnabled } = useOverlay();
   const [open, setOpen] = useState(false);
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['33%'], []);
 
   useEffect(() => {
+    if (!__DEV__ || !liveDebugEnabled) return; // gate side effects when disabled
     const t = setTimeout(() => {
       if (open) sheetRef.current?.expand();
       else sheetRef.current?.close();
     }, 80);
     return () => clearTimeout(t);
-  }, [open]);
+  }, [open, liveDebugEnabled]);
 
   const toggle = useCallback(() => setOpen((v) => !v), []);
+
+  if (!__DEV__ || !liveDebugEnabled) return null; // gate rendering but after hooks
 
   return (
     <Box style={styles.container} pointerEvents="box-none">

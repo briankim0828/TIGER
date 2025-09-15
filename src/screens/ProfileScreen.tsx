@@ -40,6 +40,7 @@ import {
   getAvatarPublicUrl,
   uploadAvatar,
 } from '../supabase/supabaseProfile';
+import { useOverlay } from '../contexts/OverlayContext';
 
 type WorkoutTab = {
   id: number;
@@ -62,6 +63,7 @@ const iconMapping: IconMappingType = {
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
   const toast = useToast(); // gluestack-ui toast hook
+  const { liveDebugEnabled, setLiveDebugEnabled } = useOverlay();
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -443,6 +445,16 @@ const ProfileScreen: React.FC = () => {
   {/* Settings & Options Section */}
       <VStack px={4} mt={4} space="md" pb={8}>
          <Text color="white" fontSize="$lg" fontWeight="bold" mb={0}>Settings</Text>
+         {__DEV__ && (
+           <Button
+             variant="outline"
+             action="secondary"
+             size="lg"
+             onPress={() => setLiveDebugEnabled(!liveDebugEnabled)}
+           >
+             <ButtonText>{liveDebugEnabled ? 'Disable Live Debugging' : 'Enable Live Debugging'}</ButtonText>
+           </Button>
+         )}
          {/* Example Setting Item */}
         <Pressable
              bg="#2A2E38"
