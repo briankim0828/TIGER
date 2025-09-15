@@ -5,7 +5,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription } from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { Entypo, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Entypo, Ionicons } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
@@ -72,8 +72,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // State
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [tick, setTick] = useState(0); // periodic re-render for timer
-  // currentExercises derived from live snapshot
-  const [expandedExercises, setExpandedExercises] = useState<{[key: string]: boolean}>({});
+  // Exercises are always expanded now (no expand/collapse state)
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [addingSetFor, setAddingSetFor] = useState<string | null>(null);
   const addingSetLockRef = useRef(false);
@@ -123,7 +122,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!isVisible) {
       console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
       setIsEndingWorkout(false);
-      setExpandedExercises({});
+  // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
     }
@@ -131,7 +130,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => {
       console.log('ActiveWorkoutModal - Component cleanup, resetting state');
       setIsEndingWorkout(false);
-      setExpandedExercises({});
+  // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
     };
   }, [isVisible]);
@@ -231,13 +230,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   //   }
   // }, [currentExercises]);
   
-  // Toggle exercise expansion
-  const toggleExerciseExpansion = useCallback((exerciseId: string) => {
-    setExpandedExercises(prev => ({
-      ...prev,
-      [exerciseId]: !prev[exerciseId]
-    }));
-  }, []);
+  // Expansion removed: exercises are always expanded
 
   // Create state for TextInput temporary values
   const [localInputValues, setLocalInputValues] = useState<{[key: string]: {weightKg: string, reps: string}}>({});
@@ -311,8 +304,40 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!ex) return;
     const s = ex.sets[setIndex];
     if (!s) return;
-  updateSet(s.id, { isCompleted: !s.isCompleted } as any).catch(console.error);
-  }, [currentExercises, updateSet, sessionId]);
+
+    const setKey = `${exerciseId}-${s.id || setIndex}`;
+    const local = localInputValues[setKey] || { weightKg: '', reps: '' };
+    const hasWeight = (local.weightKg ?? '').toString().trim() !== '';
+    const hasReps = (local.reps ?? '').toString().trim() !== '';
+    const canComplete = hasWeight && hasReps;
+
+    // If attempting to complete but inputs are not present, ignore
+    if (!s.isCompleted && !canComplete) return;
+
+    if (!s.isCompleted) {
+      // Completing: persist current values and set isCompleted=true
+      const w = parseFloat(local.weightKg);
+      const r = parseFloat(local.reps);
+      if (isNaN(w) || isNaN(r)) {
+        toast.show({
+          placement: 'top',
+          render: ({ id }) => (
+            <Toast nativeID={id} action="error" variant="accent">
+              <VStack space="xs">
+                <ToastTitle>Invalid Input</ToastTitle>
+                <ToastDescription>Please enter numeric values for weight and reps before completing.</ToastDescription>
+              </VStack>
+            </Toast>
+          ),
+        });
+        return;
+      }
+      updateSet(s.id, { weightKg: w, reps: r, isCompleted: true } as any).catch(console.error);
+    } else {
+      // Un-completing: allow editing again
+      updateSet(s.id, { isCompleted: false } as any).catch(console.error);
+    }
+  }, [currentExercises, localInputValues, updateSet, toast]);
   
   // Handle Add Set button click
   const handleAddNewSet = useCallback((exerciseId: string) => {
@@ -378,17 +403,49 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const [splitTitle, setSplitTitle] = useState<string>('');
   const elapsedSec = sessionStartedAtMs ? Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000)) : 0;
+  const formattedDate = useMemo(() => {
+    if (!sessionStartedAtMs) return '';
+    try {
+      return new Date(sessionStartedAtMs).toLocaleDateString(undefined, {
+        month: 'short', day: 'numeric', year: 'numeric',
+      });
+    } catch {
+      return '';
+    }
+  }, [sessionStartedAtMs]);
+
   const renderHeader = () => (
-    <Box bg="#2A2E38" px="$4" py="$3" borderColor="$borderDark700" borderBottomWidth={1} width="100%">
-      <HStack justifyContent="center" alignItems="center">
-        <VStack alignItems="center">
+    <Box bg="#2A2E38" px="$4" py="$3" width="100%">
+      <HStack alignItems="center" justifyContent="space-between" width="100%">
+        {/* Left: Split name + date */}
+        <VStack alignItems="flex-start" flexShrink={1} maxWidth="45%">
           <Text color="$textLight50" fontWeight="$bold" fontSize="$lg" numberOfLines={1}>
             {splitTitle || 'Active Workout'}
           </Text>
+          {!!formattedDate && (
+            <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>{formattedDate}</Text>
+          )}
+        </VStack>
+
+        {/* Middle: Timer */}
+        <VStack alignItems="center" flexGrow={1}>
           <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
             {formatTimer(elapsedSec)}
           </Text>
         </VStack>
+
+        {/* Right: Finish button */}
+        <Pressable
+          onPress={handleEndWorkout}
+          disabled={isEndingWorkout}
+          bg="#22c55e"
+          py="$2"
+          px="$4"
+          borderRadius="$lg"
+          $pressed={{ opacity: 0.7 }}
+        >
+          <Text color="$textLight50" fontWeight="$bold">{isEndingWorkout ? 'Saving…' : 'Finish'}</Text>
+        </Pressable>
       </HStack>
     </Box>
   );
@@ -401,43 +458,101 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
     
     const setKey = `${exerciseId}-${set.id || setIndex}`;
-  const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
+    const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
+    const previousText = '—';
+
+    const isCompleted = !!set.isCompleted;
+    const hasWeight = (localValue.weightKg ?? '').toString().trim() !== '';
+    const hasReps = (localValue.reps ?? '').toString().trim() !== '';
+    const canComplete = hasWeight && hasReps;
 
     return (
-      <HStack key={set.id || setIndex} alignItems="center" space="sm" my="$1" px="$1">
-        <Pressable onPress={() => handleToggleSetCompletion(exerciseId, setIndex)} p="$2">
-          <MaterialCommunityIcons
-            name={set.isCompleted ? "check-circle" : "checkbox-blank-circle-outline"}
-            size={24}
-            color={set.isCompleted ? "#22c55e" : "#71717a"}
+      <HStack
+        key={set.id || setIndex}
+        alignItems="center"
+        space="xs"
+        my="$0"
+        width="100%"
+        style={{
+          backgroundColor: isCompleted ? 'rgba(34, 197, 94, 0.12)' : 'transparent',
+          borderRadius: 8,
+        }}
+      >
+  {/* Set number */}
+  <Text w="$10" textAlign="center" color="$textLight50" fontWeight="$bold">{setIndex + 1}</Text>
+        {/* Previous column placeholder */}
+        <Text flex={1} textAlign="center" color="$textLight500">{previousText}</Text>
+        {/* Weight (lbs) */}
+        {isCompleted ? (
+          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
+            <InputField
+              value={(localValue.weightKg ?? '').toString().trim() || (set.weightKg ? String(set.weightKg) : '')}
+              editable={false}
+              color="$textLight50"
+              textAlign="center"
+            />
+          </Input>
+        ) : (
+          <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+            <InputField
+              placeholder="lbs"
+              value={localValue.weightKg}
+              onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
+              onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
+              keyboardType="numeric"
+              color="$textLight50"
+              placeholderTextColor="$textLight600"
+              textAlign="center"
+            />
+          </Input>
+        )}
+        {/* Reps */}
+        {isCompleted ? (
+          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
+            <InputField
+              value={(localValue.reps ?? '').toString().trim() || (set.reps ? String(set.reps) : '')}
+              editable={false}
+              color="$textLight50"
+              textAlign="center"
+            />
+          </Input>
+        ) : (
+          <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+            <InputField
+              placeholder="Reps"
+              value={localValue.reps}
+              onChangeText={(text) => handleInputChange(exerciseId, setKey, 'reps', text)}
+              onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'reps')}
+              keyboardType="numeric"
+              color="$textLight50"
+              placeholderTextColor="$textLight600"
+              textAlign="center"
+            />
+          </Input>
+        )}
+        {/* Completion toggle on the right */}
+        <Pressable
+          onPress={() => canComplete || isCompleted ? handleToggleSetCompletion(exerciseId, setIndex) : undefined}
+          disabled={!canComplete && !isCompleted}
+          $pressed={{ opacity: 0.9 }}
+          style={{
+            backgroundColor: isCompleted ? '#22c55e' : '#1E222C',
+            width: 28,
+            height: 28,
+            borderRadius: 6,
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: !canComplete && !isCompleted ? 0.5 : 1,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={isCompleted ? 'Mark set incomplete' : (canComplete ? 'Mark set complete' : 'Complete set (disabled)')}
+        >
+          <Ionicons
+            name="checkmark"
+            size={18}
+            color={isCompleted ? '#FFFFFF' : (canComplete ? '#FFFFFF' : '#71717a')}
           />
         </Pressable>
-        <Text w="$10" textAlign="center" color="$textLight400" fontWeight="$medium">Set {setIndex + 1}</Text>
-        <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
-          <InputField
-            placeholder="Weight (kg)"
-            value={localValue.weightKg}
-            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
-            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
-            keyboardType="numeric"
-            color="$textLight50"
-            placeholderTextColor="$textLight600"
-            textAlign="center"
-          />
-        </Input>
-        <Text color="$textLight400" px="$1">x</Text>
-        <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
-          <InputField
-            placeholder="Reps"
-            value={localValue.reps}
-            onChangeText={(text) => handleInputChange(exerciseId, setKey, 'reps', text)}
-            onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'reps')}
-            keyboardType="numeric"
-            color="$textLight50"
-            placeholderTextColor="$textLight600"
-            textAlign="center"
-          />
-        </Input>
       </HStack>
     );
   };
@@ -463,68 +578,78 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 
                 {/* Exercise list with sets */}
                 <VStack space="sm" width="100%">
-                  {currentExercises.map((exercise, exerciseIndex) => (
+                  {currentExercises.map((exercise) => (
                     <Box key={exercise.id}>
-                      <Pressable 
-                        onPress={() => toggleExerciseExpansion(exercise.id)}
-                      >
-                        <Box 
-                          bg={"transparent"} 
-                          p="$4" 
-                          borderRadius="$lg"
-                        >
-                          <HStack space="md" alignItems="center">
-                            <Text color="$textLight50" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
-                              {exercise.name}
-                            </Text>
-                            <Ionicons
-                              name={expandedExercises[exercise.id] ? "chevron-up-outline" : "chevron-down-outline"}
-                              size={20}
-                              color="#adb5bd"
-                            />
+                      <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
+                        <HStack space="sm" alignItems="center">
+                          <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
+                            {exercise.name}
+                          </Text>
+                        </HStack>
+
+                        {/* Always-expanded sets section */}
+                        <VStack mt="$2" space="xs" width="100%">
+                          {/* Column headers */}
+                          <HStack alignItems="center" justifyContent="space-between" mb="$0" width="100%">
+                            <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">Set</Text>
+                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">Previous</Text>
+                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">lbs</Text>
+                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">Reps</Text>
+                            <View style={{ width: 28, alignItems: 'center' }}>
+                              <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                            </View>
                           </HStack>
-                          
-                          {expandedExercises[exercise.id] && (
-                            <VStack mt="$3" space="md">
-                              {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, exerciseIndex))}
-                              <Button variant="outline" action="secondary" onPress={() => handleAddNewSet(exercise.id)} mt="$2" size="sm" disabled={addingSetFor === exercise.id}>
-                                <Ionicons name="add-outline" size={20} color="#6B8EF2" style={{ marginRight: 4 }} />
-                                <ButtonText>Add Set</ButtonText>
-                              </Button>
-                            </VStack>
-                          )}
-                        </Box>
-                      </Pressable>
-                      
-                      {/* Add divider after each exercise except the last one */}
-                      {exerciseIndex < currentExercises.length - 1 && (
-                        <Divider bg="$borderDark700" h={1} my="$1" opacity={1} width="95%" alignSelf="center" />
-                      )}
+
+                          {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, 0))}
+
+                          <Pressable
+                            onPress={() => handleAddNewSet(exercise.id)}
+                            disabled={addingSetFor === exercise.id}
+                            bg="#1E222C"
+                              py="$1"
+                            px="$3"
+                            borderRadius="$md"
+                            $pressed={{ opacity: 0.7 }}
+                            style={{ width: '100%' }}
+                          >
+                            <Text color="$textLight200" textAlign="center">+ Add Set</Text>
+                          </Pressable>
+                        </VStack>
+                      </Box>
                     </Box>
                   ))}
                 </VStack>
                 
-                <Box mt="$2" mb="$2" px="$2">
-                  <Button variant="solid" action="primary" onPress={handleAddExercisePress} my="$4" size="lg">
-                    <Ionicons name="add-circle-outline" size={24} color="white" style={{ marginRight: 8 }}/>
-                    <ButtonText>Add Exercise</ButtonText>
-                  </Button>
-                </Box>
-
-                <HStack space="md" mt="$4" px="$2">
+                <Box mt="$1" mb="$1" px="$2">
                   <Pressable
-                    bg="transparent"
-                    py="$3"
+                    onPress={handleAddExercisePress}
+                    bg="#1A2E5A"
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)' }}
+                    py="$1"
                     px="$6"
                     borderRadius="$lg"
-                    borderWidth={1.5}
-                    borderColor="$red500"
-                    flex={1}
                     alignItems="center"
                     justifyContent="center"
-                    $pressed={{ opacity: 0.6 }}
+                    $pressed={{ opacity: 0.8 }}
+                  >
+                    <HStack alignItems="center" space="sm">
+                      <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
+                      <Text color="#3B82F6" fontSize="$md" fontWeight="$bold">Add Exercises</Text>
+                    </HStack>
+                  </Pressable>
+                </Box>
+
+                <Box mb="$5" px="$2">
+                  <Pressable
+                    bg="#3B2B2B"
+                      py="$1"
+                    px="$6"
+                    borderRadius="$lg"
+                    alignItems="center"
+                    justifyContent="center"
+                    $pressed={{ opacity: 0.7 }}
                     onPress={async () => {
-                      // Discard: close modal and delete workout
+                      // Cancel workout: close modal and delete workout
                       if (sessionId) {
                         try {
                           await deleteWorkout(sessionId);
@@ -545,29 +670,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       }
                     }}
                   >
-                    <Text color="$red500" fontSize="$md" fontWeight="$bold" textAlign="center">
-                      Discard Workout
-                    </Text>
+                    <Text color="$red400" fontSize="$md" fontWeight="$bold" textAlign="center">Cancel Workout</Text>
                   </Pressable>
-              
-                  <Pressable
-                    bg={isEndingWorkout ? "$coolGray500" : "$red500"}
-                    py="$3"
-                    px="$6"
-                    borderRadius="$lg"
-                    onPress={handleEndWorkout}
-                    $pressed={{ opacity: 0.6 }}
-                    flex={1}
-                    alignItems="center"
-                    justifyContent="center"
-                    opacity={isEndingWorkout ? 0.7 : 1}
-                    disabled={isEndingWorkout}
-                  >
-                    <Text color="$textLight50" fontSize="$md" fontWeight="$bold" textAlign="center">
-                      {isEndingWorkout ? "Saving..." : "Finish Workout"}
-                    </Text>
-                  </Pressable>
-                </HStack>
+                </Box>
               </Box>
             </ScrollView>
           </Box>
