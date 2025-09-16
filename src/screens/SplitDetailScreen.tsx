@@ -5,7 +5,6 @@ import {
   Text,
   Icon,
   Button,
-  ButtonIcon,
   VStack,
   Pressable,
   ScrollView,
@@ -36,7 +35,7 @@ const SplitDetailScreen = () => {
   const { split, newlyAddedExercises } = route.params;
   const splitColor = split.color || "#2A2E38";
   const [exercises, setExercises] = useState<ExerciseRow[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
+  // Edit state removed; Add Exercise is always visible now
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
 
@@ -116,23 +115,38 @@ const SplitDetailScreen = () => {
   return (
     <Box flex={1} backgroundColor="#1E2028">
       <Box flex={1}>
-        <HStack justifyContent="space-between" alignItems="center" p="$4">
-          <HStack space="md" alignItems="center">
-            <Button
-              variant="link"
-              onPress={() => navigation.goBack()}
-            >
-              {/* @ts-ignore ButtonIcon typing for vector icons */}
-              <ButtonIcon as={AntDesign as any} name="left" color="$white" />
-            </Button>
-            <Text color="$white" fontSize="$xl" fontWeight="$bold">
-              {split.name}
-            </Text>
-          </HStack>
-          <Button variant="link" onPress={() => setIsEditing(!isEditing)}>
-            {/* Replace ButtonIcon with Icon to avoid typing friction */}
+        {/* Centered title header with back button on the left */}
+        <Box p="$4" position="relative" alignItems="center" justifyContent="center">
+          <Button
+            variant="link"
+            onPress={() => navigation.goBack()}
+            position="absolute"
+            left="$2"
+          >
             {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name={isEditing ? "check" : "edit"} color="white" />
+            <Icon as={AntDesign as any} name="left" color="$white" />
+          </Button>
+          <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
+            {split.name}
+          </Text>
+        </Box>
+
+        {/* Summary row with total count and Reorder button (no-op) */}
+        <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
+          <Text color="$gray400" fontSize="$sm">
+            Total of {exercises.length}
+          </Text>
+          <Button
+            variant="outline"
+            size="sm"
+            borderColor="#6B8EF2"
+            onPress={() => { /* no-op for now */ }}
+          >
+            <HStack alignItems="center" space="xs">
+              {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+              <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
+              <Text color="#6B8EF2" fontSize="$sm">Reorder</Text>
+            </HStack>
           </Button>
         </HStack>
 
@@ -144,42 +158,42 @@ const SplitDetailScreen = () => {
     {exercises.length > 0 ? (
               <VStack space="md">
                 {exercises.map((exercise, index) => (
-                  <Box
-        key={exercise.id}
-                    backgroundColor="transparent"
-                    p="$3"
-                    borderRadius="$lg"
-                    borderWidth="$1"
-                    borderColor="rgba(255, 255, 255, 0.5)"
-                  >
-                    <HStack justifyContent="space-between" alignItems="center">
+                  <Box key={exercise.id} backgroundColor="transparent" p="$2">
+                    <HStack alignItems="center" justifyContent="space-between">
                       <HStack space="md" alignItems="center" flex={1}>
+                        {/* Avatar with first letter */}
                         <Box
-                          width="$3"
-                          height="$full"
+                          width={48}
+                          height={48}
                           backgroundColor={splitColor}
-                          position="absolute"
-                          left="$0"
                           borderRadius="$md"
-                        />
-                        <Text color="rgba(255, 255, 255, 0.5)" fontSize="$sm" ml="$4">
-                          {index + 1}
-                        </Text>
-                        <Text color="$white" fontSize="$md">
-          {exercise.name}
-                        </Text>
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                            {exercise.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </Box>
+                        <VStack flex={1}>
+                          <Text color="$white" fontSize="$md" numberOfLines={1}>
+                            {exercise.name}
+                          </Text>
+                          <Text color="$gray400" fontSize="$xs">
+                            {/* Placeholder for sets/rep summary */}
+                          </Text>
+                        </VStack>
                       </HStack>
-                      {isEditing && (
-                        <Button variant="link" onPress={() => handleRemoveExercise(index)} sx={{ p: 0 }}>
-                          {/* @ts-ignore */}
-                          <Icon as={AntDesign as any} name="close" color="$gray400" />
-                        </Button>
-                      )}
+                      {/* Trailing menu (no-op) */}
+                      <Button variant="link" onPress={() => handleRemoveExercise(index)}>
+                        {/* @ts-ignore */}
+                        <Icon as={AntDesign as any} name="close" color="$red500" />
+                      </Button>
                     </HStack>
                   </Box>
                 ))}
 
-                {isEditing && addExerciseButton}
+                {/* Always show Add Exercise button */}
+                <Box mt="$2">{addExerciseButton}</Box>
               </VStack>
             ) : (
               <Box
@@ -193,7 +207,7 @@ const SplitDetailScreen = () => {
                   <Text color="$gray400" fontSize="$lg">
                     Add exercises to {split.name} day
                   </Text>
-                  {isEditing && <Box width="$full">{addExerciseButton}</Box>}
+                  <Box width="$full">{addExerciseButton}</Box>
                 </VStack>
               </Box>
             )}
