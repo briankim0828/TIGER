@@ -31,6 +31,7 @@ import {
   View,
   StyleSheet,
   LogBox,
+  Pressable,
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
@@ -38,13 +39,16 @@ import DebugDatabaseScreen from "./src/screens/DebugDatabaseScreen";
 import LiveWorkoutDebug from "./src/screens/LiveWorkoutDebug";
 import DevFloatingDebug from "./src/components/DevFloatingDebug";
 import { useLiveActiveSession } from "./src/db/live/workouts";
-import { GluestackUIProvider, Box, Text } from "@gluestack-ui/themed";
+import { GluestackUIProvider, Box, Text, HStack, Button, Icon, useToast, Toast, ToastTitle, ToastDescription, VStack } from "@gluestack-ui/themed";
+import { AntDesign } from "@expo/vector-icons";
 import { config } from "./gluestack-ui.config";
 import { StatusBar } from "react-native";
 import {
   createMaterialTopTabNavigator,
   MaterialTopTabBarProps,
 } from "@react-navigation/material-top-tabs";
+import { useElectric } from "./src/electric";
+import { pullAllSnapshots } from "./src/db/sync/pull";
 
 // Ignore specific warning about text strings
 LogBox.ignoreLogs([
@@ -228,11 +232,74 @@ interface GlobalHeaderProps {
 }
 const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const insets = useSafeAreaInsets();
+  const { db, live } = useElectric();
+  const toast = useToast();
   return (
-    <Box bg="#1E2028" px={4} pb={3}>
-      <Text color="white" fontSize="$2xl" fontWeight="bold">
-        {title}
-      </Text>
+    <Box bg="#1E2028" px="$3" width="$full" alignItems="center">
+      <HStack alignItems="center" style={{ height: 25 }}>
+        {/* Left refresh button to trigger a remote pull */}
+        <Box style={{ width: 44 }} h="$full" alignItems="flex-start" justifyContent="center" pl="$1">
+          <Button
+            variant="link"
+            p="$0"
+            onPress={async () => {
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const uid = user?.id;
+                if (db && uid) {
+                  await pullAllSnapshots(db, { userId: uid, log: true });
+                  // Bump tables we know can change to refresh UI; conservative list
+                  live.bump(['splits', 'split_day_assignments', 'split_exercises', 'workout_sessions', 'workout_exercises', 'workout_sets']);
+                  toast.show({
+                    placement: 'top',
+                    render: ({ id }) => (
+                      <Toast nativeID={id} action="success" variant="accent">
+                        <VStack space="xs">
+                          <ToastTitle>Sync complete</ToastTitle>
+                          <ToastDescription>Latest data pulled from server</ToastDescription>
+                        </VStack>
+                      </Toast>
+                    ),
+                  });
+                }
+              } catch (e) {
+                toast.show({
+                  placement: 'top',
+                  render: ({ id }) => (
+                    <Toast nativeID={id} action="error" variant="accent">
+                      <VStack space="xs">
+                        <ToastTitle>Sync failed</ToastTitle>
+                        <ToastDescription>Could not pull latest data</ToastDescription>
+                      </VStack>
+                    </Toast>
+                  ),
+                });
+              }
+            }}
+          >
+            {/* @ts-ignore */}
+            <Icon as={AntDesign as any} name="reload1" color="$white" />
+          </Button>
+        </Box>
+        {/* Centered title */}
+        <Box flex={1} alignItems="center" justifyContent="center" h="$full">
+          <Text color="white" fontSize="$xl" fontWeight="bold">
+            {title}
+          </Text>
+        </Box>
+        {/* Right settings button */}
+        <Box style={{ width: 44 }} alignItems="flex-end" h="$full" justifyContent="center">
+          <Pressable
+            onPress={() => { /* no-op */ }}
+            accessibilityRole="button"
+            hitSlop={8}
+            style={{ justifyContent: 'center', alignItems: 'center', height: '100%', width: 44 }}
+          >
+            {/* @ts-ignore gluestack Icon typing doesn't include `name` */}
+            <Icon as={AntDesign as any} name="setting" color="$white" />
+          </Pressable>
+        </Box>
+      </HStack>
     </Box>
   );
 };

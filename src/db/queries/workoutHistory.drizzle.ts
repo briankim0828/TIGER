@@ -2,6 +2,7 @@ import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
 import { and, eq, sql } from 'drizzle-orm';
 import { workoutSessions } from '../sqlite/schema';
+import { enqueueOutbox } from '../sync/outbox';
 
 /**
  * Lightweight calendar entry (date + completion flag)
@@ -83,6 +84,40 @@ export class WorkoutHistoryDataAccess {
   // execAsync does not support parameter binding; use runAsync for parametrized delete
   await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
     // SQLite execAsync does not return affected rows; do a count after.
+    const remain = await this.db
+      .select({ c: sql<number>`COUNT(*)`.as('c') })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId));
+    return (remain[0]?.c as number) ?? 0;
+  }
+
+  /**
+   * Sync-aware clear: enqueue remote deletes for each session, then delete locally.
+   * This ensures the background flusher propagates the deletions to Supabase.
+   */
+  async deleteAllWorkoutsSyncAware(userId: string): Promise<number> {
+    // Collect session IDs for the user first
+    const rows = await this.db
+      .select({ id: workoutSessions.id })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId));
+
+    // Enqueue remote deletes for each session row
+    if (rows.length > 0) {
+      await this.sqlite.withTransactionAsync(async () => {
+        for (const r of rows) {
+          const id = r.id as string;
+          await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'delete', rowId: id });
+        }
+        // Then perform the local delete (cascades will clear child tables locally)
+        await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+      });
+    } else {
+      // No rows; still ensure local table is clean (noop if already empty)
+      await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+    }
+
+    // Return remaining count for convenience
     const remain = await this.db
       .select({ c: sql<number>`COUNT(*)`.as('c') })
       .from(workoutSessions)

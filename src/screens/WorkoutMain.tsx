@@ -23,7 +23,15 @@ const WorkoutMain = () => {
       }}
     >
       <Stack.Screen name="WorkoutMain" component={WorkoutScreen} />
-      <Stack.Screen name="SplitDetail" component={SplitDetailScreen} />
+      <Stack.Screen
+        name="SplitDetail"
+        component={SplitDetailScreen}
+        options={{
+          presentation: 'transparentModal',
+          animation: 'none',
+          contentStyle: { backgroundColor: 'transparent' }
+        }}
+      />
       <Stack.Screen name="ExerciseSelection" component={ExerciseSelectionView} />
     </Stack.Navigator>
   );

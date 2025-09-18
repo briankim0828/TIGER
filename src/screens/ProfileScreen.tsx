@@ -327,7 +327,12 @@ const ProfileScreen: React.FC = () => {
     try {
       console.log('[ProfileScreen] Clearing workout history (local DB only)');
       if (!user?.id) throw new Error('Not authenticated');
-      await history.deleteAllWorkouts(user.id);
+      // Use sync-aware clear so deletions propagate to remote via outbox
+      if ((history as any).deleteAllWorkoutsSyncAware) {
+        await (history as any).deleteAllWorkoutsSyncAware(user.id);
+      } else {
+        await history.deleteAllWorkouts(user.id);
+      }
       setStats({ totalWorkouts: 0, hoursTrained: 0 });
 
       setIsAlertOpen(false);
@@ -346,7 +351,7 @@ const ProfileScreen: React.FC = () => {
       });
 
     } catch (error) {
-      console.error('Error clearing workout data:', error);
+  console.error('Error clearing workout data:', error);
       toast.show({
         placement: "top",
         render: ({ id }) => {

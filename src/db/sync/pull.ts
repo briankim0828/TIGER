@@ -64,6 +64,36 @@ export async function pullSnapshotForTable(db: SQLite.SQLiteDatabase, table: str
   const data = await queryWithRetry(table, userId, 3, 250);
   await upsertRows(db, table, data);
   if (log) console.log(`[sync] pulled ${data.length} rows for ${table}`);
+
+  // Reconcile deletions: remove local rows that no longer exist remotely.
+  // Skip for exercise_catalog to avoid breaking local references.
+  if (table !== 'exercise_catalog') {
+    try {
+      const remoteIds = new Set<string>((data as any[]).map((r) => String(r.id)));
+      // Get local IDs for this table
+      const localRows: Array<{ id: string }> = await db.getAllAsync(`SELECT id FROM ${table}`) as any;
+      if (localRows && localRows.length) {
+        let candidates = localRows.map(r => String(r.id)).filter(id => !remoteIds.has(id));
+        if (candidates.length) {
+          // Do not delete rows that are pending/processing in outbox as insert/update (haven't synced yet)
+          const placeholders = candidates.map(() => '?').join(',');
+          const pending: Array<{ row_id: string }> = await db.getAllAsync(
+            `SELECT row_id FROM outbox WHERE table_name = ? AND row_id IN (${placeholders}) AND status IN ('pending','processing') AND op IN ('insert','update')`,
+            [table, ...candidates]
+          ) as any;
+          const pendingSet = new Set(pending.map(p => String(p.row_id)));
+          const toDelete = candidates.filter(id => !pendingSet.has(id));
+          if (toDelete.length) {
+            const delPh = toDelete.map(() => '?').join(',');
+            await db.runAsync(`DELETE FROM ${table} WHERE id IN (${delPh})`, toDelete);
+            if (log) console.log(`[sync] reconciled deletes on ${table}: removed ${toDelete.length}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[sync] deletion reconciliation skipped for table', table, e);
+    }
+  }
 }
 
 export async function pullAllSnapshots(db: SQLite.SQLiteDatabase, opts: PullOptions) {
