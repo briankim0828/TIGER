@@ -19,6 +19,7 @@ interface WorkoutCalendarProps {
   workouts: { date: string; completed: boolean }[];
   onDayPress?: (date: string) => void;
   splits: ProgramSplit[];
+  useParentInset?: boolean; // when true, remove internal horizontal padding
 }
 
 interface MonthSection {
@@ -184,6 +185,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   workouts,
   onDayPress,
   splits,
+  useParentInset = false,
 }) => {
   // Cache today's date info
   const todayInfo = useMemo(() => {
@@ -351,14 +353,14 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   }, [month, year, selectedDate, todayInfo, getWorkoutForDate, getSplitForDate, handleDayPress]);
 
   return (
-    <Box bg="$1E2028" px="$1" pt="$4">
-      <VStack space="xs" p="$2" borderRadius="$lg">
+    <Box bg="$1E2028" px={useParentInset ? 0 : "$1"} pt="$4">
+      <VStack space="xs" p="$2" borderRadius="$lg" px={useParentInset ? 0 : undefined}>
         <Text
           fontSize="$lg"
           fontWeight="$bold"
           mb="$1"
           color={monthData.isFutureMonth ? "$textLight500" : "$textLight50"}
-          pl="$3"
+          pl={useParentInset ? 0 : "$3"}
         >
           {new Date(year, month).toLocaleString("default", {
             month: "long",

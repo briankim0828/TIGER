@@ -395,7 +395,7 @@ const WorkoutScreen = () => {
             data={[]}
             keyExtractor={() => "header"}
             ListHeaderComponent={
-              <VStack space="md" p="$3.5">
+              <VStack space="md" p="$2">
                 <MyProgram
                   splits={splits}
                   editMode={editMode}

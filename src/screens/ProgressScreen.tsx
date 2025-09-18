@@ -5,8 +5,9 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import { Box, Text, Pressable } from "@gluestack-ui/themed";
+import { Box, Text, Pressable, VStack } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
+import WorkoutHeatmap from "../components/WorkoutHeatmap";
 import { useFocusEffect } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
@@ -212,46 +213,52 @@ const ProgressScreen: React.FC = () => {
   return (
     <GestureHandlerRootView style={styles.container}>
       <ScrollView style={{ flex: 1, backgroundColor: "#1E2028" }}>
-        <Box flex={1} py="$4">
-          <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold" pl="$4" mb="$4">
-            My Progress
-          </Text>
+        <Box flex={1}  >
+          <VStack space="md" p="$2">
+            <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold">
+              My Progress
+            </Text>
 
-          <WorkoutCalendar
-            key={`calendar-${calendarKey}`}
-            month={currentMonth}
-            year={currentYear}
-            workouts={calendarEntries}
-            splits={splits}
-            onDayPress={handleDayPress}
-          />
+            {/* Workout Heatmap */}
+            <WorkoutHeatmap entries={calendarEntries} splits={splits} />
 
-          <Box px="$4" py="$1" pt="$5">
-            <Pressable
-              bg="$primary500"
-              py="$4"
-              px="$6"
-              borderRadius="$xl"
-              onPress={handleWorkoutPress}
-              $pressed={{ opacity: 0.8 }}
-              opacity={isFutureDate ? 0.65 : 1}
-              disabled={isFutureDate}
-              accessibilityRole="button"
-            >
-              <Text
-                color="$textLight50"
-                fontSize="$lg"
-                fontWeight="$bold"
-                textAlign="center"
+            <WorkoutCalendar
+              key={`calendar-${calendarKey}`}
+              month={currentMonth}
+              year={currentYear}
+              workouts={calendarEntries}
+              splits={splits}
+              onDayPress={handleDayPress}
+              useParentInset
+            />
+
+            <Box py="$1" pt="$5">
+              <Pressable
+                bg="$primary500"
+                py="$4"
+                px="$6"
+                borderRadius="$xl"
+                onPress={handleWorkoutPress}
+                $pressed={{ opacity: 0.8 }}
+                opacity={isFutureDate ? 0.65 : 1}
+                disabled={isFutureDate}
+                accessibilityRole="button"
               >
-                {isFutureDate
-                  ? "Not Yet..."
-                  : isToday
-                    ? "Begin Today's Workout"
-                    : `Session from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-              </Text>
-            </Pressable>
-          </Box>
+                <Text
+                  color="$textLight50"
+                  fontSize="$lg"
+                  fontWeight="$bold"
+                  textAlign="center"
+                >
+                  {isFutureDate
+                    ? "Not Yet..."
+                    : isToday
+                      ? "Begin Today's Workout"
+                      : `Session from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                </Text>
+              </Pressable>
+            </Box>
+          </VStack>
         </Box>
       </ScrollView>
       
