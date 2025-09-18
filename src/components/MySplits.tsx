@@ -268,37 +268,42 @@ const SplitItem = React.memo(
             </HStack>
           ) : (
             // -- Display View --
-            <>
-              <Text 
-                color="white" 
-                style={{ fontSize: 18, fontWeight: "bold", flex: 1 }}
-                numberOfLines={1} 
-                ellipsizeMode="tail"
-              >
-                {split.name}
-              </Text>
-              <HStack alignItems="center"> {/* Use style for spacing with animations */}
-                <Animated.View style={contentShiftAnimatedStyle}>
-                  <HStack style={{ gap: 12, alignItems: "center" }}>
-                    <Animated.View style={countAnimatedStyle}>
-                      <Text color="white" style={{ fontSize: 14 }}>
-                        {split.exerciseCount} exercises
-                      </Text>
-                    </Animated.View>
-                    {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
-                    <Animated.View style={arrowAnimatedStyle}>
+            [
+              (
+                <Text
+                  key="name"
+                  color="white"
+                  style={{ fontSize: 18, fontWeight: "bold", flex: 1 }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {split.name}
+                </Text>
+              ),
+              (
+                <HStack key="right" alignItems="center"> {/* Use style for spacing with animations */}
+                  <Animated.View style={contentShiftAnimatedStyle}>
+                    <HStack style={{ gap: 12, alignItems: "center" }}>
+                      <Animated.View style={countAnimatedStyle}>
+                        <Text color="white" style={{ fontSize: 14 }}>
+                          {split.exerciseCount} exercises
+                        </Text>
+                      </Animated.View>
+                      {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
+                      <Animated.View style={arrowAnimatedStyle}>
+                        {/* @ts-ignore */}
+                        <Icon as={AntDesign as any} name="right" color="#A1A1AA" size="sm" />
+                      </Animated.View>
+                    </HStack>
+                  </Animated.View>
+                  {/* Menu Icon (shown only in Splits mode when not editing this item) */}
+                  <Animated.View style={[menuAnimatedStyle, { justifyContent: 'center', alignItems: 'center' }]} >
                       {/* @ts-ignore */}
-                      <Icon as={AntDesign as any} name="right" color="#A1A1AA" size="sm" />
-                    </Animated.View>
-                  </HStack>
-                </Animated.View>
-                {/* Menu Icon (shown only in Splits mode when not editing this item) */}
-                <Animated.View style={[menuAnimatedStyle, { justifyContent: 'center', alignItems: 'center' }]} >
-                    {/* @ts-ignore */}
-                    <Icon as={Entypo as any} name="menu" color="#A1A1AA" size="md" />
-                </Animated.View>
-              </HStack>
-            </>
+                      <Icon as={Entypo as any} name="menu" color="#A1A1AA" size="md" />
+                  </Animated.View>
+                </HStack>
+              )
+            ]
           )}
         </HStack>
 

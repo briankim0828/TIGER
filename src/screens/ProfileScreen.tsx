@@ -438,9 +438,9 @@ const ProfileScreen: React.FC = () => {
               $pressed={{ opacity: 0.7 }}
               // Add onPress handler if needed
             >
-              <Icon as={MaterialIcons} color="#6B8EF2" mb={2}>
-                {tab.icon}
-              </Icon>
+              {/* Use name prop instead of string children to avoid RN text warnings */}
+              {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
+              <Icon as={MaterialIcons as any} name={tab.icon} color="#6B8EF2" mb={2} />
               <Text color="white" fontSize="$sm" fontWeight="medium">{tab.title}</Text>
             </Pressable>
           ))}
@@ -470,9 +470,9 @@ const ProfileScreen: React.FC = () => {
          >
              <HStack justifyContent="space-between" alignItems="center">
                  <Text color="white" fontSize="$md">Account Settings</Text>
-                 <Icon as={MaterialIcons} color="gray.400">
-                   chevron-right
-                 </Icon>
+                 {/* Use name prop instead of string children to avoid RN text warnings */}
+                 {/* @ts-ignore */}
+                 <Icon as={MaterialIcons as any} name="chevron-right" color="gray.400" />
              </HStack>
          </Pressable>
 

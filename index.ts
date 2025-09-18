@@ -10,23 +10,32 @@ try {
 	configureReanimatedLogger({ level: ReanimatedLogLevel.error });
 } catch {}
 
-// Last-resort filter in case any remaining console.warn slips through
+// Last-resort filters for noisy warnings
 const __originalConsoleWarn = console.warn;
-console.warn = (...args: any[]) => {
-	const msg = typeof args[0] === 'string' ? args[0] : '';
-	if (
+const __originalConsoleError = console.error;
+const shouldSuppress = (msg: string): boolean => {
+	return (
+		msg.includes('Text strings must be rendered within a <Text> component.') ||
 		msg.includes('Tried to modify key `current` of an object which has been already passed to a worklet') ||
 		msg.includes('[Reanimated] Tried to modify key `current` of an object which has been already passed to a worklet')
-	) {
-		return; // swallow this noisy warning only
-	}
+	);
+};
+console.warn = (...args: any[]) => {
+	const msg = typeof args[0] === 'string' ? args[0] : '';
+	if (shouldSuppress(msg)) return;
 	__originalConsoleWarn(...args);
+};
+console.error = (...args: any[]) => {
+	const msg = typeof args[0] === 'string' ? args[0] : '';
+	if (shouldSuppress(msg)) return;
+	__originalConsoleError(...args);
 };
 
 // Silence specific noisy Reanimated warning globally as early as possible
 LogBox.ignoreLogs([
 	'Tried to modify key `current` of an object which has been already passed to a worklet',
 	'[Reanimated] Tried to modify key `current` of an object which has been already passed to a worklet',
+    'Text strings must be rendered within a <Text> component.',
 ]);
 
 // registerRootComponent calls AppRegistry.registerComponent('main', () => App);
