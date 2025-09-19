@@ -47,7 +47,7 @@ export const signOutUser = async (): Promise<{ error: any | null }> => {
  */
 export const fetchUserProfileFromSupabase = async (_userId: string): Promise<UserProfile | null> => {
   // Profiles table no longer exists; return null to avoid errors.
-  console.log('[supabaseProfile] profiles table removed; skipping remote fetch.');
+  // console.log('[supabaseProfile] profiles table removed; skipping remote fetch.');
   return null;
 };
 

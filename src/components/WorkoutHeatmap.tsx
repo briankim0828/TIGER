@@ -14,7 +14,7 @@ const BASE_GAP = 2; // px
 const COLS = 30; // weeks
 const ROWS: WeekDay[] = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
-const GREEN = 'rgba(16,185,129,'; // teal-500-ish base with varying alpha
+const GREEN = 'rgba(10, 247, 73,'; // teal-500-ish base with varying alpha
 
 const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
   const today = new Date();
@@ -28,12 +28,13 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
     const w = e?.nativeEvent?.layout?.width;
     if (typeof w === 'number' && w > 0) setGridWidth(w);
   }, []);
-  const gap = useMemo(() => (gridWidth > 0 ? Math.max(1, Math.floor(gridWidth / 300)) : BASE_GAP), [gridWidth]);
+  const gapH = useMemo(() => (gridWidth > 0 ? Math.max(1, Math.floor(gridWidth / 300)) : BASE_GAP), [gridWidth]);
+  const gapV = gapH;
   const cellSize = useMemo(() => {
     if (gridWidth <= 0) return BASE_CELL_SIZE;
-    const s = (gridWidth - (COLS - 1) * gap) / COLS;
+    const s = (gridWidth - (COLS - 1) * gapH) / COLS;
     return Math.max(6, Math.floor(s));
-  }, [gridWidth, gap]);
+  }, [gridWidth, gapH]);
 
   // Map date -> completed
   const entryMap = useMemo(() => {
@@ -71,36 +72,38 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
   }, [today, todayDow, splits]);
 
   return (
-    <Box bg="#121213ff" py="$3" borderRadius="$lg" mb="$4" borderWidth={1} borderColor="#2A2E38">
+    <Box bg="#121213ff" py="$3" px="$3" borderRadius="$lg" mb="$4" borderWidth={1} borderColor="#2A2E38">
       <Text color="white" fontSize="$md" fontWeight="$bold" mb="$3">{headerText}</Text>
-      <HStack onLayout={handleLayout} style={{ width: '100%', overflow: 'hidden' }}>
-        {/* Grid: 7 rows (Mon..Sun), 30 columns (weeks), left to right oldest->latest */}
-        {Array.from({ length: COLS }, (_, c) => (
-          <VStack key={`col-${c}`} style={{ marginRight: c === COLS - 1 ? 0 : gap }}>
-            {Array.from({ length: 7 }, (_, r) => {
-              const cell = grid[r][c];
-              const bg = cell.isFutureInCurrentWeek
-                ? `${GREEN}0.1)`
-                : cell.hasSession
-                  ? `${GREEN}1)`
-                  : `${GREEN}0.3)`;
-              return (
-                <Box
-                  key={`cell-${r}-${c}`}
-                  style={{
-                    width: cellSize,
-                    height: cellSize,
-                    borderRadius: 3,
-                    backgroundColor: bg,
-                    marginBottom: r === 6 ? 0 : gap,
-                  }}
-                  accessibilityLabel={`${cell.ymd}: ${cell.hasSession ? 'Workout' : 'No workout'}`}
-                />
-              );
-            })}
-          </VStack>
-        ))}
-      </HStack>
+      <Box onLayout={handleLayout} style={{ width: '100%' }}>
+        <HStack style={{ width: '100%', justifyContent: 'space-between', overflow: 'hidden' }}>
+          {/* Grid: 7 rows (Mon..Sun), 30 columns (weeks), left to right oldest->latest */}
+          {Array.from({ length: COLS }, (_, c) => (
+            <VStack key={`col-${c}`}>
+              {Array.from({ length: 7 }, (_, r) => {
+                const cell = grid[r][c];
+                const bg = cell.isFutureInCurrentWeek
+                  ? `${GREEN}0.07)`
+                  : cell.hasSession
+                    ? `${GREEN}1)`
+                    : `${GREEN}0.15)`;
+                return (
+                  <Box
+                    key={`cell-${r}-${c}`}
+                    style={{
+                      width: cellSize,
+                      height: cellSize,
+                      borderRadius: 3,
+                      backgroundColor: bg,
+                      marginBottom: r === 6 ? 0 : gapV,
+                    }}
+                    accessibilityLabel={`${cell.ymd}: ${cell.hasSession ? 'Workout' : 'No workout'}`}
+                  />
+                );
+              })}
+            </VStack>
+          ))}
+        </HStack>
+      </Box>
     </Box>
   );
 };
