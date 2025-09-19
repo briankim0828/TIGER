@@ -10,9 +10,9 @@ export interface WorkoutContextType {
   startWorkout: (
     userId: string,
     splitId?: string | null,
-    opts?: { policy?: StartPolicy; fromSplitExerciseIds?: string[] }
+    opts?: { policy?: StartPolicy; fromSplitExerciseIds?: string[]; startedAtOverride?: string }
   ) => Promise<{ sessionId: string; resumed: boolean }>;
-  endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled' }) => Promise<boolean>;
+  endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string }) => Promise<boolean>;
   addSet: (
     sessionExerciseId: string,
     data: { weightKg?: number | null; reps?: number | null; durationSec?: number | null; distanceM?: number | null; restSec?: number | null; isWarmup?: boolean | null }
@@ -54,7 +54,7 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
         console.debug('[WorkoutContext] ending existing session before starting new', { sessionId: active.id });
         await workouts.endWorkout(active.id, { status: 'completed' });
       }
-      const { sessionId } = await workouts.startWorkout({ userId, splitId, fromSplitExerciseIds: opts?.fromSplitExerciseIds });
+  const { sessionId } = await workouts.startWorkout({ userId, splitId, fromSplitExerciseIds: opts?.fromSplitExerciseIds, startedAtOverride: opts?.startedAtOverride } as any);
       console.debug('[WorkoutContext] new session started', { sessionId });
       return { sessionId, resumed: false };
     },

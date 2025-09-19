@@ -71,12 +71,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // State
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
+  const [isBackdated, setIsBackdated] = useState<boolean>(false);
   const [tick, setTick] = useState(0); // periodic re-render for timer
   // Exercises are always expanded now (no expand/collapse state)
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [addingSetFor, setAddingSetFor] = useState<string | null>(null);
   const addingSetLockRef = useRef(false);
   const [isDiscardAlertOpen, setIsDiscardAlertOpen] = useState(false); // New state for discard alert
+  // Pressed state tracking for reliable opacity feedback
+  const [isFinishPressed, setIsFinishPressed] = useState(false);
+  const [pressedAddSetFor, setPressedAddSetFor] = useState<string | null>(null);
+  const [isAddExercisesPressed, setIsAddExercisesPressed] = useState(false);
+  const [isCancelWorkoutPressed, setIsCancelWorkoutPressed] = useState(false);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
@@ -94,10 +100,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // Fetch header info (split title, startedAt)
       try {
         const info = await getSessionInfo(sid);
-        if (info?.startedAt) setSessionStartedAtMs(Date.parse(info.startedAt));
+        if (info?.startedAt) {
+          const startedMs = Date.parse(info.startedAt);
+          setSessionStartedAtMs(startedMs);
+          // Determine if this is a backdated session (started before today)
+          try {
+            const startedDate = new Date(startedMs);
+            const today = new Date();
+            const startedYmd = `${startedDate.getFullYear()}-${String(startedDate.getMonth() + 1).padStart(2, '0')}-${String(startedDate.getDate()).padStart(2, '0')}`;
+            const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            setIsBackdated(startedYmd < todayYmd);
+          } catch {}
+        }
         if (info?.splitId) {
           const name = (await getSplitName(info.splitId)) || '';
           if (!cancelled) setSplitTitle(name);
+        } else {
+          // No split assigned: use weekday-based title from startedAt (or today if missing)
+          const baseDate = info?.startedAt ? new Date(info.startedAt) : new Date();
+          const weekday = baseDate.toLocaleDateString('en-US', { weekday: 'long' });
+          if (!cancelled) setSplitTitle(`${weekday} workout`);
         }
       } catch {}
     })();
@@ -138,11 +160,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Timer tick: compute elapsed from sessionStartedAtMs
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    if (isVisible && sessionStartedAtMs) {
+    if (isVisible && sessionStartedAtMs && !isBackdated) {
       interval = setInterval(() => setTick((t) => t + 1), 1000);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [isVisible, sessionStartedAtMs]);
+  }, [isVisible, sessionStartedAtMs, isBackdated]);
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {
@@ -173,7 +195,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         await onSave();
       } else {
         console.log('ActiveWorkoutModal - Calling endWorkout (DB)');
-        if (sessionId) await endWorkout(sessionId, { status: 'completed' });
+        if (sessionId) {
+          let finishedAtOverride: string | undefined;
+          if (isBackdated && sessionStartedAtMs) {
+            const dt = new Date(sessionStartedAtMs);
+            const localNoon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
+            finishedAtOverride = localNoon.toISOString();
+          }
+          await endWorkout(sessionId, { status: 'completed', finishedAtOverride });
+        }
       }
       console.log('ActiveWorkoutModal - Save operation completed successfully');
       
@@ -206,7 +236,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ),
       });
     }
-  }, [endWorkout, onSave, isEndingWorkout, toast, sessionId]);
+  }, [endWorkout, onSave, isEndingWorkout, toast, sessionId, isBackdated, sessionStartedAtMs]);
   
   // Format timer as MM:SS
   const formatTimer = (seconds: number) => {
@@ -416,10 +446,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const renderHeader = () => (
     <Box bg="#2A2E38" px="$4" py="$3" width="100%">
-      <HStack alignItems="center" justifyContent="space-between" width="100%">
+      <HStack alignItems="center" justifyContent="space-between" width="100%" position="relative">
         {/* Left: Split name + date */}
-        <VStack alignItems="flex-start" flexShrink={1} maxWidth="45%">
-          <Text color="$textLight50" fontWeight="$bold" fontSize="$lg" numberOfLines={1}>
+        <VStack alignItems="flex-start" flexShrink={1} maxWidth="37%">
+          <Text
+            color="$textLight50"
+            fontWeight="$bold"
+            fontSize="$lg"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}
+          >
             {splitTitle || 'Active Workout'}
           </Text>
           {!!formattedDate && (
@@ -427,22 +464,27 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           )}
         </VStack>
 
-        {/* Middle: Timer */}
-        <VStack alignItems="center" flexGrow={1}>
-          <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
-            {formatTimer(elapsedSec)}
-          </Text>
-        </VStack>
+        {/* Centered Timer overlay (hidden for backdated sessions) */}
+        <Box position="absolute" left={0} right={0} alignItems="center" pointerEvents="none">
+          {!isBackdated && (
+            <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
+              {formatTimer(elapsedSec)}
+            </Text>
+          )}
+        </Box>
 
         {/* Right: Finish button */}
         <Pressable
-          onPress={handleEndWorkout}
+          onPressIn={() => setIsFinishPressed(true)}
+          onPressOut={() => setIsFinishPressed(false)}
+          onPress={isEndingWorkout ? undefined : handleEndWorkout}
           disabled={isEndingWorkout}
+          pointerEvents={isEndingWorkout ? 'none' : 'auto'}
           bg="#22c55e"
           py="$2"
           px="$4"
           borderRadius="$lg"
-          $pressed={{ opacity: 0.7 }}
+          style={{ opacity: isFinishPressed ? 0.7 : 1 }}
         >
           <Text color="$textLight50" fontWeight="$bold">{isEndingWorkout ? 'Saving…' : 'Finish'}</Text>
         </Pressable>
@@ -603,14 +645,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, 0))}
 
                           <Pressable
+                            onPressIn={() => setPressedAddSetFor(exercise.id)}
+                            onPressOut={() => setPressedAddSetFor(null)}
                             onPress={() => handleAddNewSet(exercise.id)}
                             disabled={addingSetFor === exercise.id}
                             bg="#1E222C"
-                              py="$1"
+                            py="$1"
                             px="$3"
                             borderRadius="$md"
-                            $pressed={{ opacity: 0.7 }}
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', opacity: pressedAddSetFor === exercise.id ? 0.7 : 1 }}
                           >
                             <Text color="$textLight200" textAlign="center">+ Add Set</Text>
                           </Pressable>
@@ -622,15 +665,16 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 
                 <Box mt="$1" mb="$1" px="$2">
                   <Pressable
+                    onPressIn={() => setIsAddExercisesPressed(true)}
+                    onPressOut={() => setIsAddExercisesPressed(false)}
                     onPress={handleAddExercisePress}
                     bg="#1A2E5A"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)' }}
+                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', opacity: isAddExercisesPressed ? 0.8 : 1 }}
                     py="$1"
                     px="$6"
                     borderRadius="$lg"
                     alignItems="center"
                     justifyContent="center"
-                    $pressed={{ opacity: 0.8 }}
                   >
                     <HStack alignItems="center" space="sm">
                       <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
@@ -641,13 +685,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
                 <Box mb="$5" px="$2">
                   <Pressable
+                    onPressIn={() => setIsCancelWorkoutPressed(true)}
+                    onPressOut={() => setIsCancelWorkoutPressed(false)}
                     bg="#3B2B2B"
-                      py="$1"
+                    py="$1"
                     px="$6"
                     borderRadius="$lg"
                     alignItems="center"
                     justifyContent="center"
-                    $pressed={{ opacity: 0.7 }}
+                    style={{ opacity: isCancelWorkoutPressed ? 0.7 : 1 }}
                     onPress={async () => {
                       // Cancel workout: close modal and delete workout
                       if (sessionId) {

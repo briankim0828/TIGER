@@ -87,27 +87,52 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     bottomSheetRef.current?.close();
   }, []);
   
-  // Helper function to get day of week
+  // Helper function to get day of week and long weekday label
   const getDayOfWeek = (dateString: string | null) => {
     if (!dateString) return null;
-    const date = new Date(dateString);
+    const [y, m, d] = dateString.split('-').map((s) => parseInt(s, 10));
+    if (!y || !m || !d) return null;
+    const date = new Date(y, m - 1, d); // local time to avoid TZ shifts
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return days[date.getDay()];
   };
+  const getLongWeekday = (dateString: string | null) => {
+    if (!dateString) return null;
+    const [y, m, d] = dateString.split('-').map((s) => parseInt(s, 10));
+    if (!y || !m || !d) return null;
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-US', { weekday: 'long' });
+  };
   
   const handleStartWorkout = useCallback(async () => {
-    if (!scheduledSplit) return;
+    // If there are no exercises, do not allow starting
+    if (currentExercises.length === 0) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
       if (!userId) return;
       const ids = currentExercises.map(e => e.id);
-      const { sessionId } = await startWorkout(userId, scheduledSplit.id, { fromSplitExerciseIds: ids });
+      // Allow starting without a split when none is scheduled by passing null
+      const splitIdOrNull = scheduledSplit?.id ?? null;
+      // If logging a workout for a past date, override startedAt to that local date at noon
+      let startedAtOverride: string | undefined;
+      if (selectedDate) {
+        const [y, m, d] = selectedDate.split('-').map((s) => parseInt(s, 10));
+        if (y && m && d) {
+          const today = new Date();
+          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+          if (selectedDate < todayStr) {
+            const localNoon = new Date(y, m - 1, d, 12, 0, 0);
+            startedAtOverride = localNoon.toISOString();
+          }
+        }
+      }
+      const { sessionId } = await startWorkout(userId, splitIdOrNull, { fromSplitExerciseIds: ids, startedAtOverride });
       if (sessionId) bottomSheetRef.current?.close();
     } catch (e) {
       console.error('SessionSummaryModal - failed to start workout', e);
     }
-  }, [scheduledSplit, currentExercises, startWorkout]);
+  }, [scheduledSplit, currentExercises, startWorkout, selectedDate]);
 
   const handleAddExercise = useCallback(() => {
     // Use selection registry to add to current session preview
@@ -133,6 +158,12 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     setCurrentExercises((prev) => prev.filter((_, i) => i !== index));
   }, []);
   
+  // Local pressed-state tracking for reliable opacity feedback
+  const [isCancelPressed, setIsCancelPressed] = useState(false);
+  const [isStartPressed, setIsStartPressed] = useState(false);
+  const [isAddPressed, setIsAddPressed] = useState(false);
+  const startDisabled = currentExercises.length === 0;
+  
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
       <BottomSheet
@@ -150,7 +181,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
       >
         <Box flex={1}>
           {/* Header with today's date centered, back button on left */}
-          <Box p="$4" position="relative" alignItems="center" justifyContent="center">
+          <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2">
             {/* <Button
               variant="link"
               onPress={() => bottomSheetRef.current?.close()}
@@ -160,15 +191,15 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
               
               <Icon as={AntDesign as any} name="left" color="$white" />
             </Button> */}
-            <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
+            <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
               {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
             </Text>
           </Box>
 
           {/* Split name row with menu icon */}
           <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
-            <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
-              {scheduledSplit ? scheduledSplit.name : 'No split scheduled'}
+            <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
+              {scheduledSplit ? scheduledSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
             </Text>
             {/* @ts-ignore */}
             <Icon as={AntDesign as any} name="ellipsis1" color="$white" />
@@ -223,7 +254,9 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                   backgroundColor="transparent"
                   borderRadius="$lg"
                   py="$2"
-                  sx={{ ':pressed': { opacity: 0.7 } }}
+                  onPressIn={() => setIsAddPressed(true)}
+                  onPressOut={() => setIsAddPressed(false)}
+                  style={{ opacity: isAddPressed ? 0.7 : 1 }}
                   onPress={handleAddExercise}
                 >
                   <HStack space="sm" justifyContent="center" alignItems="center">
@@ -234,7 +267,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                 </Pressable>
               </VStack>
             ) : (
-              <Box backgroundColor="transparent" borderRadius="$lg" p="$3" borderWidth="$1" borderColor="$gray700">
+              <Box backgroundColor="transparent" borderRadius="$lg" p="$3" >
                 <VStack space="xl" alignItems="center">
                   <Text color="$gray400" fontSize="$lg">Add exercises to this session</Text>
                   <Box width="$full">
@@ -246,7 +279,9 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                       backgroundColor="transparent"
                       borderRadius="$lg"
                       py="$2"
-                      sx={{ ':pressed': { opacity: 0.7 } }}
+                      onPressIn={() => setIsAddPressed(true)}
+                      onPressOut={() => setIsAddPressed(false)}
+                      style={{ opacity: isAddPressed ? 0.7 : 1 }}
                       onPress={handleAddExercise}
                     >
                       <HStack space="sm" justifyContent="center" alignItems="center">
@@ -270,8 +305,10 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                 paddingVertical="$3"
                 flex={1}
                 borderRadius="$lg"
+                onPressIn={() => setIsCancelPressed(true)}
+                onPressOut={() => setIsCancelPressed(false)}
                 onPress={handleCancelWorkout}
-                style={({ pressed }) => (pressed ? { opacity: 0.8 } : {})}
+                style={{ opacity: isCancelPressed ? 0.8 : 1 }}
               >
                 <Text color="$white" size="md" fontWeight="$bold" textAlign="center">Cancel</Text>
               </Pressable>
@@ -280,8 +317,12 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                 paddingVertical="$3"
                 flex={1}
                 borderRadius="$lg"
-                onPress={handleStartWorkout}
-                style={({ pressed }) => (pressed ? { opacity: 0.8 } : {})}
+                onPressIn={() => { if (!startDisabled) setIsStartPressed(true); }}
+                onPressOut={() => setIsStartPressed(false)}
+                onPress={startDisabled ? undefined : handleStartWorkout}
+                isDisabled={startDisabled}
+                pointerEvents={startDisabled ? 'none' : 'auto'}
+                style={{ opacity: startDisabled ? 0.6 : (isStartPressed ? 0.8 : 1) }}
               >
                 <Text color="$white" size="md" fontWeight="$bold" textAlign="center">Start Workout</Text>
               </Pressable>

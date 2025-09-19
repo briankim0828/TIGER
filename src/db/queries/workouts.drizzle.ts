@@ -119,14 +119,15 @@ export class WorkoutsDataAccess {
   }
 
   // Writes
-  async startWorkout(args: { userId: string; splitId?: string | null; fromSplitExerciseIds?: string[] }) {
-    const { userId, splitId = null, fromSplitExerciseIds } = args;
+  async startWorkout(args: { userId: string; splitId?: string | null; fromSplitExerciseIds?: string[]; startedAtOverride?: string }) {
+    const { userId, splitId = null, fromSplitExerciseIds, startedAtOverride } = args;
     return this.inTx(async () => {
       const sessionId = newUuid();
       const nowIso = new Date().toISOString();
+      const startedIso = startedAtOverride ?? nowIso;
       await this.db
         .insert(workoutSessions)
-        .values({ id: sessionId, userId, splitId, state: 'active', startedAt: nowIso })
+        .values({ id: sessionId, userId, splitId, state: 'active', startedAt: startedIso })
         .run();
       await enqueueOutbox(this.sqlite, {
         table: 'workout_sessions',
@@ -137,7 +138,7 @@ export class WorkoutsDataAccess {
           user_id: userId,
           split_id: splitId,
           state: 'active',
-          started_at: nowIso,
+          started_at: startedIso,
           created_at: nowIso,
           updated_at: nowIso,
         },
@@ -296,18 +297,19 @@ export class WorkoutsDataAccess {
     });
   }
 
-  async endWorkout(sessionId: string, opts?: { status?: 'completed' | 'cancelled' }): Promise<boolean> {
+  async endWorkout(sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string }): Promise<boolean> {
     const status = opts?.status ?? 'completed';
     const nowIso = new Date().toISOString();
+    const finishedIso = opts?.finishedAtOverride ?? nowIso;
     await this.db
       .update(workoutSessions)
-      .set({ state: status, finishedAt: nowIso, updatedAt: nowIso })
+      .set({ state: status, finishedAt: finishedIso, updatedAt: nowIso })
       .where(eq(workoutSessions.id, sessionId))
       .run();
   // Fetch user_id for RLS on update
   const owner = await this.db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
   const userId = owner[0]?.userId as string | undefined;
-  await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'update', rowId: sessionId, payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), state: status, finished_at: nowIso, updated_at: nowIso } });
+  await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'update', rowId: sessionId, payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), state: status, finished_at: finishedIso, updated_at: nowIso } });
   this.bumpTables?.(['workout_sessions']);
     return true;
   }

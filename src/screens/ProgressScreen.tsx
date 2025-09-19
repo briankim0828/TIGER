@@ -55,6 +55,8 @@ const ProgressScreen: React.FC = () => {
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<WorkoutCalendarEntry[]>([]);
   const { showSessionSummary } = useOverlay();
+  // Pressed state for main action button
+  const [isBeginPressed, setIsBeginPressed] = useState(false);
 
   const isInitialLoadRef = useRef(true);
   // processedDataRef removed (legacy DataContext migration complete)
@@ -180,15 +182,13 @@ const ProgressScreen: React.FC = () => {
   }, [scheduledSplit, startWorkout, db]);
 
   const handleWorkoutPress = useCallback(() => {
-    if (scheduledSplit) {
-      showSessionSummary({
-        selectedDate,
-        scheduledSplit,
-        onStartWorkout: () => handleStartWorkout(),
-      });
-    } else {
-      console.log('No split scheduled for this day');
-    }
+    // Always open SessionSummaryModal. When no scheduled split, it will show an empty session
+    // with a weekday-based title (e.g., "Monday workout").
+    showSessionSummary({
+      selectedDate,
+      scheduledSplit,
+      onStartWorkout: () => handleStartWorkout(),
+    });
   }, [scheduledSplit, selectedDate, showSessionSummary, handleStartWorkout]);
 
   const handleCloseSummary = useCallback(() => {}, []);
@@ -215,7 +215,7 @@ const ProgressScreen: React.FC = () => {
       <ScrollView style={{ flex: 1, backgroundColor: "#1E2028" }}>
         <Box flex={1}  >
           <VStack space="md" p="$2">
-            <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold">
+            <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold" pb="$4">
               My Progress
             </Text>
 
@@ -238,11 +238,13 @@ const ProgressScreen: React.FC = () => {
                 py="$4"
                 px="$6"
                 borderRadius="$xl"
-                onPress={handleWorkoutPress}
-                $pressed={{ opacity: 0.8 }}
-                opacity={isFutureDate ? 0.65 : 1}
+                onPressIn={() => setIsBeginPressed(true)}
+                onPressOut={() => setIsBeginPressed(false)}
+                onPress={isFutureDate ? undefined : handleWorkoutPress}
+                pointerEvents={isFutureDate ? 'none' : 'auto'}
                 disabled={isFutureDate}
                 accessibilityRole="button"
+                style={{ opacity: isFutureDate ? 0.65 : (isBeginPressed ? 0.8 : 1) }}
               >
                 <Text
                   color="$textLight50"
@@ -254,7 +256,7 @@ const ProgressScreen: React.FC = () => {
                     ? "Not Yet..."
                     : isToday
                       ? "Begin Today's Workout"
-                      : `Session from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                      : `Log workout from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
                 </Text>
               </Pressable>
             </Box>

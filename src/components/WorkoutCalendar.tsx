@@ -353,8 +353,8 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   }, [month, year, selectedDate, todayInfo, getWorkoutForDate, getSplitForDate, handleDayPress]);
 
   return (
-    <Box bg="$1E2028" px={useParentInset ? 0 : "$1"} pt="$4">
-      <VStack space="xs" p="$2" borderRadius="$lg" px={useParentInset ? 0 : undefined}>
+    <Box bg="$1E2028" px={useParentInset ? 0 : "$1"} >
+      <VStack space="xs" borderRadius="$lg" px={useParentInset ? 0 : undefined}>
         <Text
           fontSize="$lg"
           fontWeight="$bold"
