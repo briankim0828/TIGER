@@ -1,13 +1,18 @@
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Box, Text, Pressable, VStack, HStack } from '@gluestack-ui/themed';
-// Minimal local exercise shape (legacy global Exercise interface removed)
-interface SummaryExercise { id: string; name: string; bodyPart: string; splitIds: string[] }
+import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
+import { AntDesign } from '@expo/vector-icons';
 import type { ProgramSplit } from '../types/ui';
 import { useDatabase } from '../db/queries';
+import { navigate } from '../navigation/rootNavigation';
+import { registerSelectionCallback, ExerciseLite } from '../navigation/selectionRegistry';
+import { useWorkout } from '../contexts/WorkoutContext';
+import { supabase } from '../utils/supabaseClient';
+
+type ExerciseRow = { id: string; name: string };
 
 interface SessionSummaryModalProps {
   selectedDate: string | null;
@@ -24,6 +29,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const db = useDatabase();
+  const { startWorkout } = useWorkout();
   // Log props when component mounts or props change
   useEffect(() => {
     console.log('SessionSummaryModal - Activated with data:', {
@@ -38,55 +44,33 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
   
-  // State for exercises
-  const [currentExercises, setCurrentExercises] = React.useState<SummaryExercise[]>([]);
-  const [contentHeight, setContentHeight] = useState(0);
-  
-  // Calculate snap points based on content height
-  const snapPoints = useMemo(() => {
-    // Use minimum height + content height or percentage-based fallback
-    const calculatedHeight = contentHeight > 0 ? contentHeight + 40 : '50%';
-    return [calculatedHeight];
-  }, [contentHeight]);
-  
-  // Handle the content layout to get its height
-  const onContentLayout = useCallback((event: any) => {
-    const { height } = event.nativeEvent.layout;
-    setContentHeight(height);
-  }, []);
+  // State for session exercise preview (modifiable before starting)
+  const [currentExercises, setCurrentExercises] = useState<ExerciseRow[]>([]);
+  const snapPoints = useMemo(() => ['100%'], []);
   
   // Initialize component
   useEffect(() => {
-    // Small delay to ensure the component is fully mounted
-    const timer = setTimeout(() => {
-      if (scheduledSplit && bottomSheetRef.current) {
-        // Fetch exercises from DB for preview
-        (async () => {
-          try {
-            const joins = await db.getSplitExercises(scheduledSplit.id);
-            const exs = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart || 'Uncategorized', splitIds: [scheduledSplit.id] } as SummaryExercise));
-            setCurrentExercises(exs);
-          } catch (e) {
-            console.warn('[SessionSummaryModal] failed to load split exercises', e);
-            setCurrentExercises([]);
-          }
-        })();
+    let cancelled = false;
+    (async () => {
+      if (!scheduledSplit) { setCurrentExercises([]); return; }
+      try {
+        const joins = await db.getSplitExercises(scheduledSplit.id);
+        if (cancelled) return;
+        const exs: ExerciseRow[] = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name }));
+        setCurrentExercises(exs);
+      } catch (e) {
+        console.warn('[SessionSummaryModal] failed to load split exercises', e);
+        setCurrentExercises([]);
       }
-    }, 100);
-    
-    return () => clearTimeout(timer);
+    })();
+    return () => { cancelled = true; };
   }, [scheduledSplit, db]);
   
   // Handle opening bottom sheet separately to ensure it works properly
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (bottomSheetRef.current) {
-        // bottomSheetRef.current.snapToIndex(1);
-        bottomSheetRef.current.expand();
-      }
-    }, 300);
-    
-    return () => clearTimeout(timer);
+    // Open immediately to full height like SplitDetailScreen
+    const t = setTimeout(() => bottomSheetRef.current?.expand(), 50);
+    return () => clearTimeout(t);
   }, []);
   
   // Handle bottom sheet changes
@@ -100,7 +84,6 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   
   // Cancel workout
   const handleCancelWorkout = useCallback(() => {
-    console.log('SessionSummaryModal - Workout cancelled');
     bottomSheetRef.current?.close();
   }, []);
   
@@ -112,92 +95,199 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     return days[date.getDay()];
   };
   
-  const handleStartWorkout = useCallback(() => {
-    console.log('SessionSummaryModal - Starting workout');
-    bottomSheetRef.current?.close();
-    // Small delay to ensure the sheet is closed before starting workout
-    setTimeout(() => {
-      onStartWorkout();
-    }, 300);
-  }, [onStartWorkout]);
+  const handleStartWorkout = useCallback(async () => {
+    if (!scheduledSplit) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) return;
+      const ids = currentExercises.map(e => e.id);
+      const { sessionId } = await startWorkout(userId, scheduledSplit.id, { fromSplitExerciseIds: ids });
+      if (sessionId) bottomSheetRef.current?.close();
+    } catch (e) {
+      console.error('SessionSummaryModal - failed to start workout', e);
+    }
+  }, [scheduledSplit, currentExercises, startWorkout]);
+
+  const handleAddExercise = useCallback(() => {
+    // Use selection registry to add to current session preview
+    const requestId = `session-summary-add-${Date.now()}`;
+    registerSelectionCallback(requestId, async (selected: ExerciseLite[]) => {
+      if (!selected || selected.length === 0) return;
+      setCurrentExercises((prev) => {
+        const map = new Map(prev.map(e => [e.id, e] as const));
+        for (const s of selected) {
+          if (!map.has(s.id)) map.set(s.id, { id: s.id, name: s.name });
+        }
+        // Keep insertion order: prev first, then new additions
+        const nextIds = [...prev.map(e => e.id)];
+        for (const s of selected) if (!nextIds.includes(s.id)) nextIds.push(s.id);
+        const next: ExerciseRow[] = nextIds.map(id => map.get(id)!).filter(Boolean) as ExerciseRow[];
+        return next;
+      });
+    });
+    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true });
+  }, []);
+
+  const handleRemoveExercise = useCallback((index: number) => {
+    setCurrentExercises((prev) => prev.filter((_, i) => i !== index));
+  }, []);
   
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
       <BottomSheet
         ref={bottomSheetRef}
         onChange={handleSheetChanges}
-        enablePanDownToClose={true}
-        index={-1}
+        enablePanDownToClose
+        index={0}
         snapPoints={snapPoints}
-  topInset={insets.top}
-        handleIndicatorStyle={{
-          backgroundColor: 'white',
-          width: 40,
-          height: 4,
-        }}
-        backgroundStyle={{
-          backgroundColor: '#2A2E38',
-        }}
+        topInset={insets.top}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <BottomSheetView style={styles.contentContainer}>
-          <Box width="100%" paddingHorizontal="$3" paddingBottom="$4" onLayout={onContentLayout}>
-            <Text color="$white" size="xl" fontWeight="$bold" textAlign="center">
-              {scheduledSplit ? scheduledSplit.name : "No splits scheduled"}
+        <Box flex={1}>
+          {/* Header with today's date centered, back button on left */}
+          <Box p="$4" position="relative" alignItems="center" justifyContent="center">
+            {/* <Button
+              variant="link"
+              onPress={() => bottomSheetRef.current?.close()}
+              position="absolute"
+              left="$2"
+            >
+              
+              <Icon as={AntDesign as any} name="left" color="$white" />
+            </Button> */}
+            <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
+              {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
             </Text>
-         
-            {scheduledSplit && (
-              <Box backgroundColor="transparent" padding="$2" borderRadius="$lg" alignSelf="center">
-                <Text color="$white" size="lg" marginBottom="$2">
-                  {getDayOfWeek(selectedDate || new Date().toISOString().split('T')[0])}, {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                </Text>
+          </Box>
+
+          {/* Split name row with menu icon */}
+          <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
+            <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
+              {scheduledSplit ? scheduledSplit.name : 'No split scheduled'}
+            </Text>
+            {/* @ts-ignore */}
+            <Icon as={AntDesign as any} name="ellipsis1" color="$white" />
+          </HStack>
+
+          {/* Summary row and (optional) Reorder button, mimicking SplitDetailScreen */}
+          <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
+            <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
+            <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => { /* no-op */ }} px="$2">
+              <HStack alignItems="center" space="xs">
+                {/* @ts-ignore */}
+                <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
+                <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
+              </HStack>
+            </Button>
+          </HStack>
+
+          {/* Exercises list */}
+          <ScrollView flex={1} showsVerticalScrollIndicator={false}>
+          <VStack space="md" p="$3">
+            {currentExercises.length > 0 ? (
+              <VStack space="md">
+                {currentExercises.map((exercise, index) => (
+                  <Box key={exercise.id} backgroundColor="transparent" p="$2">
+                    <HStack alignItems="center" justifyContent="space-between">
+                      <HStack space="md" alignItems="center" flex={1}>
+                        {/* Avatar with first letter */}
+                        <Box width={48} height={48} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
+                          <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                            {exercise.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </Box>
+                        <VStack flex={1}>
+                          <Text color="$white" fontSize="$md" numberOfLines={1}>{exercise.name}</Text>
+                          <Text color="$gray400" fontSize="$xs">{/* Placeholder for sets/rep summary */}</Text>
+                        </VStack>
+                      </HStack>
+                      <Button variant="link" onPress={() => handleRemoveExercise(index)}>
+                        {/* @ts-ignore */}
+                        <Icon as={AntDesign as any} name="close" color="$red500" />
+                      </Button>
+                    </HStack>
+                  </Box>
+                ))}
+
+                {/* Add Exercise button */}
+                <Pressable
+                  width="$full"
+                  borderStyle="dashed"
+                  borderWidth="$1"
+                  borderColor="#6B8EF2"
+                  backgroundColor="transparent"
+                  borderRadius="$lg"
+                  py="$2"
+                  sx={{ ':pressed': { opacity: 0.7 } }}
+                  onPress={handleAddExercise}
+                >
+                  <HStack space="sm" justifyContent="center" alignItems="center">
+                    {/* @ts-ignore */}
+                    <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                    <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
+                  </HStack>
+                </Pressable>
+              </VStack>
+            ) : (
+              <Box backgroundColor="transparent" borderRadius="$lg" p="$3" borderWidth="$1" borderColor="$gray700">
+                <VStack space="xl" alignItems="center">
+                  <Text color="$gray400" fontSize="$lg">Add exercises to this session</Text>
+                  <Box width="$full">
+                    <Pressable
+                      width="$full"
+                      borderStyle="dashed"
+                      borderWidth="$1"
+                      borderColor="#6B8EF2"
+                      backgroundColor="transparent"
+                      borderRadius="$lg"
+                      py="$2"
+                      sx={{ ':pressed': { opacity: 0.7 } }}
+                      onPress={handleAddExercise}
+                    >
+                      <HStack space="sm" justifyContent="center" alignItems="center">
+                        {/* @ts-ignore */}
+                        <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                        <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
+                      </HStack>
+                    </Pressable>
+                  </Box>
+                </VStack>
               </Box>
             )}
-            
-            {/* Scheduled exercises preview */}
-            {currentExercises.length > 0 && (
-              <Box backgroundColor="transparent" padding="$2" borderRadius="$lg" marginBottom="$2" width="100%">
-                <Box flexDirection="row" flexWrap="wrap">
-                  {currentExercises.map((exercise, index) => (
-                    <Box key={exercise.id} width="50%" marginBottom="$2" paddingRight={index % 2 === 0 ? '$1' : '$0'} paddingLeft={index % 2 === 1 ? '$1' : '$0'}>
-                      <Text color="$white" size="sm">
-                        {index + 1}. {exercise.name}
-                      </Text>
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
+          </VStack>
+          </ScrollView>
+
+          {/* Bottom action buttons */}
+          <Box p="$4" pb="$12">
             <HStack space="sm">
               <Pressable
-                marginTop="$4"
                 backgroundColor="$red500"
                 paddingVertical="$3"
                 flex={1}
                 borderRadius="$lg"
                 onPress={handleCancelWorkout}
-                style={({pressed}) => pressed ? {opacity: 0.8} : {}}
+                style={({ pressed }) => (pressed ? { opacity: 0.8 } : {})}
               >
-                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">
-                  Cancel
-                </Text>
+                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">Cancel</Text>
               </Pressable>
-
               <Pressable
-                marginTop="$4"
                 backgroundColor="#6B8EF2"
                 paddingVertical="$3"
                 flex={1}
                 borderRadius="$lg"
                 onPress={handleStartWorkout}
-                style={({pressed}) => pressed ? {opacity: 0.8} : {}}
+                style={({ pressed }) => (pressed ? { opacity: 0.8 } : {})}
               >
-                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">
-                  Start Workout
-                </Text>
+                <Text color="$white" size="md" fontWeight="$bold" textAlign="center">Start Workout</Text>
               </Pressable>
             </HStack>
           </Box>
-        </BottomSheetView>
+        </Box>
       </BottomSheet>
     </GestureHandlerRootView>
   );

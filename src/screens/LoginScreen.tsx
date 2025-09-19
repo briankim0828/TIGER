@@ -132,7 +132,7 @@ const LoginScreen = () => {
   };
 
   return (
-    <Box flex={1} bg="$backgroundDark900" pt={20} testID="login-screen-box">
+    <Box flex={1} bg="#1E2028" pt={20} testID="login-screen-box">
       <Center flex={1} px="$4">
         <VStack space="md" w="100%">
           <Heading color="$textLight50" size="2xl" mb="$8" textAlign="center">
