@@ -325,7 +325,7 @@ const ProfileScreen: React.FC = () => {
 
   const handleClearAllData = async () => {
     try {
-      console.log('[ProfileScreen] Clearing workout history (local DB only)');
+      console.log('[ProfileScreen] Clearing workout history');
       if (!user?.id) throw new Error('Not authenticated');
       // Use sync-aware clear so deletions propagate to remote via outbox
       if ((history as any).deleteAllWorkoutsSyncAware) {
