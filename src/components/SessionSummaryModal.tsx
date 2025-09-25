@@ -196,18 +196,14 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
             </Text>
           </Box>
 
-          {/* Split name row with menu icon */}
-          <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
-            <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
-              {scheduledSplit ? scheduledSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
-            </Text>
-            {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name="ellipsis1" color="$white" />
-          </HStack>
-
-          {/* Summary row and (optional) Reorder button, mimicking SplitDetailScreen */}
-          <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
-            <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
+          {/* Split name with total (stacked) on the left, Reorder on the right */}
+          <HStack alignItems="flex-end" justifyContent="space-between" px="$4" pb="$2">
+            <VStack>
+              <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
+                {scheduledSplit ? scheduledSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
+              </Text>
+              <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
+            </VStack>
             <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => { /* no-op */ }} px="$2">
               <HStack alignItems="center" space="xs">
                 {/* @ts-ignore */}

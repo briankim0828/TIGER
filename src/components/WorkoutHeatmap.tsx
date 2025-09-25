@@ -65,15 +65,21 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
     grid.push(row);
   }
 
-  const headerText = useMemo(() => {
+  // Header labels: date (smaller) above split name (larger)
+  const dateLabel = useMemo(() => (
+    today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+  ), [today]);
+  const splitLabel = useMemo(() => {
     const todaySplit = getSplitForDay(ROWS[(todayDow + 6) % 7] as WeekDay, splits);
-    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
-    return todaySplit ? `${dateStr} • ${todaySplit.name}` : `${dateStr} • No split scheduled`;
-  }, [today, todayDow, splits]);
+    return todaySplit ? todaySplit.name : 'No split scheduled';
+  }, [todayDow, splits]);
 
   return (
     <Box bg="#121213ff" py="$3" px="$3" borderRadius="$lg" mb="$4" borderWidth={1} borderColor="#2A2E38">
-      <Text color="white" fontSize="$md" fontWeight="$bold" mb="$3">{headerText}</Text>
+      <VStack mb="$3">
+        <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
+        <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>
+      </VStack>
       <Box onLayout={handleLayout} style={{ width: '100%' }}>
         <HStack style={{ width: '100%', justifyContent: 'space-between', overflow: 'hidden' }}>
           {/* Grid: 7 rows (Mon..Sun), 30 columns (weeks), left to right oldest->latest */}
