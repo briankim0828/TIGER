@@ -1,6 +1,6 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput as RNTextInput } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions } from 'react-native';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription } from '@gluestack-ui/themed';
@@ -387,6 +387,43 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       });
   }, [addSet, currentExercises, sessionId, exerciseIdToSessionExerciseId]);
 
+  // Delete a set (mirrors how addSet uses context; context is responsible for local+remote mutation)
+  const handleDeleteSet = useCallback(async (exerciseId: string, setId: string, setIndex: number) => {
+    try {
+      await deleteSet(setId);
+      // Optimistic local input cleanup
+      const key = `${exerciseId}-${setId || setIndex}`;
+      setLocalInputValues(prev => {
+        const copy = { ...prev } as any;
+        delete copy[key];
+        return copy;
+      });
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="warning" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Set deleted</ToastTitle>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } catch (e) {
+      console.error('Failed to delete set', e);
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Delete failed</ToastTitle>
+              <ToastDescription>Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    }
+  }, [deleteSet, toast]);
+
   // Function to handle the actual discard action using the context function
   const handleConfirmDiscard = useCallback(() => {
     console.log('ActiveWorkoutModal - Confirming discard');
@@ -508,18 +545,47 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const hasReps = (localValue.reps ?? '').toString().trim() !== '';
     const canComplete = hasWeight && hasReps;
 
+    const screenWidth = Dimensions.get('window').width;
+    const rightThreshold = Math.max(80, screenWidth / 2);
+
+    const renderRightActions = () => (
+      <View style={{
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'flex-end',
+        backgroundColor: '#ef4444', // red
+        borderRadius: 8,
+        marginVertical: 2,
+      }}>
+        <View style={{ paddingRight: 10}}>
+          <Text style={{ color: 'white', fontWeight: 'bold' }}>Delete</Text>
+        </View>
+      </View>
+    );
+
     return (
-      <HStack
+      <Swipeable
         key={set.id || setIndex}
-        alignItems="center"
-        space="xs"
-        my="$0"
-        width="100%"
-        style={{
-          backgroundColor: isCompleted ? 'rgba(34, 197, 94, 0.12)' : 'transparent',
-          borderRadius: 8,
+        friction={0.77}
+        rightThreshold={rightThreshold}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'right') {
+            // Swiped past threshold from right-to-left: delete
+            handleDeleteSet(exerciseId, set.id, setIndex);
+          }
         }}
       >
+        <HStack
+          alignItems="center"
+          space="xs"
+          my="$0"
+          width="100%"
+          style={{
+            backgroundColor: isCompleted ? 'rgba(34, 197, 94, 0.5)' : '#2A2E38',
+            borderRadius: 8,
+          }}
+        >
   {/* Set number */}
   <Text w="$10" textAlign="center" color="$textLight50" fontWeight="$bold">{setIndex + 1}</Text>
         {/* Previous column placeholder */}
@@ -535,7 +601,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             />
           </Input>
         ) : (
-          <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
               placeholder="lbs"
               value={localValue.weightKg}
@@ -559,7 +625,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             />
           </Input>
         ) : (
-          <Input flex={1} size="sm" variant="outline" borderColor="$borderDark700">
+          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
               placeholder="Reps"
               value={localValue.reps}
@@ -595,7 +661,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             color={isCompleted ? '#FFFFFF' : (canComplete ? '#FFFFFF' : '#71717a')}
           />
         </Pressable>
-      </HStack>
+        </HStack>
+      </Swipeable>
     );
   };
 
