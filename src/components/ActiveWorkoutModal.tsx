@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
 import { supabase } from '../utils/supabaseClient';
+import SaveSessionScreen from './SaveSessionScreen';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -83,6 +84,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [pressedAddSetFor, setPressedAddSetFor] = useState<string | null>(null);
   const [isAddExercisesPressed, setIsAddExercisesPressed] = useState(false);
   const [isCancelWorkoutPressed, setIsCancelWorkoutPressed] = useState(false);
+  // Snapshot of elapsed seconds at Finish press
+  const [elapsedSecAtFinish, setElapsedSecAtFinish] = useState<number | null>(null);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // const snapPoints = useMemo(() => ['12%', '100%'], []);
@@ -144,6 +147,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!isVisible) {
       console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
       setIsEndingWorkout(false);
+      // Reset to the first page when closing
+      try { Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start(); } catch {}
+      setPageIndex(0);
+      setIsFinishPressed(false);
+      setElapsedSecAtFinish(null);
   // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
@@ -152,6 +160,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     return () => {
       console.log('ActiveWorkoutModal - Component cleanup, resetting state');
       setIsEndingWorkout(false);
+      try { Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start(); } catch {}
+      setPageIndex(0);
+      setIsFinishPressed(false);
+      setElapsedSecAtFinish(null);
   // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
     };
@@ -175,68 +187,35 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     }
   }, [onClose]);
   
-  // End workout
-  const handleEndWorkout = useCallback(async () => {
-    console.log('ActiveWorkoutModal - Ending workout');
-    
-    // Prevent multiple clicks from triggering multiple saves
-    if (isEndingWorkout) {
-      console.log('ActiveWorkoutModal - Already ending workout, ignoring duplicate call');
-      return;
+  // Sliding two-page layout inside BottomSheet
+  const [pageIndex, setPageIndex] = useState(0); // 0 = active, 1 = save
+  const slideX = useRef(new Animated.Value(0)).current;
+  const screenW = Dimensions.get('window').width;
+
+  const animateToIndex = useCallback((idx: number) => {
+    setPageIndex(idx);
+    // Reset any pressed state when navigating pages
+    setIsFinishPressed(false);
+    Animated.timing(slideX, {
+      toValue: -idx * screenW,
+      duration: 250,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [screenW, slideX]);
+
+  // Finish button now navigates to SaveSessionScreen
+  const handleEndWorkout = useCallback(() => {
+    // Capture timer snapshot at the moment Finish is pressed
+    if (sessionStartedAtMs && !isBackdated) {
+      const secs = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
+      setElapsedSecAtFinish(secs);
+    } else {
+      setElapsedSecAtFinish(null);
     }
-    
-    // Set flag to prevent multiple calls
-    setIsEndingWorkout(true);
-    
-    try {
-      // Use the provided onSave prop if available, otherwise fall back to endWorkout
-      if (onSave) {
-        console.log('ActiveWorkoutModal - Using provided onSave handler');
-        await onSave();
-      } else {
-        console.log('ActiveWorkoutModal - Calling endWorkout (DB)');
-        if (sessionId) {
-          let finishedAtOverride: string | undefined;
-          if (isBackdated && sessionStartedAtMs) {
-            const dt = new Date(sessionStartedAtMs);
-            const localNoon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
-            finishedAtOverride = localNoon.toISOString();
-          }
-          await endWorkout(sessionId, { status: 'completed', finishedAtOverride });
-        }
-      }
-      console.log('ActiveWorkoutModal - Save operation completed successfully');
-      
-      // After successful save, close the modal
-      bottomSheetRef.current?.close();
-      toast.show({
-        placement: "top",
-        render: ({ id }) => (
-          <Toast nativeID={id} action="success" variant="accent">
-            <VStack space="xs">
-              <ToastTitle>Workout Saved</ToastTitle>
-              <ToastDescription>Your workout session has been saved successfully.</ToastDescription>
-            </VStack>
-          </Toast>
-        ),
-      });
-    } catch (error) {
-      console.error('Error ending workout:', error);
-      // Reset the flag if there was an error
-      setIsEndingWorkout(false);
-      toast.show({
-        placement: "top",
-        render: ({ id }) => (
-          <Toast nativeID={id} action="error" variant="accent">
-            <VStack space="xs">
-              <ToastTitle>Save Error</ToastTitle>
-              <ToastDescription>Could not save your workout. Please try again.</ToastDescription>
-            </VStack>
-          </Toast>
-        ),
-      });
-    }
-  }, [endWorkout, onSave, isEndingWorkout, toast, sessionId, isBackdated, sessionStartedAtMs]);
+    setIsFinishPressed(false);
+    animateToIndex(1);
+  }, [animateToIndex, sessionStartedAtMs, isBackdated]);
   
   // Format timer as MM:SS
   const formatTimer = (seconds: number) => {
@@ -510,20 +489,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           )}
         </Box>
 
-        {/* Right: Finish button */}
+        {/* Right: Finish button navigates to Save screen */}
         <Pressable
           onPressIn={() => setIsFinishPressed(true)}
           onPressOut={() => setIsFinishPressed(false)}
-          onPress={isEndingWorkout ? undefined : handleEndWorkout}
-          disabled={isEndingWorkout}
-          pointerEvents={isEndingWorkout ? 'none' : 'auto'}
+          onPress={handleEndWorkout}
           bg="#22c55e"
           py="$2"
           px="$4"
           borderRadius="$lg"
           style={{ opacity: isFinishPressed ? 0.7 : 1 }}
         >
-          <Text color="$textLight50" fontWeight="$bold">{isEndingWorkout ? 'Saving…' : 'Finish'}</Text>
+          <Text color="$textLight50" fontWeight="$bold">Finish</Text>
         </Pressable>
       </HStack>
     </Box>
@@ -680,7 +657,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         backgroundStyle={{ backgroundColor: '#2A2E38' }}
       >
         <BottomSheetView style={styles.contentContainer}>
-          {renderHeader()}
+          {pageIndex === 0 ? renderHeader() : null}
+          <Animated.View style={{ flex: 1, width: screenW * 2, flexDirection: 'row', transform: [{ translateX: slideX }] }}>
+            {/* Page 0: Active session */}
+            <View style={{ width: screenW }}>
           <Box flex={1} width="100%" display="flex" >
             <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
               <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
@@ -789,6 +769,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Box>
             </ScrollView>
           </Box>
+            </View>
+            {/* Page 1: Save Session screen */}
+            <View style={{ width: screenW }}>
+              {sessionId && (
+                <SaveSessionScreen
+                  sessionId={sessionId}
+                  splitTitle={splitTitle}
+                  sessionStartedAtMs={sessionStartedAtMs}
+                  isBackdated={isBackdated}
+                  currentExercises={currentExercises}
+                  onBack={() => animateToIndex(0)}
+                  onCloseSheet={() => bottomSheetRef.current?.close()}
+                  onSaveOverride={onSave}
+                  elapsedSecAtFinish={elapsedSecAtFinish}
+                />
+              )}
+            </View>
+          </Animated.View>
         </BottomSheetView>
       </BottomSheet>
     </GestureHandlerRootView>
