@@ -81,8 +81,33 @@ export class WorkoutHistoryDataAccess {
 
   /** Clear all workout history for a user. */
   async deleteAllWorkouts(userId: string): Promise<number> {
-  // execAsync does not support parameter binding; use runAsync for parametrized delete
-  await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+    // Try direct delete (relies on ON DELETE CASCADE in schema)
+    try {
+      await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      const code = (e as any)?.code ?? (e as any)?.errno;
+      const isFk = msg.includes('FOREIGN KEY constraint failed') || code === 19;
+      if (!isFk) throw e;
+      // Fallback: child-first delete in case FK CASCADE isn’t present yet on this device DB
+      await this.sqlite.withTransactionAsync(async () => {
+        await this.sqlite.runAsync(
+          `DELETE FROM workout_sets WHERE workout_exercise_id IN (
+             SELECT id FROM workout_exercises WHERE session_id IN (
+               SELECT id FROM workout_sessions WHERE user_id = ?
+             )
+           )`,
+          userId
+        );
+        await this.sqlite.runAsync(
+          `DELETE FROM workout_exercises WHERE session_id IN (
+             SELECT id FROM workout_sessions WHERE user_id = ?
+           )`,
+          userId
+        );
+        await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+      });
+    }
     // SQLite execAsync does not return affected rows; do a count after.
     const remain = await this.db
       .select({ c: sql<number>`COUNT(*)`.as('c') })
@@ -109,9 +134,33 @@ export class WorkoutHistoryDataAccess {
           const id = r.id as string;
           await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'delete', rowId: id });
         }
-        // Then perform the local delete (cascades will clear child tables locally)
-        await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
       });
+      // Then perform the local delete (falling back to child-first if FK error occurs)
+      try {
+        await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        const code = (e as any)?.code ?? (e as any)?.errno;
+        const isFk = msg.includes('FOREIGN KEY constraint failed') || code === 19;
+        if (!isFk) throw e;
+        await this.sqlite.withTransactionAsync(async () => {
+          await this.sqlite.runAsync(
+            `DELETE FROM workout_sets WHERE workout_exercise_id IN (
+               SELECT id FROM workout_exercises WHERE session_id IN (
+                 SELECT id FROM workout_sessions WHERE user_id = ?
+               )
+             )`,
+            userId
+          );
+          await this.sqlite.runAsync(
+            `DELETE FROM workout_exercises WHERE session_id IN (
+               SELECT id FROM workout_sessions WHERE user_id = ?
+             )`,
+            userId
+          );
+          await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);
+        });
+      }
     } else {
       // No rows; still ensure local table is clean (noop if already empty)
       await this.sqlite.runAsync('DELETE FROM workout_sessions WHERE user_id = ?', userId);

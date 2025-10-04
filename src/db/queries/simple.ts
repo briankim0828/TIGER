@@ -57,6 +57,11 @@ export class SimpleDataAccess {
    */
   async initializeTables(options?: { reset?: boolean }) {
     try {
+      // Ensure SQLite enforces FK constraints on this connection
+      try {
+        await this.db.execAsync(`PRAGMA foreign_keys = ON;`);
+      } catch {}
+
       if (options?.reset) {
         // Destructive reset for development: drop all tables before recreation
         await this.db.execAsync(`
@@ -135,7 +140,7 @@ export class SimpleDataAccess {
 
   // (Removed body_part backfill migration; new table includes column.)
 
-      // Create split_exercises referencing exercise_catalog
+      // Create split_exercises referencing splits (CASCADE) and exercise_catalog (NO ACTION)
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS split_exercises (
           id TEXT PRIMARY KEY,
@@ -144,12 +149,12 @@ export class SimpleDataAccess {
           order_pos INTEGER NOT NULL,
           rest_sec_default INTEGER,
           notes TEXT,
-          FOREIGN KEY (split_id) REFERENCES splits (id),
-          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id)
+          FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE CASCADE,
+          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id) ON DELETE NO ACTION
         );
       `);
 
-      // Create workout_sessions (CP6 shape)
+      // Create workout_sessions (CP6 shape) — keep sessions if split is deleted
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS workout_sessions (
           id TEXT PRIMARY KEY,
@@ -164,11 +169,13 @@ export class SimpleDataAccess {
           total_sets INTEGER,
           duration_sec INTEGER,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE SET NULL
         );
       `);
 
-      // Create workout_exercises (CP6 shape)
+      // Create workout_exercises (CP6 shape) — cascade on session delete; keep exercise_catalog referential (no action);
+      // origin link from_split_exercise_id becomes NULL if origin split_exercise is removed
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS workout_exercises (
           id TEXT PRIMARY KEY,
@@ -179,12 +186,13 @@ export class SimpleDataAccess {
           from_split_exercise_id TEXT,
           note TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (session_id) REFERENCES workout_sessions (id),
-          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id)
+          FOREIGN KEY (session_id) REFERENCES workout_sessions (id) ON DELETE CASCADE,
+          FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id) ON DELETE NO ACTION,
+          FOREIGN KEY (from_split_exercise_id) REFERENCES split_exercises (id) ON DELETE SET NULL
         );
       `);
 
-      // Create workout_sets (CP6 shape)
+      // Create workout_sets (CP6 shape) — cascade on workout_exercise delete
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS workout_sets (
           id TEXT PRIMARY KEY,
@@ -198,20 +206,21 @@ export class SimpleDataAccess {
           rest_sec INTEGER,
           is_completed INTEGER NOT NULL DEFAULT 0,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id)
+          FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id) ON DELETE CASCADE
         );
         CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
         CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id);
       `);
 
-      // Create split_day_assignments table for program days
+      // Create split_day_assignments table for program days — cascade when split is removed
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS split_day_assignments (
           id TEXT PRIMARY KEY,
           user_id TEXT NOT NULL,
           weekday INTEGER NOT NULL, -- 0=Mon .. 6=Sun
           split_id TEXT NOT NULL,
-          UNIQUE(user_id, weekday)
+          UNIQUE(user_id, weekday),
+          FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE CASCADE
         );
       `);
 
@@ -243,6 +252,156 @@ export class SimpleDataAccess {
         );
         CREATE INDEX IF NOT EXISTS idx_outbox_status_created ON outbox (status, created_at);
       `);
+
+      // Ensure existing installations have the correct FK cascade behaviors.
+      // If missing/incorrect, rebuild affected tables with proper FKs.
+      try {
+        const fkList = async (table: string) => (await this.db.getAllAsync(`PRAGMA foreign_key_list(${table})`)) as any[];
+
+        const ensureTable = async (
+          table: string,
+          expected: Array<{ from: string; table: string; onDelete?: string }>,
+          createSql: string,
+          copyColumns: string
+        ) => {
+          let needsRebuild = false;
+          try {
+            const fks = await fkList(table);
+            for (const e of expected) {
+              const match = fks.find(
+                (r) => r.table === e.table && r.from === e.from && (!e.onDelete || (r.on_delete ?? r.onDelete) === e.onDelete)
+              );
+              if (!match) { needsRebuild = true; break; }
+            }
+          } catch { needsRebuild = true; }
+
+          if (needsRebuild) {
+            await this.db.withTransactionAsync(async () => {
+              await this.db.execAsync(`PRAGMA foreign_keys=OFF;`);
+              await this.db.execAsync(`ALTER TABLE ${table} RENAME TO ${table}_old;`);
+              await this.db.execAsync(createSql);
+              // Best-effort copy of all known columns
+              try {
+                await this.db.execAsync(`INSERT INTO ${table} (${copyColumns}) SELECT ${copyColumns} FROM ${table}_old;`);
+              } catch {}
+              await this.db.execAsync(`DROP TABLE ${table}_old;`);
+              await this.db.execAsync(`PRAGMA foreign_keys=ON;`);
+            });
+          }
+        };
+
+        // Define canonical CREATE statements mirroring above with correct FKs
+        const createSplitExercises = `
+          CREATE TABLE IF NOT EXISTS split_exercises (
+            id TEXT PRIMARY KEY,
+            split_id TEXT NOT NULL,
+            exercise_id TEXT NOT NULL,
+            order_pos INTEGER NOT NULL,
+            rest_sec_default INTEGER,
+            notes TEXT,
+            FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE CASCADE,
+            FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id) ON DELETE NO ACTION
+          );`;
+
+        const createSplitDayAssignments = `
+          CREATE TABLE IF NOT EXISTS split_day_assignments (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            weekday INTEGER NOT NULL,
+            split_id TEXT NOT NULL,
+            UNIQUE(user_id, weekday),
+            FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE CASCADE
+          );`;
+
+        const createWorkoutSessions = `
+          CREATE TABLE IF NOT EXISTS workout_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            split_id TEXT,
+            state TEXT DEFAULT 'active',
+            started_at TEXT,
+            finished_at TEXT,
+            note TEXT,
+            energy_kcal INTEGER,
+            total_volume_kg INTEGER,
+            total_sets INTEGER,
+            duration_sec INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE SET NULL
+          );`;
+
+        const createWorkoutExercises = `
+          CREATE TABLE IF NOT EXISTS workout_exercises (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            exercise_id TEXT NOT NULL,
+            order_pos INTEGER NOT NULL,
+            rest_sec_default INTEGER,
+            from_split_exercise_id TEXT,
+            note TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (session_id) REFERENCES workout_sessions (id) ON DELETE CASCADE,
+            FOREIGN KEY (exercise_id) REFERENCES exercise_catalog (id) ON DELETE NO ACTION,
+            FOREIGN KEY (from_split_exercise_id) REFERENCES split_exercises (id) ON DELETE SET NULL
+          );`;
+
+        const createWorkoutSets = `
+          CREATE TABLE IF NOT EXISTS workout_sets (
+            id TEXT PRIMARY KEY,
+            workout_exercise_id TEXT NOT NULL,
+            set_order INTEGER NOT NULL,
+            is_warmup INTEGER NOT NULL DEFAULT 0,
+            weight_kg INTEGER,
+            reps INTEGER,
+            duration_sec INTEGER,
+            distance_m INTEGER,
+            rest_sec INTEGER,
+            is_completed INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id) ON DELETE CASCADE
+          );
+          CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
+          CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id);`;
+
+        // Apply fixes per rules
+        await ensureTable(
+          'split_exercises',
+          [ { from: 'split_id', table: 'splits', onDelete: 'CASCADE' } ],
+          createSplitExercises,
+          'id, split_id, exercise_id, order_pos, rest_sec_default, notes'
+        );
+
+        await ensureTable(
+          'split_day_assignments',
+          [ { from: 'split_id', table: 'splits', onDelete: 'CASCADE' } ],
+          createSplitDayAssignments,
+          'id, user_id, weekday, split_id'
+        );
+
+        await ensureTable(
+          'workout_sessions',
+          [ { from: 'split_id', table: 'splits', onDelete: 'SET NULL' } ],
+          createWorkoutSessions,
+          'id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_sec, created_at, updated_at'
+        );
+
+        await ensureTable(
+          'workout_exercises',
+          [ { from: 'session_id', table: 'workout_sessions', onDelete: 'CASCADE' } ],
+          createWorkoutExercises,
+          'id, session_id, exercise_id, order_pos, rest_sec_default, from_split_exercise_id, note, created_at'
+        );
+
+        await ensureTable(
+          'workout_sets',
+          [ { from: 'workout_exercise_id', table: 'workout_exercises', onDelete: 'CASCADE' } ],
+          createWorkoutSets,
+          'id, workout_exercise_id, set_order, is_warmup, weight_kg, reps, duration_sec, distance_m, rest_sec, is_completed, created_at'
+        );
+      } catch (e) {
+        console.warn('FK enforcement check skipped or failed:', e);
+      }
 
       console.log('Database tables initialized successfully');
     } catch (error) {
