@@ -1,6 +1,6 @@
-import React, { useMemo, useCallback } from 'react';
-import { View } from 'react-native';
-import { Box, Text, HStack, VStack, Pressable, useToast, Toast, ToastTitle, ToastDescription, Divider } from '@gluestack-ui/themed';
+import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import { View, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { Box, Text, HStack, VStack, Pressable, useToast, Toast, ToastTitle, ToastDescription, Divider, Textarea, TextareaInput } from '@gluestack-ui/themed';
 import { Ionicons } from '@expo/vector-icons';
 import { useWorkout } from '../contexts/WorkoutContext';
 
@@ -31,7 +31,13 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   elapsedSecAtFinish,
 }) => {
   const toast = useToast();
-  const { endWorkout, deleteWorkout } = useWorkout();
+  const { endWorkout, deleteWorkout, setSessionNote } = useWorkout();
+  const [note, setNote] = useState<string>('');
+
+  // Reset note when switching to a different session
+  useEffect(() => {
+    setNote('');
+  }, [sessionId]);
 
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);
@@ -76,6 +82,10 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     try {
       // If parent provided a custom handler, use it
       if (typeof onSaveOverride === 'function') {
+        // Ensure note is persisted even when custom save flow is used
+        if (note?.trim()) {
+          await setSessionNote(sessionId, note.trim());
+        }
         await onSaveOverride();
       } else {
         let finishedAtOverride: string | undefined;
@@ -84,7 +94,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           const localNoon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
           finishedAtOverride = localNoon.toISOString();
         }
-        await endWorkout(sessionId, { status: 'completed', finishedAtOverride });
+        await endWorkout(sessionId, { status: 'completed', finishedAtOverride, note: note?.trim() ? note.trim() : undefined });
       }
       onCloseSheet();
       toast.show({
@@ -111,7 +121,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         ),
       });
     }
-  }, [endWorkout, isBackdated, sessionStartedAtMs, sessionId, onCloseSheet, toast, onSaveOverride]);
+  }, [endWorkout, isBackdated, sessionStartedAtMs, sessionId, onCloseSheet, toast, onSaveOverride, note, setSessionNote]);
 
   const handleDiscard = useCallback(async () => {
     try {
@@ -143,7 +153,8 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   }, [deleteWorkout, sessionId, onCloseSheet, toast]);
 
   return (
-    <Box flex={1} width="100%" backgroundColor="#2A2E38">
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <Box flex={1} width="100%" backgroundColor="#2A2E38">
       {/* Top bar */}
       <Box bg="#2A2E38" px="$3" py="$3" width="100%" borderBottomWidth={1} borderColor="#3A3F4B">
         <HStack alignItems="center" justifyContent="space-between">
@@ -160,37 +171,75 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         </HStack>
       </Box>
 
+      
+
       {/* Content */}
-      <Box flex={1} px="$4" py="$4">
-        {/* Split/Workout name */}
-        <Text color="$textLight50" fontSize="$xl" fontWeight="$semibold" mb="$4" numberOfLines={2}>
-          {splitTitle || 'Workout'}
-        </Text>
+      <Box flex={1} px="$3" py="$4">
+        <VStack space="xl">
 
-        {/* Metrics row */}
-        <HStack justifyContent="space-between" mb="$4">
-          <VStack>
-            <Text color="$textLight400" fontSize="$sm">Duration</Text>
-            <Pressable>
-              <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{durationText}</Text>
-            </Pressable>
-          </VStack>
-          <VStack>
-            <Text color="$textLight400" fontSize="$sm">Volume</Text>
-            <Text color="$textLight50" fontWeight="$semibold" fontSize="$md">{volumeText}</Text>
-          </VStack>
-          <VStack>
-            <Text color="$textLight400" fontSize="$sm">Sets</Text>
-            <Text color="$textLight50" fontWeight="$semibold" fontSize="$md">{metrics.setCount}</Text>
-          </VStack>
-        </HStack>
+          {/* Split/Workout name */}
+          <Text color="$textLight50" fontSize="$xl" fontWeight="$semibold" numberOfLines={2}>
+            {splitTitle || 'Workout'}
+          </Text>
 
-        <Divider bg="#3A3F4B" my="$2" />
+          {/* Metrics row */}
+          <HStack justifyContent="space-between" space="sm">
+            <VStack>
+              <Text color="$textLight400" fontSize="$sm">Duration</Text>
+              <Pressable>
+                <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{durationText}</Text>
+              </Pressable>
+            </VStack>
+            <VStack>
+              <Text color="$textLight400" fontSize="$sm">Volume</Text>
+              <Text color="$textLight50" fontWeight="$semibold" fontSize="$md">{volumeText}</Text>
+            </VStack>
+            <VStack>
+              <Text color="$textLight400" fontSize="$sm">Sets</Text>
+              <Text color="$textLight50" fontWeight="$semibold" fontSize="$md">{metrics.setCount}</Text>
+            </VStack>
+          </HStack>
 
-        {/* Date */}
-        <VStack mt="$2" mb="$8">
-          <Text color="$textLight400" fontSize="$sm">When</Text>
-          <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{dateText}</Text>
+          <Divider bg="#3A3F4B" />
+
+          {/* Date */}
+          <VStack>
+            <Text color="$textLight400" fontSize="$sm">When</Text>
+            <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{dateText}</Text>
+          </VStack>
+
+          <Divider bg="#3A3F4B" />
+
+          {/* Description */}
+          <VStack space="sm">
+            <Text color="$textLight400" fontSize="$sm">Note</Text>
+            <Textarea
+              bg="transparent"
+              borderColor="#3A3F4B"
+              borderWidth={0}
+              borderRadius="$md"
+              minHeight={110}
+              p="$0"
+              px="$0"
+              py="$0"
+              style={{ padding: 0 }}
+              $focus={{ borderColor: '#3B82F6' }}
+            >
+              <TextareaInput
+                placeholder="How did your workout go? Leave some notes here..."
+                color="$textLight50"
+                value={note}
+                onChangeText={setNote}
+                multiline
+                textAlignVertical="top"
+                numberOfLines={5}
+                p="$0"
+                px="$0"
+                py="$0"
+                style={{ padding: 0 }}
+              />
+            </Textarea>
+          </VStack>
         </VStack>
 
         {/* Discard button */}
@@ -199,7 +248,9 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           <Text color="$red400" fontWeight="$bold">Discard Workout</Text>
         </Pressable>
       </Box>
-    </Box>
+      {/* Close outer container Box */}
+      </Box>
+    </TouchableWithoutFeedback>
   );
 };
 

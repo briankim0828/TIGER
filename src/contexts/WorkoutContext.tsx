@@ -12,7 +12,8 @@ export interface WorkoutContextType {
     splitId?: string | null,
     opts?: { policy?: StartPolicy; fromSplitExerciseIds?: string[]; startedAtOverride?: string }
   ) => Promise<{ sessionId: string; resumed: boolean }>;
-  endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string }) => Promise<boolean>;
+  endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string }) => Promise<boolean>;
+  setSessionNote: (sessionId: string, note: string) => Promise<boolean>;
   addSet: (
     sessionExerciseId: string,
     data: { weightKg?: number | null; reps?: number | null; durationSec?: number | null; distanceM?: number | null; restSec?: number | null; isWarmup?: boolean | null }
@@ -58,7 +59,8 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
       console.debug('[WorkoutContext] new session started', { sessionId });
       return { sessionId, resumed: false };
     },
-    endWorkout: (sessionId, opts) => workouts.endWorkout(sessionId, opts),
+  endWorkout: (sessionId, opts) => workouts.endWorkout(sessionId, opts),
+  setSessionNote: (sessionId, note) => workouts.setSessionNote(sessionId, note),
     addSet: (sessionExerciseId, data) => workouts.addSet(sessionExerciseId, data),
     updateSet: (setId, patch) => workouts.updateSet(setId, patch),
     deleteSet: (setId) => workouts.deleteSet(setId),

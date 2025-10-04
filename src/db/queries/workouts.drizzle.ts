@@ -42,6 +42,21 @@ export class WorkoutsDataAccess {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     this.db = drizzle(this.sqlite as any);
   }
+  async setSessionNote(sessionId: string, note: string): Promise<boolean> {
+    const nowIso = new Date().toISOString();
+    await this.db.update(workoutSessions).set({ note, updatedAt: nowIso }).where(eq(workoutSessions.id, sessionId)).run();
+    // Fetch user_id for RLS on update
+    const owner = await this.db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
+    const userId = owner[0]?.userId as string | undefined;
+    await enqueueOutbox(this.sqlite, {
+      table: 'workout_sessions',
+      op: 'update',
+      rowId: sessionId,
+      payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), note, updated_at: nowIso },
+    });
+    this.bumpTables?.(['workout_sessions']);
+    return true;
+  }
 
   // Allow callers to inject a bump function to notify live queries
   setLiveNotifier(bump: (tables: string[]) => void) {
@@ -297,19 +312,17 @@ export class WorkoutsDataAccess {
     });
   }
 
-  async endWorkout(sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string }): Promise<boolean> {
+  async endWorkout(sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string }): Promise<boolean> {
     const status = opts?.status ?? 'completed';
     const nowIso = new Date().toISOString();
     const finishedIso = opts?.finishedAtOverride ?? nowIso;
-    await this.db
-      .update(workoutSessions)
-      .set({ state: status, finishedAt: finishedIso, updatedAt: nowIso })
-      .where(eq(workoutSessions.id, sessionId))
-      .run();
+    const patch: any = { state: status, finishedAt: finishedIso, updatedAt: nowIso };
+    if (typeof opts?.note === 'string') patch.note = opts.note;
+    await this.db.update(workoutSessions).set(patch).where(eq(workoutSessions.id, sessionId)).run();
   // Fetch user_id for RLS on update
   const owner = await this.db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
   const userId = owner[0]?.userId as string | undefined;
-  await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'update', rowId: sessionId, payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), state: status, finished_at: finishedIso, updated_at: nowIso } });
+  await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'update', rowId: sessionId, payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), state: status, finished_at: finishedIso, updated_at: nowIso, ...(typeof opts?.note === 'string' ? { note: opts.note } : {}) } });
   this.bumpTables?.(['workout_sessions']);
     return true;
   }

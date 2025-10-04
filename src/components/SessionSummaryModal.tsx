@@ -12,7 +12,7 @@ import { registerSelectionCallback, ExerciseLite } from '../navigation/selection
 import { useWorkout } from '../contexts/WorkoutContext';
 import { supabase } from '../utils/supabaseClient';
 
-type ExerciseRow = { id: string; name: string };
+type ExerciseRow = { id: string; name: string; bodyPart: string | null };
 
 interface SessionSummaryModalProps {
   selectedDate: string | null;
@@ -27,6 +27,15 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
   onClose,
   onStartWorkout,
 }) => {
+  // Pretty-print helper for body part labels
+  const titleCase = useCallback((s: string | null | undefined) => {
+    if (!s) return '';
+    return s
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }, []);
   const insets = useSafeAreaInsets();
   const db = useDatabase();
   const { startWorkout } = useWorkout();
@@ -56,7 +65,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
       try {
         const joins = await db.getSplitExercises(scheduledSplit.id);
         if (cancelled) return;
-        const exs: ExerciseRow[] = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name }));
+        const exs: ExerciseRow[] = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart ?? null }));
         setCurrentExercises(exs);
       } catch (e) {
         console.warn('[SessionSummaryModal] failed to load split exercises', e);
@@ -139,17 +148,37 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
     const requestId = `session-summary-add-${Date.now()}`;
     registerSelectionCallback(requestId, async (selected: ExerciseLite[]) => {
       if (!selected || selected.length === 0) return;
-      setCurrentExercises((prev) => {
-        const map = new Map(prev.map(e => [e.id, e] as const));
-        for (const s of selected) {
-          if (!map.has(s.id)) map.set(s.id, { id: s.id, name: s.name });
-        }
-        // Keep insertion order: prev first, then new additions
-        const nextIds = [...prev.map(e => e.id)];
-        for (const s of selected) if (!nextIds.includes(s.id)) nextIds.push(s.id);
-        const next: ExerciseRow[] = nextIds.map(id => map.get(id)!).filter(Boolean) as ExerciseRow[];
-        return next;
-      });
+      // Fetch bodyPart details for selections
+      try {
+        const details = await Promise.all(selected.map(async (s) => {
+          const d = await db.getExerciseById(s.id);
+          return { id: s.id, name: s.name, bodyPart: d?.bodyPart ?? null } as ExerciseRow;
+        }));
+        setCurrentExercises((prev) => {
+          const map = new Map(prev.map(e => [e.id, e] as const));
+          for (const row of details) {
+            if (!map.has(row.id)) map.set(row.id, row);
+          }
+          // Keep insertion order: prev first, then new additions
+          const nextIds = [...prev.map(e => e.id)];
+          for (const row of details) if (!nextIds.includes(row.id)) nextIds.push(row.id);
+          const next: ExerciseRow[] = nextIds.map(id => map.get(id)!).filter(Boolean) as ExerciseRow[];
+          return next;
+        });
+      } catch (e) {
+        console.warn('[SessionSummaryModal] failed to fetch exercise details', e);
+        // Fallback: add without bodyPart
+        setCurrentExercises((prev) => {
+          const map = new Map(prev.map(e => [e.id, e] as const));
+          for (const s of selected) {
+            if (!map.has(s.id)) map.set(s.id, { id: s.id, name: s.name, bodyPart: null });
+          }
+          const nextIds = [...prev.map(e => e.id)];
+          for (const s of selected) if (!nextIds.includes(s.id)) nextIds.push(s.id);
+          const next: ExerciseRow[] = nextIds.map(id => map.get(id)!).filter(Boolean) as ExerciseRow[];
+          return next;
+        });
+      }
     });
     navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true });
   }, []);
@@ -182,18 +211,14 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
         <Box flex={1}>
           {/* Header with today's date centered, back button on left */}
           <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2">
-            {/* <Button
-              variant="link"
-              onPress={() => bottomSheetRef.current?.close()}
-              position="absolute"
-              left="$2"
-            >
-              
-              <Icon as={AntDesign as any} name="left" color="$white" />
-            </Button> */}
-            <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
-              {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
-            </Text>
+            <HStack alignItems="center" justifyContent="center" space="sm">
+              {/* Calendar icon on the left */}
+              {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
+              <Icon as={AntDesign as any} name="calendar" color="$white" size="md" />
+              <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
+                {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}
+              </Text>
+            </HStack>
           </Box>
 
           {/* Split name with total (stacked) on the left, Reorder on the right */}
@@ -204,13 +229,13 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
               </Text>
               <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
             </VStack>
-            <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => { /* no-op */ }} px="$2">
+            {/* <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => {}} px="$2">
               <HStack alignItems="center" space="xs">
-                {/* @ts-ignore */}
+                
                 <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
                 <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
               </HStack>
-            </Button>
+            </Button> */}
           </HStack>
 
           {/* Exercises list */}
@@ -230,7 +255,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                         </Box>
                         <VStack flex={1}>
                           <Text color="$white" fontSize="$md" numberOfLines={1}>{exercise.name}</Text>
-                          <Text color="$gray400" fontSize="$xs">{/* Placeholder for sets/rep summary */}</Text>
+                          <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
                         </VStack>
                       </HStack>
                       <Button variant="link" onPress={() => handleRemoveExercise(index)}>
@@ -252,7 +277,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                   py="$2"
                   onPressIn={() => setIsAddPressed(true)}
                   onPressOut={() => setIsAddPressed(false)}
-                  style={{ opacity: isAddPressed ? 0.7 : 1 }}
+                  style={{ opacity: isAddPressed ? 0.5 : 1 }}
                   onPress={handleAddExercise}
                 >
                   <HStack space="sm" justifyContent="center" alignItems="center">
@@ -265,7 +290,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
             ) : (
               <Box backgroundColor="transparent" borderRadius="$lg" p="$3" >
                 <VStack space="xl" alignItems="center">
-                  <Text color="$gray400" fontSize="$lg">Add exercises to this session</Text>
+                  <Text color="$gray400" fontSize="$md">Add exercises to this session</Text>
                   <Box width="$full">
                     <Pressable
                       width="$full"
@@ -316,7 +341,7 @@ const SessionSummaryModal: React.FC<SessionSummaryModalProps> = ({
                 onPressIn={() => { if (!startDisabled) setIsStartPressed(true); }}
                 onPressOut={() => setIsStartPressed(false)}
                 onPress={startDisabled ? undefined : handleStartWorkout}
-                isDisabled={startDisabled}
+                disabled={startDisabled}
                 pointerEvents={startDisabled ? 'none' : 'auto'}
                 style={{ opacity: startDisabled ? 0.6 : (isStartPressed ? 0.8 : 1) }}
               >

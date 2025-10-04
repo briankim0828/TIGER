@@ -3,9 +3,9 @@ import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Ani
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription } from '@gluestack-ui/themed';
+import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription, Icon} from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { Entypo, Ionicons } from '@expo/vector-icons';
+import { Entypo, Ionicons, AntDesign } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
@@ -453,7 +453,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!sessionStartedAtMs) return '';
     try {
       return new Date(sessionStartedAtMs).toLocaleDateString(undefined, {
-        month: 'short', day: 'numeric', year: 'numeric',
+        month: 'short', day: '2-digit', year: 'numeric',
       });
     } catch {
       return '';
@@ -475,9 +475,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           >
             {splitTitle || 'Active Workout'}
           </Text>
+          <HStack space="xs" alignItems="center">
+          <Icon as={AntDesign as any} name="calendar" color="$textLight400" size="sm" />
           {!!formattedDate && (
+            
             <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>{formattedDate}</Text>
           )}
+          </HStack>
         </VStack>
 
         {/* Centered Timer overlay (hidden for backdated sessions) */}
