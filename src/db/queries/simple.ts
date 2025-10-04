@@ -155,6 +155,42 @@ export class SimpleDataAccess {
       `);
 
       // Create workout_sessions (CP6 shape) — keep sessions if split is deleted
+      // Migration: if legacy column duration_sec exists, rename/migrate to duration_min preserving values
+      try {
+        const wsCols = await this.db.getAllAsync(`PRAGMA table_info(workout_sessions)`);
+        const hasDurationSec = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'duration_sec');
+        const hasDurationMin = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'duration_min');
+        if (hasDurationSec && !hasDurationMin) {
+          await this.db.withTransactionAsync(async () => {
+            await this.db.execAsync(`PRAGMA foreign_keys=OFF;`);
+            await this.db.execAsync(`ALTER TABLE workout_sessions RENAME TO workout_sessions_old;`);
+            await this.db.execAsync(`
+              CREATE TABLE IF NOT EXISTS workout_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                split_id TEXT,
+                state TEXT DEFAULT 'active',
+                started_at TEXT,
+                finished_at TEXT,
+                note TEXT,
+                energy_kcal INTEGER,
+                total_volume_kg INTEGER,
+                total_sets INTEGER,
+                duration_min INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE SET NULL
+              );
+            `);
+            await this.db.execAsync(`
+              INSERT INTO workout_sessions (id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at)
+              SELECT id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_sec, created_at, updated_at FROM workout_sessions_old;
+            `);
+            await this.db.execAsync(`DROP TABLE workout_sessions_old;`);
+            await this.db.execAsync(`PRAGMA foreign_keys=ON;`);
+          });
+        }
+      } catch {}
       await this.db.execAsync(`
         CREATE TABLE IF NOT EXISTS workout_sessions (
           id TEXT PRIMARY KEY,
@@ -167,7 +203,7 @@ export class SimpleDataAccess {
           energy_kcal INTEGER,
           total_volume_kg INTEGER,
           total_sets INTEGER,
-          duration_sec INTEGER,
+          duration_min INTEGER,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE SET NULL
@@ -325,7 +361,7 @@ export class SimpleDataAccess {
             energy_kcal INTEGER,
             total_volume_kg INTEGER,
             total_sets INTEGER,
-            duration_sec INTEGER,
+            duration_min INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (split_id) REFERENCES splits (id) ON DELETE SET NULL
@@ -383,7 +419,7 @@ export class SimpleDataAccess {
           'workout_sessions',
           [ { from: 'split_id', table: 'splits', onDelete: 'SET NULL' } ],
           createWorkoutSessions,
-          'id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_sec, created_at, updated_at'
+          'id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at'
         );
 
         await ensureTable(

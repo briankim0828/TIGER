@@ -105,7 +105,7 @@ export const workoutSessions = sqliteTable(
     energyKcal: integer('energy_kcal'),
     totalVolumeKg: integer('total_volume_kg'),
     totalSets: integer('total_sets'),
-    durationSec: integer('duration_sec'),
+    durationMin: integer('duration_min'),
     createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
     updatedAt: text('updated_at').notNull().default(sql`CURRENT_TIMESTAMP`),
   },

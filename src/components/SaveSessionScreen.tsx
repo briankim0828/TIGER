@@ -42,8 +42,8 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);
     const setCount = sets.length;
-    const volume = sets.reduce((sum, s) => sum + (Number(s.weightKg || 0) * Number(s.reps || 0)), 0);
-    return { setCount, volume };
+    const volumeLbs = sets.reduce((sum, s) => sum + (Number(s.weightKg || 0) * Number(s.reps || 0)), 0);
+    return { setCount, volumeLbs };
   }, [currentExercises]);
 
   const durationText = useMemo(() => {
@@ -73,19 +73,37 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   }, [sessionStartedAtMs]);
 
   const volumeText = useMemo(() => {
-    const n = metrics.volume || 0;
+    const n = metrics.volumeLbs || 0;
     // Show one decimal like the screenshot
     return `${n.toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} lbs`;
-  }, [metrics.volume]);
+  }, [metrics.volumeLbs]);
 
   const handleSave = useCallback(async () => {
     try {
+      // compute persisted stats at the moment of Save to avoid stale values
+      const setCount = metrics.setCount;
+      // convert lbs -> kg (nearest integer)
+      const totalVolumeKg = Math.round(((metrics.volumeLbs ?? 0) / 2.20462));
+      // duration text computed in minutes; use the same source in minutes (rounded)
+      let durationMin: number | undefined = undefined;
+      if (sessionStartedAtMs && !isBackdated) {
+        const secs = Math.max(0, Math.floor((elapsedSecAtFinish ?? 0)) || Math.floor((Date.now() - sessionStartedAtMs) / 1000));
+        durationMin = Math.max(0, Math.round(secs / 60));
+      }
       // If parent provided a custom handler, use it
       if (typeof onSaveOverride === 'function') {
         // Ensure note is persisted even when custom save flow is used
         if (note?.trim()) {
           await setSessionNote(sessionId, note.trim());
         }
+        // Optionally, if custom save flow also expects stats, we can pre-write them locally
+        await endWorkout(sessionId, {
+          status: 'completed',
+          ...(typeof durationMin === 'number' ? { durationMin } : {}),
+          totalVolumeKg,
+          totalSets: setCount,
+          note: note?.trim() ? note.trim() : undefined,
+        });
         await onSaveOverride();
       } else {
         let finishedAtOverride: string | undefined;
@@ -94,7 +112,14 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           const localNoon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
           finishedAtOverride = localNoon.toISOString();
         }
-        await endWorkout(sessionId, { status: 'completed', finishedAtOverride, note: note?.trim() ? note.trim() : undefined });
+        await endWorkout(sessionId, {
+          status: 'completed',
+          finishedAtOverride,
+          note: note?.trim() ? note.trim() : undefined,
+          totalVolumeKg,
+          totalSets: setCount,
+          ...(typeof durationMin === 'number' ? { durationMin } : {}),
+        });
       }
       onCloseSheet();
       toast.show({

@@ -312,17 +312,38 @@ export class WorkoutsDataAccess {
     });
   }
 
-  async endWorkout(sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string }): Promise<boolean> {
+  async endWorkout(
+    sessionId: string,
+    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number }
+  ): Promise<boolean> {
     const status = opts?.status ?? 'completed';
     const nowIso = new Date().toISOString();
     const finishedIso = opts?.finishedAtOverride ?? nowIso;
     const patch: any = { state: status, finishedAt: finishedIso, updatedAt: nowIso };
     if (typeof opts?.note === 'string') patch.note = opts.note;
+    if (typeof opts?.totalVolumeKg === 'number') patch.totalVolumeKg = opts.totalVolumeKg;
+    if (typeof opts?.totalSets === 'number') patch.totalSets = opts.totalSets;
+    if (typeof opts?.durationMin === 'number') patch.durationMin = opts.durationMin;
     await this.db.update(workoutSessions).set(patch).where(eq(workoutSessions.id, sessionId)).run();
   // Fetch user_id for RLS on update
   const owner = await this.db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
   const userId = owner[0]?.userId as string | undefined;
-  await enqueueOutbox(this.sqlite, { table: 'workout_sessions', op: 'update', rowId: sessionId, payload: { id: sessionId, ...(userId ? { user_id: userId } : {}), state: status, finished_at: finishedIso, updated_at: nowIso, ...(typeof opts?.note === 'string' ? { note: opts.note } : {}) } });
+  await enqueueOutbox(this.sqlite, {
+    table: 'workout_sessions',
+    op: 'update',
+    rowId: sessionId,
+    payload: {
+      id: sessionId,
+      ...(userId ? { user_id: userId } : {}),
+      state: status,
+      finished_at: finishedIso,
+      updated_at: nowIso,
+      ...(typeof opts?.note === 'string' ? { note: opts.note } : {}),
+      ...(typeof opts?.totalVolumeKg === 'number' ? { total_volume_kg: opts.totalVolumeKg } : {}),
+      ...(typeof opts?.totalSets === 'number' ? { total_sets: opts.totalSets } : {}),
+      ...(typeof opts?.durationMin === 'number' ? { duration_min: opts.durationMin } : {}),
+    },
+  });
   this.bumpTables?.(['workout_sessions']);
     return true;
   }

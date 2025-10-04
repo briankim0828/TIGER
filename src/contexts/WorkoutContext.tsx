@@ -12,7 +12,10 @@ export interface WorkoutContextType {
     splitId?: string | null,
     opts?: { policy?: StartPolicy; fromSplitExerciseIds?: string[]; startedAtOverride?: string }
   ) => Promise<{ sessionId: string; resumed: boolean }>;
-  endWorkout: (sessionId: string, opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string }) => Promise<boolean>;
+  endWorkout: (
+    sessionId: string,
+    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number }
+  ) => Promise<boolean>;
   setSessionNote: (sessionId: string, note: string) => Promise<boolean>;
   addSet: (
     sessionExerciseId: string,

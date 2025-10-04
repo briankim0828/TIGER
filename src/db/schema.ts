@@ -157,7 +157,7 @@ export const workoutSessions = pgTable("workout_sessions", {
   energyKcal: integer("energy_kcal"),
   totalVolumeKg: numeric("total_volume_kg", { precision: 12, scale: 2 }),
   totalSets: integer("total_sets"),
-  durationSec: integer("duration_sec"),
+  durationMin: integer("duration_min"),
   mediaCount: integer("media_count").default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
