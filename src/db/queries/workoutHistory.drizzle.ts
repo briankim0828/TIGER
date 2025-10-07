@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { drizzle } from 'drizzle-orm/expo-sqlite';
-import { and, eq, sql } from 'drizzle-orm';
-import { workoutSessions } from '../sqlite/schema';
+import { and, eq, inArray, sql, asc, desc } from 'drizzle-orm';
+import { workoutSessions, workoutExercises, workoutSets, exerciseCatalog } from '../sqlite/schema';
 import { enqueueOutbox } from '../sync/outbox';
 
 /**
@@ -16,6 +16,23 @@ export type WorkoutCalendarEntry = {
 export type WorkoutStats = {
   totalWorkouts: number;
   hoursTrained: number; // rounded to 1 decimal from duration hours
+};
+
+export type WorkoutPostExercise = {
+  sessionExerciseId: string;
+  name: string;
+  setCount: number;
+};
+
+export type WorkoutPost = {
+  sessionId: string;
+  sessionName: string | null;
+  note: string | null;
+  durationMin: number | null;
+  totalVolumeKg: number | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  exercises: WorkoutPostExercise[];
 };
 
 /**
@@ -77,6 +94,68 @@ export class WorkoutHistoryDataAccess {
     }
     const hours = totalDurationMs / 1000 / 3600;
     return { totalWorkouts: totalCompleted, hoursTrained: Math.round(hours * 10) / 10 };
+  }
+
+  /**
+   * Feed-style posts: one per completed workout session, newest first, with per-exercise set counts.
+   */
+  async getWorkoutPosts(userId: string, limit = 25): Promise<WorkoutPost[]> {
+    // 1) Fetch latest completed sessions for the user
+    const sessions = await this.db
+      .select({
+        id: workoutSessions.id,
+        sessionName: workoutSessions.sessionName,
+        note: workoutSessions.note,
+        durationMin: workoutSessions.durationMin,
+        totalVolumeKg: workoutSessions.totalVolumeKg,
+        startedAt: workoutSessions.startedAt,
+        finishedAt: workoutSessions.finishedAt,
+      })
+      .from(workoutSessions)
+      .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.state, 'completed')))
+      .orderBy(desc(workoutSessions.finishedAt))
+      .limit(limit);
+
+    if (sessions.length === 0) return [];
+    const sessionIds = sessions.map((s) => s.id as string);
+
+    // 2) Fetch exercises with set counts for these sessions in one query
+    const exRows = await this.db
+      .select({
+        sessionId: workoutExercises.sessionId,
+        sessionExerciseId: workoutExercises.id,
+        name: exerciseCatalog.name,
+        setCount: sql<number>`COUNT(${workoutSets.id})`.as('set_count'),
+        orderPos: workoutExercises.orderPos,
+      })
+      .from(workoutExercises)
+      .leftJoin(workoutSets, eq(workoutSets.workoutExerciseId, workoutExercises.id))
+      .innerJoin(exerciseCatalog, eq(workoutExercises.exerciseId, exerciseCatalog.id))
+      .where(inArray(workoutExercises.sessionId, sessionIds))
+      .groupBy(workoutExercises.sessionId, workoutExercises.id, exerciseCatalog.name, workoutExercises.orderPos)
+      .orderBy(asc(workoutExercises.sessionId), asc(workoutExercises.orderPos));
+
+    // 3) Group exercises by sessionId
+    const bySession = new Map<string, WorkoutPostExercise[]>();
+    for (const r of exRows as Array<{ sessionId: string; sessionExerciseId: string; name: string; setCount: number; orderPos: number }>) {
+      const sid = r.sessionId as string;
+      const arr = bySession.get(sid) ?? [];
+      arr.push({ sessionExerciseId: r.sessionExerciseId as string, name: r.name as string, setCount: (r.setCount ?? 0) });
+      bySession.set(sid, arr);
+    }
+
+    // 4) Map sessions into posts, preserving order from sessions[] (newest first)
+    const posts: WorkoutPost[] = sessions.map((s) => ({
+      sessionId: s.id as string,
+      sessionName: (s.sessionName ?? null) as string | null,
+      note: (s.note ?? null) as string | null,
+      durationMin: (s.durationMin ?? null) as number | null,
+      totalVolumeKg: (s.totalVolumeKg ?? null) as number | null,
+      startedAt: (s.startedAt ?? null) as string | null,
+      finishedAt: (s.finishedAt ?? null) as string | null,
+      exercises: bySession.get(s.id as string) ?? [],
+    }));
+    return posts;
   }
 
   /** Clear all workout history for a user. */

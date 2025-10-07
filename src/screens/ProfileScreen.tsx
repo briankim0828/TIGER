@@ -27,10 +27,11 @@ import {
 } from '@gluestack-ui/themed';
 import { MaterialIcons } from '@expo/vector-icons';
 import { User } from '@supabase/supabase-js';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 // DataContext removed – using workout history queries instead
 import { useWorkoutHistory } from '../db/queries';
+import type { WorkoutPost } from '../db/queries/workoutHistory.drizzle';
 import {
   UserProfile,
   getCurrentUser,
@@ -78,6 +79,7 @@ const ProfileScreen: React.FC = () => {
   const cancelRef = React.useRef(null);
   const history = useWorkoutHistory();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [posts, setPosts] = useState<WorkoutPost[]>([]);
   useEffect(() => {
     (async () => {
       try {
@@ -157,6 +159,7 @@ const ProfileScreen: React.FC = () => {
     if (user) {
       fetchUserProfile();
       fetchUserStats();
+      // refreshPosts referenced below; call after it's defined
     }
   }, [user, fetchUserProfile]);
 
@@ -196,6 +199,30 @@ const ProfileScreen: React.FC = () => {
       console.error('Error fetching stats (local DB):', error);
     }
   };
+
+  const refreshPosts = useCallback(async () => {
+    try {
+      const uid = user?.id ?? authUserId ?? '';
+      if (!uid) return;
+      const list = await history.getWorkoutPosts(uid, 25);
+      setPosts(list);
+    } catch (e) {
+      console.warn('Failed to load workout posts', e);
+    }
+  }, [history, user?.id, authUserId]);
+
+  // Refresh posts whenever Profile gains focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshPosts();
+      return () => {};
+    }, [refreshPosts])
+  );
+
+  // Also refresh after user is available
+  useEffect(() => {
+    if (user) refreshPosts();
+  }, [user, refreshPosts]);
 
   const handleLogout = async () => {
     try {
@@ -423,7 +450,7 @@ const ProfileScreen: React.FC = () => {
       </VStack>
 
       {/* Workout Stats Section */}
-      <HStack bg="#1E2028" px={4} py={4} justifyContent="space-around" alignItems="center" mx={4} borderRadius="lg" pt ={10}>
+      <HStack bg="#1E2028" px={4} py={4} justifyContent="space-around" alignItems="center" mx={4} borderRadius="lg" pt ={10} pb={6}>
         <VStack alignItems="center">
           <Text color="white" fontSize="$xl" fontWeight="bold">{stats.totalWorkouts}</Text>
           <Text color="gray.400" fontSize="$sm">Total Workouts</Text>
@@ -436,29 +463,77 @@ const ProfileScreen: React.FC = () => {
       </HStack>
 
       {/* Workout Tabs Section - Example Grid Layout */}
-      <Box px={4} mt={6}>
+      <Box px={10} mt={6}>
         <Text color="white" fontSize="$lg" fontWeight="bold" mb={3}>My Workouts</Text>
-        <HStack flexWrap="wrap" justifyContent="space-between">
-          {workoutTabs.map((tab) => (
-            <Pressable
-              key={tab.id}
-              bg="#2A2E38"
-              p={4}
-              borderRadius="lg"
-              alignItems="center"
-              justifyContent="center"
-              width="48%" // Adjust for desired spacing
-              mb={3}
-              $pressed={{ opacity: 0.7 }}
-              // Add onPress handler if needed
-            >
-              {/* Use name prop instead of string children to avoid RN text warnings */}
-              {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
-              <Icon as={MaterialIcons as any} name={tab.icon} color="#6B8EF2" mb={2} />
-              <Text color="white" fontSize="$sm" fontWeight="medium">{tab.title}</Text>
-            </Pressable>
-          ))}
-        </HStack>
+        
+
+        {/* Workout Posts Feed */}
+        <VStack space="lg" mt={8}>
+          {posts.map((p) => {
+            const dateLabel = (() => {
+              const d = p.finishedAt ?? p.startedAt;
+              try {
+                return d ? new Date(d).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }) : '';
+              } catch { return ''; }
+            })();
+            const sessionTitle = p.sessionName || 'Workout';
+            return (
+              <Box key={p.sessionId} bg="#12141A" borderRadius="$lg" p="$4">
+                {/* Header: avatar letter, username, date */}
+                <HStack alignItems="center" justifyContent="space-between" mb="$2">
+                  <HStack alignItems="center" space="sm">
+                    <Box width={36} height={36} borderRadius="$full" bg="#2A2E38" alignItems="center" justifyContent="center">
+                      <Text color="$white" fontWeight="$bold">
+                        {(displayName?.charAt(0) || 'U').toUpperCase()}
+                      </Text>
+                    </Box>
+                    <VStack>
+                      <Text color="$white" fontWeight="$bold">{displayName}</Text>
+                      <Text color="$gray400" fontSize="$xs">{dateLabel}</Text>
+                    </VStack>
+                  </HStack>
+                </HStack>
+
+                {/* Title + Note */}
+                <VStack space="xs" mb="$3">
+                  <Text color="$white" fontSize="$xl" fontWeight="$bold">{sessionTitle}</Text>
+                  {!!p.note && <Text color="$gray300" fontSize="$sm">{p.note}</Text>}
+                </VStack>
+
+                {/* Duration + Volume */}
+                <HStack space="xl" mb="$3">
+                  <VStack>
+                    <Text color="$gray400" fontSize="$xs">Time</Text>
+                    <Text color="$white" fontWeight="$semibold">{p.durationMin ?? 0}min</Text>
+                  </VStack>
+                  <VStack>
+                    <Text color="$gray400" fontSize="$xs">Volume</Text>
+                    <Text color="$white" fontWeight="$semibold">{(p.totalVolumeKg ?? 0).toLocaleString()} kg</Text>
+                  </VStack>
+                </HStack>
+
+                {/* Exercise list */}
+                <VStack space="md">
+                  {p.exercises.map((ex) => (
+                    <HStack key={ex.sessionExerciseId} alignItems="center" justifyContent="space-between">
+                      <HStack space="md" alignItems="center" flex={1}>
+                        <Box width={48} height={48} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
+                          <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                            {ex.name.charAt(0).toUpperCase()}
+                          </Text>
+                        </Box>
+                        <VStack flex={1}>
+                          <Text color="$white" fontSize="$md" numberOfLines={1}>{ex.name}</Text>
+                        </VStack>
+                      </HStack>
+                      <Text color="$gray400" fontSize="$sm">{ex.setCount} {ex.setCount === 1 ? 'set' : 'sets'}</Text>
+                    </HStack>
+                  ))}
+                </VStack>
+              </Box>
+            );
+          })}
+        </VStack>
       </Box>
 
   {/* Settings moved to SettingsScreen */}

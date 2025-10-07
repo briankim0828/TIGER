@@ -476,6 +476,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {splitTitle || 'Active Workout'}
           </Text>
           <HStack space="xs" alignItems="center">
+          {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
           <Icon as={AntDesign as any} name="calendar" color="$textLight400" size="sm" />
           {!!formattedDate && (
             
@@ -738,7 +739,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   <Pressable
                     onPressIn={() => setIsCancelWorkoutPressed(true)}
                     onPressOut={() => setIsCancelWorkoutPressed(false)}
-                    bg="#3B2B2B"
+                    bg="#6d3434ff"
                     py="$1"
                     px="$6"
                     borderRadius="$lg"

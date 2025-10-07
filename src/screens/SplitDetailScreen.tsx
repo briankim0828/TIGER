@@ -29,7 +29,7 @@ type WorkoutStackParamList = {
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
 type RoutePropType = RouteProp<WorkoutStackParamList, "SplitDetail">;
 
-type ExerciseRow = { id: string; name: string };
+type ExerciseRow = { id: string; name: string; bodyPart: string | null };
 
 const SplitDetailScreen = () => {
   const navigation = useNavigation<NavigationProp>();
@@ -44,10 +44,20 @@ const SplitDetailScreen = () => {
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
 
+  // Pretty-print helper for body part labels (matches SessionSummaryModal)
+  const titleCase = useCallback((s: string | null | undefined) => {
+    if (!s) return "";
+    return s
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }, []);
+
   const loadSplitExercises = useCallback(async () => {
     try {
       const rows: SplitExerciseJoin[] = await db.getSplitExercises(split.id);
-      const list = rows.map((r) => ({ id: r.exercise.id, name: r.exercise.name }));
+      const list = rows.map((r) => ({ id: r.exercise.id, name: r.exercise.name, bodyPart: r.exercise.bodyPart ?? null }));
       setExercises(list);
     } catch (e) {
       console.error('SplitDetailScreen: failed to load split exercises', e);
@@ -200,9 +210,7 @@ const SplitDetailScreen = () => {
                             <Text color="$white" fontSize="$md" numberOfLines={1}>
                               {exercise.name}
                             </Text>
-                            <Text color="$gray400" fontSize="$xs">
-                              {/* Placeholder for sets/rep summary */}
-                            </Text>
+                            <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
                           </VStack>
                         </HStack>
                         {/* Trailing menu (no-op) */}
