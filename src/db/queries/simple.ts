@@ -160,6 +160,7 @@ export class SimpleDataAccess {
         const wsCols = await this.db.getAllAsync(`PRAGMA table_info(workout_sessions)`);
         const hasDurationSec = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'duration_sec');
         const hasDurationMin = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'duration_min');
+        const hasSessionName = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'session_name');
         if (hasDurationSec && !hasDurationMin) {
           await this.db.withTransactionAsync(async () => {
             await this.db.execAsync(`PRAGMA foreign_keys=OFF;`);
@@ -172,6 +173,7 @@ export class SimpleDataAccess {
                 state TEXT DEFAULT 'active',
                 started_at TEXT,
                 finished_at TEXT,
+                session_name TEXT,
                 note TEXT,
                 energy_kcal INTEGER,
                 total_volume_kg INTEGER,
@@ -183,12 +185,19 @@ export class SimpleDataAccess {
               );
             `);
             await this.db.execAsync(`
-              INSERT INTO workout_sessions (id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at)
-              SELECT id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_sec, created_at, updated_at FROM workout_sessions_old;
+              INSERT INTO workout_sessions (id, user_id, split_id, state, started_at, finished_at, session_name, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at)
+              SELECT id, user_id, split_id, state, started_at, finished_at, NULL as session_name, note, energy_kcal, total_volume_kg, total_sets, duration_sec, created_at, updated_at FROM workout_sessions_old;
             `);
             await this.db.execAsync(`DROP TABLE workout_sessions_old;`);
             await this.db.execAsync(`PRAGMA foreign_keys=ON;`);
           });
+        } else if (!hasSessionName) {
+          // Lightweight migration: add session_name column if missing
+          try {
+            await this.db.runAsync(`ALTER TABLE workout_sessions ADD COLUMN session_name TEXT`);
+          } catch (e) {
+            console.warn('SQLite migration: adding session_name may have failed or already exists:', e);
+          }
         }
       } catch {}
       await this.db.execAsync(`
@@ -199,6 +208,7 @@ export class SimpleDataAccess {
           state TEXT DEFAULT 'active',
           started_at TEXT,
           finished_at TEXT,
+          session_name TEXT,
           note TEXT,
           energy_kcal INTEGER,
           total_volume_kg INTEGER,
@@ -357,6 +367,7 @@ export class SimpleDataAccess {
             state TEXT DEFAULT 'active',
             started_at TEXT,
             finished_at TEXT,
+            session_name TEXT,
             note TEXT,
             energy_kcal INTEGER,
             total_volume_kg INTEGER,
@@ -419,7 +430,7 @@ export class SimpleDataAccess {
           'workout_sessions',
           [ { from: 'split_id', table: 'splits', onDelete: 'SET NULL' } ],
           createWorkoutSessions,
-          'id, user_id, split_id, state, started_at, finished_at, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at'
+          'id, user_id, split_id, state, started_at, finished_at, session_name, note, energy_kcal, total_volume_kg, total_sets, duration_min, created_at, updated_at'
         );
 
         await ensureTable(

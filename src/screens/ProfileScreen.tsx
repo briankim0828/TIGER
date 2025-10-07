@@ -73,6 +73,7 @@ const ProfileScreen: React.FC = () => {
     hoursTrained: 0
   });
   const [cachedAvatarUrl, setCachedAvatarUrl] = useState<string | null>(null);
+  const [avatarImageError, setAvatarImageError] = useState(false);
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const cancelRef = React.useRef(null);
   const history = useWorkoutHistory();
@@ -181,6 +182,11 @@ const ProfileScreen: React.FC = () => {
     return `https://ui-avatars.com/api/?name=${initials}&background=${color}&color=fff&size=256&bold=true`;
 
   }, [userProfile, cachedAvatarUrl, user]);
+
+  // Reset image error state whenever the avatar URL changes
+  useEffect(() => {
+    setAvatarImageError(false);
+  }, [avatarUrl]);
 
   const fetchUserStats = async () => {
     try {
@@ -382,13 +388,21 @@ const ProfileScreen: React.FC = () => {
 
 
   return (
-    <ScrollView bg="#1E2028" flex={1}>
+    <ScrollView bg="#1E2028" flex={1} pt={45}>
       <VStack space="xl" alignItems="center" pt={8} pb={4}>
         <Pressable onPress={pickImage}>
           <Avatar size="xl" bg="$primary500">
              {/* Add key to force re-render on URL change */}
-            <AvatarImage source={{ uri: avatarUrl }} alt="User Avatar" key={avatarUrl} />
-            <AvatarFallbackText>{fallbackName}</AvatarFallbackText>
+            <AvatarImage
+              source={{ uri: avatarUrl }}
+              alt="User Avatar"
+              key={avatarUrl}
+              // @ts-ignore gluestack AvatarImage should forward props to RN Image
+              onError={() => setAvatarImageError(true)}
+            />
+            {avatarImageError && (
+              <AvatarFallbackText>{fallbackName}</AvatarFallbackText>
+            )}
             {(uploading) && (
                 <Box
                     position="absolute"
@@ -409,7 +423,7 @@ const ProfileScreen: React.FC = () => {
       </VStack>
 
       {/* Workout Stats Section */}
-      <HStack bg="#2A2E38" px={4} py={4} justifyContent="space-around" alignItems="center" mx={4} borderRadius="lg">
+      <HStack bg="#1E2028" px={4} py={4} justifyContent="space-around" alignItems="center" mx={4} borderRadius="lg" pt ={10}>
         <VStack alignItems="center">
           <Text color="white" fontSize="$xl" fontWeight="bold">{stats.totalWorkouts}</Text>
           <Text color="gray.400" fontSize="$sm">Total Workouts</Text>
@@ -423,7 +437,7 @@ const ProfileScreen: React.FC = () => {
 
       {/* Workout Tabs Section - Example Grid Layout */}
       <Box px={4} mt={6}>
-        <Text color="white" fontSize="$lg" fontWeight="bold" mb={3}>My Activity</Text>
+        <Text color="white" fontSize="$lg" fontWeight="bold" mb={3}>My Workouts</Text>
         <HStack flexWrap="wrap" justifyContent="space-between">
           {workoutTabs.map((tab) => (
             <Pressable

@@ -787,6 +787,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   onCloseSheet={() => bottomSheetRef.current?.close()}
                   onSaveOverride={onSave}
                   elapsedSecAtFinish={elapsedSecAtFinish}
+                  onSessionNameChange={(name) => setSplitTitle(name)}
                 />
               )}
             </View>

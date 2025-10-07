@@ -101,6 +101,7 @@ export const workoutSessions = sqliteTable(
     state: text('state').notNull().default('active'),
     startedAt: text('started_at'),
     finishedAt: text('finished_at'),
+    sessionName: text('session_name'),
     note: text('note'),
     energyKcal: integer('energy_kcal'),
     totalVolumeKg: integer('total_volume_kg'),

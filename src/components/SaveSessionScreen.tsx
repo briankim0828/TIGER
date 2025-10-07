@@ -1,6 +1,7 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
 import { View, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Box, Text, HStack, VStack, Pressable, useToast, Toast, ToastTitle, ToastDescription, Divider, Textarea, TextareaInput } from '@gluestack-ui/themed';
+import { TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWorkout } from '../contexts/WorkoutContext';
 
@@ -17,6 +18,7 @@ interface SaveSessionScreenProps {
   onCloseSheet: () => void; // close the bottom sheet after action
   onSaveOverride?: () => Promise<void>; // optional custom save handler
   elapsedSecAtFinish?: number | null; // snapshot of elapsed seconds captured when user pressed Finish
+  onSessionNameChange?: (name: string) => void; // bubble up session name edits
 }
 
 const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
@@ -29,20 +31,32 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   onCloseSheet,
   onSaveOverride,
   elapsedSecAtFinish,
+  onSessionNameChange,
 }) => {
   const toast = useToast();
   const { endWorkout, deleteWorkout, setSessionNote } = useWorkout();
   const [note, setNote] = useState<string>('');
+  const [sessionName, setSessionName] = useState<string>(splitTitle || '');
+  const LB_PER_KG = 2.20462;
 
-  // Reset note when switching to a different session
+  // Reset when switching to a different session and sync name upward once
   useEffect(() => {
     setNote('');
+    const initial = splitTitle || '';
+    setSessionName(initial);
+    if (onSessionNameChange) onSessionNameChange(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);
     const setCount = sets.length;
-    const volumeLbs = sets.reduce((sum, s) => sum + (Number(s.weightKg || 0) * Number(s.reps || 0)), 0);
+    // UI uses lbs throughout: sum weight(lbs) * reps
+    const volumeLbs = sets.reduce((sum, s) => {
+      const lbs = Number(s.weightKg || 0); // Note: field name is weightKg, but UI treats it as lbs
+      const reps = Number(s.reps || 0);
+      return sum + (lbs * reps);
+    }, 0);
     return { setCount, volumeLbs };
   }, [currentExercises]);
 
@@ -80,29 +94,25 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
 
   const handleSave = useCallback(async () => {
     try {
-      // compute persisted stats at the moment of Save to avoid stale values
       const setCount = metrics.setCount;
-      // convert lbs -> kg (nearest integer)
-      const totalVolumeKg = Math.round(((metrics.volumeLbs ?? 0) / 2.20462));
-      // duration text computed in minutes; use the same source in minutes (rounded)
+      const totalVolumeKg = Math.round(((metrics.volumeLbs ?? 0) / LB_PER_KG));
       let durationMin: number | undefined = undefined;
       if (sessionStartedAtMs && !isBackdated) {
         const secs = Math.max(0, Math.floor((elapsedSecAtFinish ?? 0)) || Math.floor((Date.now() - sessionStartedAtMs) / 1000));
         durationMin = Math.max(0, Math.round(secs / 60));
       }
-      // If parent provided a custom handler, use it
+      const nameToSave = (sessionName ?? '').trim();
       if (typeof onSaveOverride === 'function') {
-        // Ensure note is persisted even when custom save flow is used
         if (note?.trim()) {
           await setSessionNote(sessionId, note.trim());
         }
-        // Optionally, if custom save flow also expects stats, we can pre-write them locally
         await endWorkout(sessionId, {
           status: 'completed',
           ...(typeof durationMin === 'number' ? { durationMin } : {}),
           totalVolumeKg,
           totalSets: setCount,
           note: note?.trim() ? note.trim() : undefined,
+          ...(nameToSave ? { sessionName: nameToSave } : {}),
         });
         await onSaveOverride();
       } else {
@@ -119,6 +129,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           totalVolumeKg,
           totalSets: setCount,
           ...(typeof durationMin === 'number' ? { durationMin } : {}),
+          ...(nameToSave ? { sessionName: nameToSave } : {}),
         });
       }
       onCloseSheet();
@@ -146,7 +157,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         ),
       });
     }
-  }, [endWorkout, isBackdated, sessionStartedAtMs, sessionId, onCloseSheet, toast, onSaveOverride, note, setSessionNote]);
+  }, [metrics.setCount, metrics.volumeLbs, LB_PER_KG, sessionStartedAtMs, isBackdated, elapsedSecAtFinish, sessionName, onSaveOverride, note, setSessionNote, endWorkout, sessionId, onCloseSheet, toast]);
 
   const handleDiscard = useCallback(async () => {
     try {
@@ -181,7 +192,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <Box flex={1} width="100%" backgroundColor="#2A2E38">
       {/* Top bar */}
-      <Box bg="#2A2E38" px="$3" py="$3" width="100%" borderBottomWidth={1} borderColor="#3A3F4B">
+      <Box bg="#2A2E38" px="$3" py="$3" width="100%" borderBottomWidth={0} borderColor="#3A3F4B">
         <HStack alignItems="center" justifyContent="space-between">
           <Pressable onPress={onBack} aria-label="Back">
             <HStack alignItems="center" space="xs">
@@ -202,10 +213,25 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
       <Box flex={1} px="$3" py="$4">
         <VStack space="xl">
 
-          {/* Split/Workout name */}
-          <Text color="$textLight50" fontSize="$xl" fontWeight="$semibold" numberOfLines={2}>
-            {splitTitle || 'Workout'}
-          </Text>
+          {/* Split/Workout name (editable) - no box/inset, keep original layout */}
+          <TextInput
+            value={sessionName}
+            onChangeText={(t) => { setSessionName(t); if (onSessionNameChange) onSessionNameChange(t); }}
+            placeholder={splitTitle || 'Workout'}
+            placeholderTextColor="#9CA3AF"
+            multiline
+            numberOfLines={2}
+            underlineColorAndroid="transparent"
+            accessibilityLabel="Session name"
+            style={{
+              color: '#ffffff',
+              fontSize: 20, // approximates $xl
+              fontWeight: '600', // semibold
+              padding: 0,
+              margin: 0,
+              backgroundColor: 'transparent',
+            }}
+          />
 
           {/* Metrics row */}
           <HStack justifyContent="space-between" space="sm">

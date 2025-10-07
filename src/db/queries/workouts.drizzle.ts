@@ -314,16 +314,17 @@ export class WorkoutsDataAccess {
 
   async endWorkout(
     sessionId: string,
-    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number }
+    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number; sessionName?: string }
   ): Promise<boolean> {
     const status = opts?.status ?? 'completed';
     const nowIso = new Date().toISOString();
     const finishedIso = opts?.finishedAtOverride ?? nowIso;
     const patch: any = { state: status, finishedAt: finishedIso, updatedAt: nowIso };
     if (typeof opts?.note === 'string') patch.note = opts.note;
-    if (typeof opts?.totalVolumeKg === 'number') patch.totalVolumeKg = opts.totalVolumeKg;
+  if (typeof opts?.totalVolumeKg === 'number') patch.totalVolumeKg = opts.totalVolumeKg;
     if (typeof opts?.totalSets === 'number') patch.totalSets = opts.totalSets;
     if (typeof opts?.durationMin === 'number') patch.durationMin = opts.durationMin;
+  if (typeof opts?.sessionName === 'string') patch.sessionName = opts.sessionName;
     await this.db.update(workoutSessions).set(patch).where(eq(workoutSessions.id, sessionId)).run();
   // Fetch user_id for RLS on update
   const owner = await this.db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).limit(1);
@@ -342,6 +343,7 @@ export class WorkoutsDataAccess {
       ...(typeof opts?.totalVolumeKg === 'number' ? { total_volume_kg: opts.totalVolumeKg } : {}),
       ...(typeof opts?.totalSets === 'number' ? { total_sets: opts.totalSets } : {}),
       ...(typeof opts?.durationMin === 'number' ? { duration_min: opts.durationMin } : {}),
+      ...(typeof opts?.sessionName === 'string' ? { session_name: opts.sessionName } : {}),
     },
   });
   this.bumpTables?.(['workout_sessions']);

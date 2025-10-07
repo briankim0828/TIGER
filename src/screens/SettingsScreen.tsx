@@ -73,7 +73,7 @@ const SettingsScreen: React.FC = () => {
           <Toast nativeID={id} action="success" variant="accent">
             <VStack space="xs">
               <ToastTitle>Workout Data Cleared</ToastTitle>
-              <ToastDescription>All local workout history removed</ToastDescription>
+              <ToastDescription>All workout history removed</ToastDescription>
             </VStack>
           </Toast>
         ),

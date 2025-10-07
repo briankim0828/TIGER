@@ -100,6 +100,7 @@ export const workoutSessions = pgTable('workout_sessions', {
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   splitId: uuid('split_id').references(() => splits.id),
+  sessionName: text('session_name'),
   note: text('note'),
   energyKcal: integer('energy_kcal'),
   totalVolumeKg: integer('total_volume_kg'), // simplified (precision numeric deferred)
