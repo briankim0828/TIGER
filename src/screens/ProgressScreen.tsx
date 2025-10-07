@@ -229,6 +229,7 @@ const ProgressScreen: React.FC = () => {
               workouts={calendarEntries}
               splits={splits}
               onDayPress={handleDayPress}
+              selectedDate={selectedDate}
               useParentInset
             />
 

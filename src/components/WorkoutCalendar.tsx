@@ -20,6 +20,7 @@ interface WorkoutCalendarProps {
   onDayPress?: (date: string) => void;
   splits: ProgramSplit[];
   useParentInset?: boolean; // when true, remove internal horizontal padding
+  selectedDate?: string; // controlled selected date from parent
 }
 
 interface MonthSection {
@@ -186,6 +187,7 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
   onDayPress,
   splits,
   useParentInset = false,
+  selectedDate: controlledSelectedDate,
 }) => {
   // Cache today's date info
   const todayInfo = useMemo(() => {
@@ -202,8 +204,8 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
     };
   }, []);
 
-  // Initialize selectedDate to today's date
-  const [selectedDate, setSelectedDate] = useState<string>(todayInfo.dateString);
+  // Controlled selected date: fall back to today if not provided
+  const selectedDate = controlledSelectedDate ?? todayInfo.dateString;
 
   // Create an ultra-fast O(1) lookup for workouts
   const workoutsMap = useMemo(() => {
@@ -246,25 +248,12 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
     (day: number, month: number, year: number) => {
       const dateStr = getDateString(day, month, year);
 
-      // Always set selectedDate to the clicked date
-      setSelectedDate(dateStr);
-
-      // Find and log the cell info for the selected date
-      const dayOfWeek = DAYS_OF_WEEK[getDayOfWeek(year, month, day)];
-      const workout = getWorkoutForDate(dateStr);
-      const split = getSplitForDate(dayOfWeek as WeekDay);
-      
-      // console.log('[DEBUG] Selected Cell Info:', {
-      //   date: dateStr,
-      //   dayOfWeek,
-      // });
-
-      // Call the onDayPress callback if provided
+      // Delegate selection handling to parent when provided
       if (onDayPress) {
         onDayPress(dateStr);
       }
     },
-    [onDayPress, getWorkoutForDate, getSplitForDate]
+    [onDayPress]
   );
 
   // Generate current month data

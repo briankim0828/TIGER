@@ -18,6 +18,7 @@ import { ElectricProvider } from "./src/electric";
 import WorkoutMain from "./src/screens/WorkoutMain";
 import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
+import SettingsScreen from "./src/screens/SettingsScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
@@ -216,6 +217,7 @@ type RootStackParamList = {
   ExerciseSelectionModalScreen: undefined;
   DebugDatabase: undefined;
   LiveWorkoutDebug: undefined;
+  Settings: undefined;
 };
 
 // -----------------------------
@@ -242,6 +244,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
           <Button
             variant="link"
             p="$0"
+            $pressed={{ opacity: 0.6 }}
             onPress={async () => {
               try {
                 const { data: { user } } = await supabase.auth.getUser();
@@ -290,10 +293,16 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
         {/* Right settings button */}
         <Box style={{ width: 44 }} alignItems="flex-end" h="$full" justifyContent="center">
           <Pressable
-            onPress={() => { /* no-op */ }}
+            onPress={() => {
+              // Navigate to Settings screen
+              try {
+                // use ref to navigate from header
+                (navigationRef as any)?.current?.navigate?.('Settings');
+              } catch {}
+            }}
             accessibilityRole="button"
             hitSlop={8}
-            style={{ justifyContent: 'center', alignItems: 'center', height: '100%', width: 44 }}
+            style={({ pressed }) => ({ justifyContent: 'center', alignItems: 'center', height: '100%', width: 44, opacity: pressed ? 0.6 : 1 })}
           >
             {/* @ts-ignore gluestack Icon typing doesn't include `name` */}
             <Icon as={AntDesign as any} name="setting" color="$white" />
@@ -392,6 +401,8 @@ const NavigationWrapper = () => {
           }}
         >
           <Stack.Screen name="Main" component={MainTabs} />
+          {/* Settings screen (standard push) */}
+          <Stack.Screen name="Settings" component={SettingsScreen} />
           <Stack.Group
             screenOptions={{ presentation: "modal", headerShown: false }}
           >
