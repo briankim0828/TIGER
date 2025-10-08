@@ -97,6 +97,54 @@ export class WorkoutHistoryDataAccess {
   }
 
   /**
+   * For a given exercise, find the latest completed session BEFORE a timestamp
+   * and return its sets (ordered) for that exercise. Used for "Previous" column.
+   */
+  async getPreviousExerciseSets(
+    userId: string,
+    exerciseId: string,
+    beforeISO: string
+  ): Promise<Array<{ weightKg: number | null; reps: number | null }>> {
+    // 1) Find the most recent completed session before the given timestamp
+    const sessions = await this.db
+      .select({ id: workoutSessions.id, startedAt: workoutSessions.startedAt })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.state, 'completed'),
+          // Compare started_at lexicographically (ISO format), safe in SQLite
+          (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`
+        )
+      )
+      .orderBy(desc(workoutSessions.startedAt))
+      .limit(1);
+
+    if (sessions.length === 0) return [];
+    const prevSessionId = sessions[0].id as string;
+
+    // 2) Find the workout_exercises row for this exercise in that session (first by order)
+    const exRows = await this.db
+      .select({ id: workoutExercises.id })
+      .from(workoutExercises)
+      .where(and(eq(workoutExercises.sessionId, prevSessionId), eq(workoutExercises.exerciseId, exerciseId)))
+      .orderBy(asc(workoutExercises.orderPos))
+      .limit(1);
+
+    if (exRows.length === 0) return [];
+    const sessionExerciseId = exRows[0].id as string;
+
+    // 3) Get sets ordered by set_order
+    const sets = await this.db
+      .select({ weightKg: workoutSets.weightKg, reps: workoutSets.reps, setOrder: workoutSets.setOrder })
+      .from(workoutSets)
+      .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+      .orderBy(asc(workoutSets.setOrder));
+
+    return sets.map((s: any) => ({ weightKg: (s.weightKg ?? null) as number | null, reps: (s.reps ?? null) as number | null }));
+  }
+
+  /**
    * Feed-style posts: one per completed workout session, newest first, with per-exercise set counts.
    */
   async getWorkoutPosts(userId: string, limit = 25): Promise<WorkoutPost[]> {

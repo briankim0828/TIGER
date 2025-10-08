@@ -14,7 +14,7 @@ export interface WorkoutContextType {
   ) => Promise<{ sessionId: string; resumed: boolean }>;
   endWorkout: (
     sessionId: string,
-    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number; sessionName?: string }
+    opts?: { status?: 'completed' | 'cancelled'; startedAtOverride?: string; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number; sessionName?: string }
   ) => Promise<boolean>;
   setSessionNote: (sessionId: string, note: string) => Promise<boolean>;
   addSet: (

@@ -11,6 +11,7 @@ import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
 import { supabase } from '../utils/supabaseClient';
 import SaveSessionScreen from './SaveSessionScreen';
+import { useWorkoutHistory } from '../db/queries';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -43,6 +44,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, []);
   
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const history = useWorkoutHistory();
   // Live snapshot for current session
   const { snapshot } = useLiveSessionSnapshot(sessionId);
   const currentExercises: RenderExercise[] = useMemo(() => {
@@ -86,6 +88,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [isCancelWorkoutPressed, setIsCancelWorkoutPressed] = useState(false);
   // Snapshot of elapsed seconds at Finish press
   const [elapsedSecAtFinish, setElapsedSecAtFinish] = useState<number | null>(null);
+  // Cache of previous session sets per exercise: exerciseId -> array of { weightKg, reps }
+  const [prevSetsByExercise, setPrevSetsByExercise] = useState<Record<string, Array<{ weightKg: number | null; reps: number | null }>>>({});
+  // Track which exerciseIds we've already pre-populated to avoid duplicate inserts
+  const prepopulatedExIdsRef = useRef<Set<string>>(new Set());
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // Only allow fully open or fully closed (no partial snap point)
@@ -128,6 +134,33 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     })();
     return () => { cancelled = true; };
   }, [isVisible, authUserId, getActiveSessionId, getSessionInfo, getSplitName]);
+
+  // When we have session start and exercises, fetch previous sets for each exercise
+  useEffect(() => {
+    (async () => {
+      if (!authUserId || !sessionStartedAtMs) return;
+      if (!snapshot || !snapshot.exercises) return;
+      const beforeISO = new Date(sessionStartedAtMs).toISOString();
+      const results: Record<string, Array<{ weightKg: number | null; reps: number | null }>> = {};
+      try {
+        await Promise.all(
+          snapshot.exercises.map(async (join) => {
+            const exId = join.exercise.id as string;
+            try {
+              const sets = await history.getPreviousExerciseSets(authUserId, exId, beforeISO);
+              results[exId] = sets;
+            } catch {
+              results[exId] = [];
+            }
+          })
+        );
+        setPrevSetsByExercise(results);
+      } catch {
+        // ignore
+      }
+    })();
+  }, [authUserId, sessionStartedAtMs, snapshot?.exercises, history]);
+
   
   // Open/close bottom sheet based on visibility
   useEffect(() => {
@@ -437,6 +470,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     registerSelectionCallback(requestId, async (items) => {
       try {
         for (const ex of items) {
+          // Add exercise row; data layer will seed empty sets inside the same transaction if history exists
           await addExerciseToSession(sessionId, ex.id);
         }
       } catch (e) {
@@ -520,7 +554,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     
     const setKey = `${exerciseId}-${set.id || setIndex}`;
     const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
-    const previousText = '—';
+    const prevSets = prevSetsByExercise[exerciseId] || [];
+    const prevForIndex = prevSets[setIndex];
+    const previousText = prevForIndex && prevForIndex.weightKg != null && prevForIndex.reps != null
+      ? `${prevForIndex.weightKg} lbs x ${prevForIndex.reps}`
+      : '—';
 
     const isCompleted = !!set.isCompleted;
     const hasWeight = (localValue.weightKg ?? '').toString().trim() !== '';
@@ -571,7 +609,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   {/* Set number */}
   <Text w="$10" textAlign="center" color="$textLight50" fontWeight="$bold">{setIndex + 1}</Text>
         {/* Previous column placeholder */}
-        <Text flex={1} textAlign="center" color="$textLight500">{previousText}</Text>
+  <Text flex={1} textAlign="center" color="$textLight200" size="sm">{previousText}</Text>
         {/* Weight (lbs) */}
         {isCompleted ? (
           <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
@@ -591,6 +629,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               value={localValue.weightKg}
               onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
               onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
+              selectTextOnFocus
+              onFocus={(e: any) => {
+                try { e?.target?.setSelection && e.target.setSelection(0, (localValue.weightKg ?? '').toString().length); } catch {}
+              }}
               keyboardType="numeric"
               color="$textLight50"
               placeholderTextColor="$textLight600"
@@ -617,6 +659,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               value={localValue.reps}
               onChangeText={(text) => handleInputChange(exerciseId, setKey, 'reps', text)}
               onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'reps')}
+              selectTextOnFocus
+              onFocus={(e: any) => {
+                try { e?.target?.setSelection && e.target.setSelection(0, (localValue.reps ?? '').toString().length); } catch {}
+              }}
               keyboardType="numeric"
               color="$textLight50"
               placeholderTextColor="$textLight600"

@@ -42,6 +42,91 @@ export class WorkoutsDataAccess {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     this.db = drizzle(this.sqlite as any);
   }
+
+  // Helper: fetch ordered previous set values (weightKg, reps) for an exercise before a timestamp
+  private async getPreviousSetsValues(
+    userId: string,
+    exerciseId: string,
+    beforeISO: string
+  ): Promise<Array<{ weightKg: number | null; reps: number | null }>> {
+    const prevSessions = await this.db
+      .select({ id: workoutSessions.id, startedAt: workoutSessions.startedAt })
+      .from(workoutSessions)
+      .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.state, 'completed'), (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`))
+      .orderBy(desc(workoutSessions.startedAt))
+      .limit(1);
+    if (prevSessions.length === 0) return [];
+    const prevSessionId = prevSessions[0]?.id as string;
+    const exRows = await this.db
+      .select({ id: workoutExercises.id })
+      .from(workoutExercises)
+      .where(and(eq(workoutExercises.sessionId, prevSessionId), eq(workoutExercises.exerciseId, exerciseId)))
+      .orderBy(asc(workoutExercises.orderPos))
+      .limit(1);
+    if (exRows.length === 0) return [];
+    const sessionExerciseId = exRows[0]?.id as string;
+    const rows = await this.db
+      .select({ weightKg: workoutSets.weightKg, reps: workoutSets.reps, order: workoutSets.setOrder })
+      .from(workoutSets)
+      .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+      .orderBy(asc(workoutSets.setOrder));
+    return rows.map((r) => ({ weightKg: (r.weightKg ?? null) as number | null, reps: (r.reps ?? null) as number | null }));
+  }
+
+  // Helper: insert sets with provided values within current transaction
+  private async insertSetsWithValuesTx(
+    sessionExerciseId: string,
+    values: Array<{ weightKg: number | null; reps: number | null }>,
+    createdAtIso: string
+  ) {
+    const count = values.length;
+    if (count <= 0) return;
+    // Determine current max set_order
+    const existing = await this.db
+      .select({ so: workoutSets.setOrder })
+      .from(workoutSets)
+      .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+      .orderBy(desc(workoutSets.setOrder))
+      .limit(1);
+    const base = existing.length > 0 ? ((existing[0]?.so as number) ?? 0) + 1 : 0;
+    for (let i = 0; i < count; i += 1) {
+      const id = newUuid();
+      await this.db
+        .insert(workoutSets)
+        .values({
+          id,
+          workoutExerciseId: sessionExerciseId,
+          setOrder: base + i,
+          isWarmup: 0,
+          weightKg: values[i]?.weightKg ?? null,
+          reps: values[i]?.reps ?? null,
+          durationSec: null,
+          distanceM: null,
+          restSec: null,
+          isCompleted: 0,
+        })
+        .run();
+      await enqueueOutbox(this.sqlite, {
+        table: 'workout_sets',
+        op: 'insert',
+        rowId: id,
+        payload: {
+          id,
+          workout_exercise_id: sessionExerciseId,
+          set_order: base + i,
+          is_warmup: 0,
+          weight_kg: values[i]?.weightKg ?? null,
+          reps: values[i]?.reps ?? null,
+          duration_sec: null,
+          distance_m: null,
+          rest_sec: null,
+          is_completed: 0,
+          created_at: createdAtIso,
+        },
+      });
+    }
+    this.bumpTables?.(['workout_sets']);
+  }
   async setSessionNote(sessionId: string, note: string): Promise<boolean> {
     const nowIso = new Date().toISOString();
     await this.db.update(workoutSessions).set({ note, updatedAt: nowIso }).where(eq(workoutSessions.id, sessionId)).run();
@@ -180,30 +265,35 @@ export class WorkoutsDataAccess {
       if (exerciseIds.length === 0) {
         console.debug('[WorkoutsDA] startWorkout: no exerciseIds provided/resolved; session will start empty');
       }
+      const inserted: Array<{ sessionExerciseId: string; exerciseId: string }> = [];
       for (let i = 0; i < exerciseIds.length; i += 1) {
         const wexId = newUuid();
+        const exId = exerciseIds[i]!;
         await this.db
           .insert(workoutExercises)
-          .values({
-            id: wexId,
-            sessionId,
-            exerciseId: exerciseIds[i]!,
-            orderPos: i,
-          })
+          .values({ id: wexId, sessionId, exerciseId: exId, orderPos: i })
           .run();
         await enqueueOutbox(this.sqlite, {
           table: 'workout_exercises',
           op: 'insert',
           rowId: wexId,
-          payload: {
-            id: wexId,
-            session_id: sessionId,
-            exercise_id: exerciseIds[i]!,
-            order_pos: i,
-          },
+          payload: { id: wexId, session_id: sessionId, exercise_id: exId, order_pos: i },
         });
+        inserted.push({ sessionExerciseId: wexId, exerciseId: exId });
       }
-  console.debug('[WorkoutsDA] startWorkout: inserted session exercises', { count: exerciseIds.length });
+      console.debug('[WorkoutsDA] startWorkout: inserted session exercises', { count: exerciseIds.length });
+
+      // Pre-populate sets for each exercise using previous session values
+      for (const row of inserted) {
+        try {
+          const prevValues = await this.getPreviousSetsValues(userId, row.exerciseId, startedIso);
+          if (prevValues.length > 0) {
+            await this.insertSetsWithValuesTx(row.sessionExerciseId, prevValues, nowIso);
+          }
+        } catch (e) {
+          // non-fatal
+        }
+      }
 
   // Notify live queries: a new session exists and exercises were inserted
   this.bumpTables?.(['workout_sessions', 'workout_exercises']);
@@ -314,12 +404,19 @@ export class WorkoutsDataAccess {
 
   async endWorkout(
     sessionId: string,
-    opts?: { status?: 'completed' | 'cancelled'; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number; sessionName?: string }
+    opts?: { status?: 'completed' | 'cancelled'; startedAtOverride?: string; finishedAtOverride?: string; note?: string; totalVolumeKg?: number; totalSets?: number; durationMin?: number; sessionName?: string }
   ): Promise<boolean> {
     const status = opts?.status ?? 'completed';
     const nowIso = new Date().toISOString();
-    const finishedIso = opts?.finishedAtOverride ?? nowIso;
-    const patch: any = { state: status, finishedAt: finishedIso, updatedAt: nowIso };
+    // Derive finishedAt from startedAt + durationMin if not explicitly provided
+    let finishedIso = opts?.finishedAtOverride ?? null;
+    if (!finishedIso && typeof opts?.startedAtOverride === 'string' && typeof opts?.durationMin === 'number') {
+      const base = new Date(opts.startedAtOverride);
+      finishedIso = new Date(base.getTime() + (opts.durationMin * 60000)).toISOString();
+    }
+    if (!finishedIso) finishedIso = nowIso;
+  const patch: any = { state: status, finishedAt: finishedIso, updatedAt: nowIso };
+  if (typeof opts?.startedAtOverride === 'string') patch.startedAt = opts.startedAtOverride;
     if (typeof opts?.note === 'string') patch.note = opts.note;
   if (typeof opts?.totalVolumeKg === 'number') patch.totalVolumeKg = opts.totalVolumeKg;
     if (typeof opts?.totalSets === 'number') patch.totalSets = opts.totalSets;
@@ -337,7 +434,8 @@ export class WorkoutsDataAccess {
       id: sessionId,
       ...(userId ? { user_id: userId } : {}),
       state: status,
-      finished_at: finishedIso,
+  finished_at: finishedIso,
+      ...(typeof opts?.startedAtOverride === 'string' ? { started_at: opts.startedAtOverride } : {}),
       updated_at: nowIso,
       ...(typeof opts?.note === 'string' ? { note: opts.note } : {}),
       ...(typeof opts?.totalVolumeKg === 'number' ? { total_volume_kg: opts.totalVolumeKg } : {}),
@@ -444,6 +542,26 @@ export class WorkoutsDataAccess {
         rowId: id,
         payload: { id, session_id: sessionId, exercise_id: exerciseId, order_pos: insertedOrder },
       });
+      // Pre-populate sets based on previous session values
+      try {
+        // Fetch session owner and startedAt
+        const sRows = await this.db
+          .select({ userId: workoutSessions.userId, startedAt: workoutSessions.startedAt })
+          .from(workoutSessions)
+          .where(eq(workoutSessions.id, sessionId))
+          .limit(1);
+        const ownerId = sRows[0]?.userId as string | undefined;
+        const startedAt = sRows[0]?.startedAt as string | undefined;
+        if (ownerId && startedAt) {
+          const nowIso = new Date().toISOString();
+          const prevValues = await this.getPreviousSetsValues(ownerId, exerciseId, startedAt);
+          if (prevValues.length > 0) {
+            await this.insertSetsWithValuesTx(id, prevValues, nowIso);
+          }
+        }
+      } catch {
+        // ignore
+      }
       this.bumpTables?.(['workout_exercises']);
       return { id };
     });

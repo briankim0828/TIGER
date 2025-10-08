@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback, useState, useEffect } from 'react';
-import { View, Keyboard, TouchableWithoutFeedback } from 'react-native';
+import { View, Keyboard, TouchableWithoutFeedback, Modal, Platform, ScrollView } from 'react-native';
 import { Box, Text, HStack, VStack, Pressable, useToast, Toast, ToastTitle, ToastDescription, Divider, Textarea, TextareaInput } from '@gluestack-ui/themed';
 import { TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,6 +39,11 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const { showWorkoutSummary } = useOverlay();
   const [note, setNote] = useState<string>('');
   const [sessionName, setSessionName] = useState<string>(splitTitle || '');
+  // Backdated editables
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [customStart, setCustomStart] = useState<Date | null>(null);
+  const [customDurationMin, setCustomDurationMin] = useState<number>(60);
   const LB_PER_KG = 2.20462;
 
   // Reset when switching to a different session and sync name upward once
@@ -47,6 +52,14 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     const initial = splitTitle || '';
     setSessionName(initial);
     if (onSessionNameChange) onSessionNameChange(initial);
+    // Initialize backdated defaults
+    if (sessionStartedAtMs) {
+      const base = new Date(sessionStartedAtMs);
+      setCustomStart(base);
+    } else {
+      setCustomStart(null);
+    }
+    setCustomDurationMin(60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
@@ -64,17 +77,17 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
 
   const durationText = useMemo(() => {
     if (!sessionStartedAtMs) return '—';
-    if (isBackdated) return '—';
+    if (isBackdated) return `${customDurationMin}min`;
     // Prefer the snapshot captured at the moment Finish was pressed
     const secs = Math.max(0, Math.floor((elapsedSecAtFinish ?? 0)) || Math.floor((Date.now() - sessionStartedAtMs) / 1000));
     const mins = Math.max(0, Math.round(secs / 60));
     return `${mins}min`;
-  }, [sessionStartedAtMs, elapsedSecAtFinish, isBackdated]);
+  }, [sessionStartedAtMs, elapsedSecAtFinish, isBackdated, customDurationMin]);
 
   const dateText = useMemo(() => {
     if (!sessionStartedAtMs) return '';
     try {
-      const d = new Date(sessionStartedAtMs);
+      const d = isBackdated && customStart ? customStart : new Date(sessionStartedAtMs);
       // Example: 1 Oct 2025, 10:47 PM
       return d.toLocaleString(undefined, {
         day: 'numeric',
@@ -86,7 +99,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     } catch {
       return '';
     }
-  }, [sessionStartedAtMs]);
+  }, [sessionStartedAtMs, isBackdated, customStart]);
 
   const volumeText = useMemo(() => {
     const n = metrics.volumeLbs || 0;
@@ -98,8 +111,18 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     try {
       const setCount = metrics.setCount;
       const totalVolumeKg = Math.round(((metrics.volumeLbs ?? 0) / LB_PER_KG));
+      // Compute overrides and duration consistently for both save paths
       let durationMin: number | undefined = undefined;
-      if (sessionStartedAtMs && !isBackdated) {
+      let startedAtOverride: string | undefined;
+      let finishedAtOverride: string | undefined;
+      if (isBackdated) {
+        // For backdated saves, rely on the user's selected time and duration.
+        const base = customStart ? new Date(customStart) : (sessionStartedAtMs ? new Date(sessionStartedAtMs) : new Date());
+        startedAtOverride = base.toISOString();
+        durationMin = customDurationMin;
+        const end = new Date(base.getTime() + (customDurationMin * 60000));
+        finishedAtOverride = end.toISOString();
+      } else if (sessionStartedAtMs) {
         const secs = Math.max(0, Math.floor((elapsedSecAtFinish ?? 0)) || Math.floor((Date.now() - sessionStartedAtMs) / 1000));
         durationMin = Math.max(0, Math.round(secs / 60));
       }
@@ -110,6 +133,8 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         }
         await endWorkout(sessionId, {
           status: 'completed',
+          ...(startedAtOverride ? { startedAtOverride } : {}),
+          ...(finishedAtOverride ? { finishedAtOverride } : {}),
           ...(typeof durationMin === 'number' ? { durationMin } : {}),
           totalVolumeKg,
           totalSets: setCount,
@@ -118,15 +143,10 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         });
         await onSaveOverride();
       } else {
-        let finishedAtOverride: string | undefined;
-        if (isBackdated && sessionStartedAtMs) {
-          const dt = new Date(sessionStartedAtMs);
-          const localNoon = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0);
-          finishedAtOverride = localNoon.toISOString();
-        }
         await endWorkout(sessionId, {
           status: 'completed',
-          finishedAtOverride,
+          ...(startedAtOverride ? { startedAtOverride } : {}),
+          ...(finishedAtOverride ? { finishedAtOverride } : {}),
           note: note?.trim() ? note.trim() : undefined,
           totalVolumeKg,
           totalSets: setCount,
@@ -142,8 +162,8 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           note: note?.trim() || null,
           durationMin: typeof durationMin === 'number' ? durationMin : null,
           totalVolumeKg,
-          startedAtMs: sessionStartedAtMs,
-          startedAtISO: sessionStartedAtMs ? new Date(sessionStartedAtMs).toISOString() : null,
+          startedAtMs: isBackdated ? (customStart ? customStart.getTime() : sessionStartedAtMs) : sessionStartedAtMs,
+          startedAtISO: (isBackdated ? (customStart ? customStart.toISOString() : (sessionStartedAtMs ? new Date(sessionStartedAtMs).toISOString() : null)) : (sessionStartedAtMs ? new Date(sessionStartedAtMs).toISOString() : null)) as any,
           exercises: summaryExercises,
         });
       } catch {}
@@ -252,7 +272,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           <HStack justifyContent="space-between" space="sm">
             <VStack>
               <Text color="$textLight400" fontSize="$sm">Duration</Text>
-              <Pressable>
+              <Pressable onPress={() => { if (isBackdated) setShowDurationPicker(true); }}>
                 <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{durationText}</Text>
               </Pressable>
             </VStack>
@@ -271,7 +291,9 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           {/* Date */}
           <VStack>
             <Text color="$textLight400" fontSize="$sm">When</Text>
-            <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{dateText}</Text>
+            <Pressable onPress={() => { if (isBackdated) setShowTimePicker(true); }}>
+              <Text color="#3B82F6" fontWeight="$semibold" fontSize="$md">{dateText}</Text>
+            </Pressable>
           </VStack>
 
           <Divider bg="#3A3F4B" />
@@ -314,6 +336,71 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           <Text color="$red400" fontWeight="$bold">Discard Workout</Text>
         </Pressable>
       </Box>
+      {/* Duration Picker Modal (10..360 minutes) */}
+      <Modal transparent visible={showDurationPicker} animationType="fade" onRequestClose={() => setShowDurationPicker(false)}>
+        <Box flex={1} bg="rgba(0,0,0,0.6)" justifyContent="center" alignItems="center" px="$4">
+          <Box bg="#12141A" borderRadius="$xl" p="$4" width="$5/6">
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$md" mb="$2">Select Duration</Text>
+            <ScrollView style={{ maxHeight: 300 }}>
+              <VStack>
+                {Array.from({ length: 36 }, (_, i) => (i + 1) * 10).map((m) => (
+                  <Pressable key={m} onPress={() => setCustomDurationMin(m)} py="$2" alignItems="center">
+                    <Text alignItems="center" color={customDurationMin === m ? '#3B82F6' : '$textLight50'} fontWeight={customDurationMin === m ? '$bold' : '$normal'}>
+                      {m} minutes
+                    </Text>
+                  </Pressable>
+                ))}
+              </VStack>
+            </ScrollView>
+            <HStack justifyContent="flex-end" mt="$3" space="md">
+              <Pressable onPress={() => setShowDurationPicker(false)}>
+                <Text color="#3B82F6" fontWeight="$bold">Done</Text>
+              </Pressable>
+            </HStack>
+          </Box>
+        </Box>
+      </Modal>
+
+      {/* Time Picker for backdated start time (custom list, one time per row) */}
+      <Modal transparent visible={showTimePicker} animationType="fade" onRequestClose={() => setShowTimePicker(false)}>
+        <Box flex={1} bg="rgba(0,0,0,0.6)" justifyContent="center" alignItems="center" px="$4">
+          <Box bg="#12141A" borderRadius="$xl" p="$4" width="$full">
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$md" mb="$2" textAlign="center">Select Time</Text>
+            <ScrollView style={{ maxHeight: 360 }} contentContainerStyle={{ alignItems: 'center' }}>
+              <VStack w="$full" alignItems="center">
+                {(() => {
+                  const times: Array<{ h: number; m: number; date: Date; label: string }> = [];
+                  const baseDate = customStart ? new Date(customStart) : (sessionStartedAtMs ? new Date(sessionStartedAtMs) : new Date());
+                  // Ensure we only change time, keep date fixed
+                  for (let h = 0; h < 24; h += 1) {
+                    for (const min of [0, 15, 30, 45]) {
+                      const d = new Date(baseDate);
+                      d.setHours(h, min, 0, 0);
+                      const label = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+                      times.push({ h, m: min, date: d, label });
+                    }
+                  }
+                  return times.map((t) => {
+                    const isSelected = !!customStart && customStart.getHours() === t.h && customStart.getMinutes() === t.m;
+                    return (
+                      <Pressable key={`${t.h}-${t.m}`} onPress={() => setCustomStart(t.date)} py="$2" w="$full" alignItems="center">
+                        <Text color={isSelected ? '#3B82F6' : '$textLight50'} fontWeight={isSelected ? '$bold' : '$normal'} fontSize="$md" textAlign="center">
+                          {t.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  });
+                })()}
+              </VStack>
+            </ScrollView>
+            <HStack justifyContent="center" mt="$3" space="md">
+              <Pressable onPress={() => setShowTimePicker(false)}>
+                <Text color="#3B82F6" fontWeight="$bold">Done</Text>
+              </Pressable>
+            </HStack>
+          </Box>
+        </Box>
+      </Modal>
       {/* Close outer container Box */}
       </Box>
     </TouchableWithoutFeedback>
