@@ -353,7 +353,13 @@ const WorkoutScreen = () => {
   // Dismiss keyboard on background press; do not persist edits here
   const handleBackgroundPress = useCallback(() => {
     Keyboard.dismiss();
-  }, []);
+    // If in weekday assignment mode (program), allow tapping anywhere (except split items) to exit
+    if (editMode === 'program') {
+      setSelectedDay(null);
+      setSelectedSplit(null);
+      setEditModeWithDebug('none');
+    }
+  }, [editMode, setEditModeWithDebug]);
 
   // Ensure focused TextInput is visible above keyboard during splits editing
   const handleFocusScroll = useCallback((inputY: number, inputHeight: number) => {

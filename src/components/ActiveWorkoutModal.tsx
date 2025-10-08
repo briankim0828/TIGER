@@ -88,8 +88,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [elapsedSecAtFinish, setElapsedSecAtFinish] = useState<number | null>(null);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
-  // const snapPoints = useMemo(() => ['12%', '100%'], []);
-  const snapPoints = useMemo(() => ['10%', '100%'], []);
+  // Only allow fully open or fully closed (no partial snap point)
+  const snapPoints = useMemo(() => ['100%'], []);
   
   // Initialize with active session when opened
   useEffect(() => {
@@ -659,7 +659,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         onChange={handleSheetChanges}
         enablePanDownToClose={true}
         enableContentPanningGesture={true}
-        index={isVisible ? 1 : -1}
+  index={isVisible ? 0 : -1}
         snapPoints={snapPoints}
   topInset={insets.top}
         keyboardBehavior="extend"
