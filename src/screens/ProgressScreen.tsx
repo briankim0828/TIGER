@@ -182,7 +182,7 @@ const ProgressScreen: React.FC = () => {
   }, [scheduledSplit, startWorkout, db]);
 
   const handleWorkoutPress = useCallback(() => {
-    // Always open SessionSummaryModal. When no scheduled split, it will show an empty session
+    // Always open SessionPreviewModal. When no scheduled split, it will show an empty session
     // with a weekday-based title (e.g., "Monday workout").
     showSessionSummary({
       selectedDate,
@@ -265,7 +265,7 @@ const ProgressScreen: React.FC = () => {
         </Box>
       </ScrollView>
       
-  {/* SessionSummaryModal is now rendered globally via GlobalOverlays */}
+  {/* SessionPreviewModal is now rendered globally via GlobalOverlays */}
     </GestureHandlerRootView>
   );
 };

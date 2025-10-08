@@ -44,7 +44,7 @@ const SplitDetailScreen = () => {
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
 
-  // Pretty-print helper for body part labels (matches SessionSummaryModal)
+  // Pretty-print helper for body part labels (matches SessionPreviewModal)
   const titleCase = useCallback((s: string | null | undefined) => {
     if (!s) return "";
     return s
@@ -230,7 +230,7 @@ const SplitDetailScreen = () => {
                   backgroundColor="transparent"
                   borderRadius="$lg"
                   p="$3"
-                  borderWidth="$1"
+                  borderWidth="$0"
                   borderColor="$gray700"
                 >
                   <VStack space="xl" alignItems="center">

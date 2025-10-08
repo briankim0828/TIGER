@@ -12,7 +12,7 @@ This document explains the small but important utility modules that support the 
 - `src/contexts/OverlayContext.tsx`
   - What: Simple overlay manager for temporary UI overlays (e.g., session summary modal trigger).
   - Why: Decouples overlay state from individual screens.
-  - Used by: `ProgressScreen`, `SessionSummaryModal` trigger.
+  - Used by: `ProgressScreen`, `SessionPreviewModal` trigger.
 
 ## Navigation helpers
 

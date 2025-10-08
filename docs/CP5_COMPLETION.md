@@ -14,7 +14,7 @@ Hard cut removal of legacy AsyncStorage & DataContext based data layer, consolid
 - Migrated primitive constants (WEEKDAYS, BODY_PARTS, WeekDay, BodyPart) into `src/types/base.ts`.
 - Simplified seeding logic in `simple.ts` with `MINI_SEED` list (no giant default constant retained).
 - Added new UI type `WorkoutCalendarEntry` to `src/types/ui.ts`.
-- Cleaned `SessionSummaryModal` & other components to rely only on new query layer.
+- Cleaned `SessionPreviewModal` & other components to rely only on new query layer.
 - Manually deleted legacy files: `src/contexts/DataContext.tsx`, `src/services/data.ts`, `src/supabase/supabaseWorkout.ts`, `src/supabase/supabaseSplits.ts`, `src/types/index.ts`.
  - Pruned unused Supabase workout stat/delete helpers from `supabaseProfile.ts` (now fully local via `useWorkoutHistory`).
 

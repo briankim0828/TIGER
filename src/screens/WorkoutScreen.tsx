@@ -6,9 +6,8 @@ import {
   Keyboard,
   Dimensions,
   TouchableWithoutFeedback,
-  FlatList,
-  ListRenderItemInfo,
 } from "react-native";
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { WeekDay } from "../types/base";
 import {
   ProgramSplit,
@@ -34,7 +33,7 @@ type EditMode = ProgramEditMode;
 
 const WorkoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
-  const scrollViewRef = useRef<FlatList<any>>(null);
+  const scrollViewRef = useRef<any>(null);
   const db = useDatabase();
   const [AUTH_USER_ID, setAUTH_USER_ID] = useState<string | null>(null);
 
@@ -379,7 +378,7 @@ const WorkoutScreen = () => {
       return; // Already visible
     }
     try {
-      scrollViewRef.current.scrollToOffset({ offset: scrollToY, animated: true });
+      scrollViewRef.current.scrollTo({ y: scrollToY, animated: true });
     } catch {}
   }, [editMode, keyboardHeight, scrollY]);
 
@@ -390,61 +389,58 @@ const WorkoutScreen = () => {
     >
       <TouchableWithoutFeedback onPress={handleBackgroundPress}>
         <Box flex={1}>
-          <FlatList
+          <GHScrollView
             ref={scrollViewRef}
-            data={[]}
-            keyExtractor={() => "header"}
-            ListHeaderComponent={
-              <VStack space="md" p="$2">
-                <MyProgram
-                  splits={splits}
-                  editMode={editMode}
-                  selectedDay={selectedDay}
-                  onDaySelect={handleDaySelect}
-                />
-                <MySplits
-                  splits={splits}
-                  editedSplits={editedSplits}
-                  editMode={editMode}
-                  selectedDay={selectedDay}
-                  editingSplitId={editingSplitId}
-                  onSplitPress={handleSplitPress}
-                  onNameEdit={handleSplitNameEdit}
-                  
-                  onColorSelect={handleColorSelect}
-                  onDeleteSplit={handleDeleteSplit}
-                  onAddSplit={handleAddSplit}
-                  onToggleEditMode={toggleSplitsEditMode}
-                  onFocusScroll={handleFocusScroll}
-                  onPersistOrder={handlePersistSplitOrder}
-                />
-                <Box>
-                  <Animated.View layout={Layout.duration(200)}>
-                    <MyExercises
-                      splits={
-                        splitsWithExercises ??
-                        splits.map((s) => ({ ...s, exercises: [] }))
-                      }
-                      editMode={editMode}
-                      expandedExercises={expandedExercises}
-                      onToggleExerciseExpansion={toggleExerciseExpansion}
-                    />
-                  </Animated.View>
-                </Box>
-              </VStack>
-            }
-            ListFooterComponent={<Box style={{ height: 20 }} />}
-            automaticallyAdjustKeyboardInsets={true}
-            keyboardShouldPersistTaps="handled"
+            style={{ flex: 1 }}
             contentContainerStyle={{ paddingBottom: 20 }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            nestedScrollEnabled
+            showsVerticalScrollIndicator
+            bounces
+            contentInsetAdjustmentBehavior="automatic"
+            automaticallyAdjustKeyboardInsets
             onScroll={(e) => setScrollY(e.nativeEvent.contentOffset.y)}
             scrollEventThrottle={16}
-            renderItem={
-              null as unknown as (
-                (info: ListRenderItemInfo<any>) => React.ReactElement
-              )
-            }
-          />
+          >
+            <VStack space="md" p="$2">
+              <MyProgram
+                splits={splits}
+                editMode={editMode}
+                selectedDay={selectedDay}
+                onDaySelect={handleDaySelect}
+              />
+              <MySplits
+                splits={splits}
+                editedSplits={editedSplits}
+                editMode={editMode}
+                selectedDay={selectedDay}
+                editingSplitId={editingSplitId}
+                onSplitPress={handleSplitPress}
+                onNameEdit={handleSplitNameEdit}
+                onColorSelect={handleColorSelect}
+                onDeleteSplit={handleDeleteSplit}
+                onAddSplit={handleAddSplit}
+                onToggleEditMode={toggleSplitsEditMode}
+                onFocusScroll={handleFocusScroll}
+                onPersistOrder={handlePersistSplitOrder}
+              />
+              <Box>
+                <Animated.View layout={Layout.duration(200)}>
+                  <MyExercises
+                    splits={
+                      splitsWithExercises ??
+                      splits.map((s) => ({ ...s, exercises: [] }))
+                    }
+                    editMode={editMode}
+                    expandedExercises={expandedExercises}
+                    onToggleExerciseExpansion={toggleExerciseExpansion}
+                  />
+                </Animated.View>
+              </Box>
+            </VStack>
+            <Box style={{ height: 20 }} />
+          </GHScrollView>
         </Box>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>

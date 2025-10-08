@@ -65,8 +65,8 @@ const SplitItem = React.memo(
     onDelete: () => void;
     onFocusScroll: (y: number, height: number) => void;
   }) => {
-    const borderColor = useSharedValue("#3A3E48");
-    const pressBorderColor = useSharedValue("#3A3E48");
+  const borderColor = useSharedValue("transparent");
+  const pressBorderColor = useSharedValue("transparent");
     const arrowOpacity = useSharedValue(1);
     const arrowRotation = useSharedValue(0);
     const menuOpacity = useSharedValue(0);
@@ -87,7 +87,7 @@ const SplitItem = React.memo(
       const isAssignedToSelected = hasSelectedDay && split.days.includes(selectedDay as WeekDay);
       const target = inProgram && hasSelectedDay
         ? (isAssignedToSelected ? "#EF4444" : "#6B8EF2")
-        : "#3A3E48";
+        : "transparent";
       borderColor.value = withTiming(target, { duration: 200 });
     }, [selectedDay, isEditingThisSplit, editMode, split.days]);
 
@@ -141,12 +141,21 @@ const SplitItem = React.memo(
       prevShowMenuRef.current = showMenu;
     }, [editMode, isEditingThisSplit, dragDisabled]);
 
-    const borderAnimatedStyle = useAnimatedStyle(() => ({
-      borderColor: isEditingThisSplit ? "white" : borderColor.value,
-  borderWidth: isEditingThisSplit ? 1 : (selectedDay !== null && !isEditingThisSplit && editMode === 'program' ? 3 : 0),
-    }));
+    const borderAnimatedStyle = useAnimatedStyle(() => {
+      const color = isEditingThisSplit ? 'white' : borderColor.value;
+      const width = isEditingThisSplit
+        ? 1
+        : (selectedDay !== null && !isEditingThisSplit && editMode === 'program' ? 3 : 0);
+      return {
+        borderColor: color,
+        borderWidth: color === 'transparent' ? 0 : width,
+      };
+    });
 
-    const pressBorderAnimatedStyle = useAnimatedStyle(() => ({ borderColor: pressBorderColor.value }));
+    const pressBorderAnimatedStyle = useAnimatedStyle(() => ({
+      borderColor: pressBorderColor.value,
+      borderWidth: pressBorderColor.value === 'transparent' ? 0 : 1,
+    }));
     const arrowAnimatedStyle = useAnimatedStyle(() => ({ opacity: arrowOpacity.value, transform: [{ rotateZ: `${arrowRotation.value}deg` }] }));
     const menuAnimatedStyle = useAnimatedStyle(() => ({ width: menuWidth.value, opacity: menuOpacity.value, transform: [{ translateX: menuTranslateX.value }] }));
     const contentShiftAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: contentShiftX.value }] }));
@@ -160,7 +169,7 @@ const SplitItem = React.memo(
 
     const handlePressOut = () => {
       if (!isEditingThisSplit && editMode !== 'program') {
-        pressBorderColor.value = withTiming("#3A3E48", { duration: 150 });
+        pressBorderColor.value = withTiming("transparent", { duration: 150 });
       }
     };
 
@@ -189,7 +198,8 @@ const SplitItem = React.memo(
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         style={{
-          backgroundColor: "#2A2E38",
+          // backgroundColor: "#2A2E38", 
+          backgroundColor: "#12141A", 
           padding: 12,
           paddingLeft: 24,
           borderRadius: 12,
@@ -212,7 +222,7 @@ const SplitItem = React.memo(
           style={[
             {
               position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
-              borderRadius: 12, borderWidth: 1, zIndex: 3,
+              borderRadius: 12, zIndex: 3,
             },
             pressBorderAnimatedStyle,
           ]}

@@ -3,6 +3,7 @@ import { View, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Box, Text, HStack, VStack, Pressable, useToast, Toast, ToastTitle, ToastDescription, Divider, Textarea, TextareaInput } from '@gluestack-ui/themed';
 import { TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useOverlay } from '../contexts/OverlayContext';
 import { useWorkout } from '../contexts/WorkoutContext';
 
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
@@ -35,6 +36,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
 }) => {
   const toast = useToast();
   const { endWorkout, deleteWorkout, setSessionNote } = useWorkout();
+  const { showWorkoutSummary } = useOverlay();
   const [note, setNote] = useState<string>('');
   const [sessionName, setSessionName] = useState<string>(splitTitle || '');
   const LB_PER_KG = 2.20462;
@@ -132,6 +134,19 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           ...(nameToSave ? { sessionName: nameToSave } : {}),
         });
       }
+      // Show workout summary overlay before closing
+      try {
+        const summaryExercises = currentExercises.map(e => ({ name: e.name, setCount: e.sets?.length ?? 0 }));
+        showWorkoutSummary({
+          sessionName: nameToSave || splitTitle || 'Workout',
+          note: note?.trim() || null,
+          durationMin: typeof durationMin === 'number' ? durationMin : null,
+          totalVolumeKg,
+          startedAtMs: sessionStartedAtMs,
+          startedAtISO: sessionStartedAtMs ? new Date(sessionStartedAtMs).toISOString() : null,
+          exercises: summaryExercises,
+        });
+      } catch {}
       onCloseSheet();
       toast.show({
         placement: 'top',

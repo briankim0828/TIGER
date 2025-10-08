@@ -88,7 +88,8 @@ const ExerciseItem = React.memo(
       <Pressable
         onPress={() => onToggle(exercise.id)}
         style={{
-          backgroundColor: "#1E2028",
+          // backgroundColor: "#1E2028",
+          backgroundColor: "transparent",
           padding: 6,
           borderRadius: 6,
           position: "relative",
@@ -186,7 +187,7 @@ const BodyPartSection = React.memo(
   }) => {
     return (
       // <Box mt={isFirstItem ? 0 : 1}> {/* Adjust margin */} 
-      <Box style={{ marginTop: -20 }}>
+      <Box style={{ marginTop: -20, }}>
         <Text color="#A1A1AA" style={{ fontSize: 14, marginBottom: 8 }}>
           {bodyPart}
         </Text>

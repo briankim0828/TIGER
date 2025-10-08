@@ -22,7 +22,8 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
-import SessionSummaryModal from "./src/components/SessionSummaryModal";
+import SessionPreviewModal from "./src/components/SessionPreviewModal";
+import WorkoutSummaryModal from "./src/components/WorkoutSummaryModal";
 import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
@@ -488,14 +489,29 @@ export default function App() {
 
 // Render overlays at root using OverlayContext state
 const GlobalOverlays = () => {
-  const { sessionSummary, hideSessionSummary } = useOverlay();
-  if (!sessionSummary) return null;
+  const { sessionSummary, hideSessionSummary, workoutSummary, hideWorkoutSummary } = useOverlay();
   return (
-    <SessionSummaryModal
-      selectedDate={sessionSummary.selectedDate}
-      scheduledSplit={sessionSummary.scheduledSplit}
-      onClose={hideSessionSummary}
-      onStartWorkout={sessionSummary.onStartWorkout}
-    />
+    <>
+      {!!sessionSummary && (
+        <SessionPreviewModal
+          selectedDate={sessionSummary.selectedDate}
+          scheduledSplit={sessionSummary.scheduledSplit}
+          onClose={hideSessionSummary}
+          onStartWorkout={sessionSummary.onStartWorkout}
+        />
+      )}
+      {!!workoutSummary && (
+        <WorkoutSummaryModal
+          sessionName={workoutSummary.sessionName}
+          note={workoutSummary.note}
+          durationMin={workoutSummary.durationMin}
+          totalVolumeKg={workoutSummary.totalVolumeKg}
+          startedAtMs={workoutSummary.startedAtMs}
+          startedAtISO={workoutSummary.startedAtISO}
+          exercises={workoutSummary.exercises}
+          onClose={hideWorkoutSummary}
+        />
+      )}
+    </>
   );
 };

@@ -7,7 +7,6 @@ import {
   Avatar,
   AvatarFallbackText,
   AvatarImage,
-  ScrollView,
   Pressable,
   Spinner,
   Button,
@@ -25,6 +24,7 @@ import {
   ToastTitle,
   ToastDescription
 } from '@gluestack-ui/themed';
+import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { MaterialIcons } from '@expo/vector-icons';
 import { User } from '@supabase/supabase-js';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -415,7 +415,17 @@ const ProfileScreen: React.FC = () => {
 
 
   return (
-    <ScrollView bg="#1E2028" flex={1} pt={45}>
+    <Box flex={1} bg="#1E2028" pt={5}>
+      <GHScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 24 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        nestedScrollEnabled
+        showsVerticalScrollIndicator
+        bounces
+        contentInsetAdjustmentBehavior="automatic"
+      >
       <VStack space="xl" alignItems="center" pt={8} pb={4}>
         <Pressable onPress={pickImage}>
           <Avatar size="xl" bg="$primary500">
@@ -469,9 +479,19 @@ const ProfileScreen: React.FC = () => {
 
         {/* Workout Posts Feed */}
         <VStack space="lg" mt={8}>
-          {posts.map((p) => {
+          {posts.length === 0 ? (
+            <Box bg="#12141A" borderRadius="$lg" p="$6" alignItems="center">
+              {/* @ts-ignore */}
+              <Icon as={MaterialIcons as any} name="event-busy" color="$gray400" size="xl" />
+              <Text color="$gray400" mt="$3" fontSize="$md" fontWeight="$semibold">No workouts logged yet</Text>
+              <Text color="$gray500" fontSize="$sm" mt="$1" textAlign="center">
+                Your logged workouts will appear here.
+              </Text>
+            </Box>
+          ) : (
+          posts.map((p) => {
             const dateLabel = (() => {
-              const d = p.finishedAt ?? p.startedAt;
+              const d = p.startedAt ?? p.finishedAt;
               try {
                 return d ? new Date(d).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: '2-digit', year: 'numeric' }) : '';
               } catch { return ''; }
@@ -512,13 +532,13 @@ const ProfileScreen: React.FC = () => {
                   </VStack>
                 </HStack>
 
-                {/* Exercise list */}
-                <VStack space="md">
+                {/* Exercise list (compact) */}
+                <VStack space="sm">
                   {p.exercises.map((ex) => (
                     <HStack key={ex.sessionExerciseId} alignItems="center" justifyContent="space-between">
-                      <HStack space="md" alignItems="center" flex={1}>
-                        <Box width={48} height={48} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
-                          <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                      <HStack space="sm" alignItems="center" flex={1}>
+                        <Box width={32} height={32} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
+                          <Text color="$white" fontWeight="$bold" fontSize="$sm">
                             {ex.name.charAt(0).toUpperCase()}
                           </Text>
                         </Box>
@@ -532,12 +552,14 @@ const ProfileScreen: React.FC = () => {
                 </VStack>
               </Box>
             );
-          })}
+          })
+          )}
         </VStack>
       </Box>
 
   {/* Settings moved to SettingsScreen */}
-    </ScrollView>
+      </GHScrollView>
+    </Box>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription, Icon} from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
@@ -585,6 +585,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ) : (
           <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
+              // @ts-ignore - render RN input via bottom sheet aware text input
+              as={BottomSheetTextInput as any}
               placeholder="lbs"
               value={localValue.weightKg}
               onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
@@ -609,6 +611,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ) : (
           <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
+              // @ts-ignore - render RN input via bottom sheet aware text input
+              as={BottomSheetTextInput as any}
               placeholder="Reps"
               value={localValue.reps}
               onChangeText={(text) => handleInputChange(exerciseId, setKey, 'reps', text)}
@@ -654,10 +658,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ref={bottomSheetRef}
         onChange={handleSheetChanges}
         enablePanDownToClose={true}
+        enableContentPanningGesture={true}
         index={isVisible ? 1 : -1}
         snapPoints={snapPoints}
   topInset={insets.top}
-        // Match SessionSummaryModal visuals: dark background + white notch
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+  // Match SessionPreviewModal visuals: dark background + white notch
         handleIndicatorStyle={{ backgroundColor: 'white', width: 40, height: 4 }}
         backgroundStyle={{ backgroundColor: '#2A2E38' }}
       >
@@ -667,7 +674,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {/* Page 0: Active session */}
             <View style={{ width: screenW }}>
           <Box flex={1} width="100%" display="flex" >
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              keyboardDismissMode="on-drag"
+            >
               <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
                 
                 {/* Exercise list with sets */}
