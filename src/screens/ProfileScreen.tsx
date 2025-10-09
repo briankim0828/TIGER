@@ -466,7 +466,7 @@ const ProfileScreen: React.FC = () => {
           <Text color="gray.400" fontSize="$sm">Total Workouts</Text>
         </VStack>
         <VStack alignItems="center">
-          <Text color="white" fontSize="$xl" fontWeight="bold">{stats.hoursTrained}</Text>
+          <Text color="white" fontSize="$xl" fontWeight="bold">{stats.hoursTrained.toFixed(1)}</Text>
           <Text color="gray.400" fontSize="$sm">Hours Trained</Text>
         </VStack>
         {/* Add more stats if needed */}

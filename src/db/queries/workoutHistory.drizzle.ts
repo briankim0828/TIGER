@@ -74,25 +74,22 @@ export class WorkoutHistoryDataAccess {
 
   /** Basic aggregate stats for profile screen */
   async getWorkoutStats(userId: string): Promise<WorkoutStats> {
-    // Duration = finishedAt - startedAt (only completed sessions with both timestamps)
-    const rows = await this.db
-      .select({ startedAt: workoutSessions.startedAt, finishedAt: workoutSessions.finishedAt, state: workoutSessions.state })
+    // Requirement: hoursTrained should sum duration_min across all sessions for the user
+    // and convert to hours with one decimal. Keep totalWorkouts as count of completed sessions.
+    // Use simple SQL aggregates for efficiency.
+    const completedRows = await this.db
+      .select({ c: sql<number>`COUNT(*)`.as('c') })
       .from(workoutSessions)
-      .where(and(eq(workoutSessions.userId, userId)));
+      .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.state, 'completed')));
 
-    let totalCompleted = 0;
-    let totalDurationMs = 0;
-    for (const r of rows) {
-      if (r.state === 'completed' && r.startedAt && r.finishedAt) {
-        totalCompleted += 1;
-        const start = Date.parse(r.startedAt);
-        const end = Date.parse(r.finishedAt);
-        if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
-          totalDurationMs += (end - start);
-        }
-      }
-    }
-    const hours = totalDurationMs / 1000 / 3600;
+    const durationRows = await this.db
+      .select({ s: sql<number>`SUM(${workoutSessions.durationMin})`.as('s') })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.userId, userId));
+
+    const totalCompleted = (completedRows[0]?.c as number) ?? 0;
+    const totalDurationMin = (durationRows[0]?.s as number) ?? 0;
+    const hours = (totalDurationMin / 60);
     return { totalWorkouts: totalCompleted, hoursTrained: Math.round(hours * 10) / 10 };
   }
 
