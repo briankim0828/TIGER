@@ -8,13 +8,15 @@ import React, {
 import { Box, Text, Pressable, VStack } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import WorkoutHeatmap from "../components/WorkoutHeatmap";
+import ProgressGraph from "../components/ProgressGraph";
 import { useFocusEffect } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
 import { supabase } from "../utils/supabaseClient";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ScrollView, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { ScrollView } from 'react-native-gesture-handler';
 import { useOverlay } from "../contexts/OverlayContext";
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
 
@@ -54,6 +56,7 @@ const ProgressScreen: React.FC = () => {
   }, [currentYear, currentMonth, today]));
   const [workouts, setWorkouts] = useState<WorkoutSession[]>([]);
   const [calendarEntries, setCalendarEntries] = useState<WorkoutCalendarEntry[]>([]);
+  const [graphSessions, setGraphSessions] = useState<Array<{ startedAt: string | null; totalVolumeKg: number | null }>>([]);
   const { showSessionSummary } = useOverlay();
   // Pressed state for main action button
   const [isBeginPressed, setIsBeginPressed] = useState(false);
@@ -123,9 +126,13 @@ const ProgressScreen: React.FC = () => {
               exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
             }));
             setSplits(calendarSplits);
-            const entries = await history.getWorkoutCalendarEntries(authUserId);
+            const [entries, posts] = await Promise.all([
+              history.getWorkoutCalendarEntries(authUserId),
+              history.getWorkoutPosts(authUserId, 90),
+            ]);
             setCalendarEntries(entries);
             setWorkouts(entries.map((e: WorkoutCalendarEntry) => ({ date: e.date, completed: e.completed })));
+            setGraphSessions(posts.map(p => ({ startedAt: p.startedAt, totalVolumeKg: p.totalVolumeKg })));
           }
         } catch (e) {
           console.warn('[ProgressScreen] Failed to build calendar splits from DB', e);
@@ -219,8 +226,15 @@ const ProgressScreen: React.FC = () => {
               My Progress
             </Text>
 
-            {/* Workout Heatmap */}
-            <WorkoutHeatmap entries={calendarEntries} splits={splits} />
+            {/* Workout Heatmap (allow scrolling when dragging on it) */}
+            <Box pointerEvents="none">
+              <WorkoutHeatmap entries={calendarEntries} splits={splits} />
+            </Box>
+
+            {/* Training Volume Graph (allow scrolling when dragging on it) */}
+            <Box pointerEvents="none">
+              <ProgressGraph title="Training Volume" sessions={graphSessions} />
+            </Box>
 
             <WorkoutCalendar
               key={`calendar-${calendarKey}`}
