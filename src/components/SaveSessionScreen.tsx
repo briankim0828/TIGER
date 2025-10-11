@@ -340,7 +340,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
       <Modal transparent visible={showDurationPicker} animationType="fade" onRequestClose={() => setShowDurationPicker(false)}>
         <Box flex={1} bg="rgba(0,0,0,0.6)" justifyContent="center" alignItems="center" px="$4">
           <Box bg="#12141A" borderRadius="$xl" p="$4" width="$5/6">
-            <Text color="$textLight50" fontWeight="$bold" fontSize="$md" mb="$2">Select Duration</Text>
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$md" mb="$2" textAlign="center">Select Duration</Text>
             <ScrollView style={{ maxHeight: 300 }}>
               <VStack>
                 {Array.from({ length: 36 }, (_, i) => (i + 1) * 10).map((m) => (
@@ -352,9 +352,9 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
                 ))}
               </VStack>
             </ScrollView>
-            <HStack justifyContent="flex-end" mt="$3" space="md">
-              <Pressable onPress={() => setShowDurationPicker(false)}>
-                <Text color="#3B82F6" fontWeight="$bold">Done</Text>
+            <HStack justifyContent="center" mt="$3" space="md">
+              <Pressable onPress={() => setShowDurationPicker(false)} alignContent="center">
+                <Text color="#3B82F6" fontWeight="$bold" textAlign="center">Done</Text>
               </Pressable>
             </HStack>
           </Box>

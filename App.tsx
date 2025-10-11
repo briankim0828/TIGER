@@ -19,6 +19,7 @@ import WorkoutMain from "./src/screens/WorkoutMain";
 import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import CalendarScreen from "./src/screens/CalendarScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
@@ -219,6 +220,7 @@ type RootStackParamList = {
   DebugDatabase: undefined;
   LiveWorkoutDebug: undefined;
   Settings: undefined;
+  Calendar: undefined;
 };
 
 // -----------------------------
@@ -404,6 +406,8 @@ const NavigationWrapper = () => {
           <Stack.Screen name="Main" component={MainTabs} />
           {/* Settings screen (standard push) */}
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          {/* Calendar screen for logging previous workouts */}
+          <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Group
             screenOptions={{ presentation: "modal", headerShown: false }}
           >

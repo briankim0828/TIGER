@@ -6,7 +6,6 @@ import React, {
   useMemo,
 } from "react";
 import { Box, Text, Pressable, VStack } from "@gluestack-ui/themed";
-import WorkoutCalendar from "../components/WorkoutCalendar";
 import WorkoutHeatmap from "../components/WorkoutHeatmap";
 import ProgressGraph from "../components/ProgressGraph";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -167,27 +166,7 @@ const ProgressScreen: React.FC = () => {
     }, [db, history, authUserId])
   );
 
-  const handleDayPress = useCallback(
-    (date: string) => {
-      if (date === selectedDate) {
-        return;
-      }
-      
-  const dayOfWeek = getDayOfWeek(date) as WeekDay | null;
-  const currentSplit = dayOfWeek ? splits.find(split => split.days.includes(dayOfWeek)) : null;
-  const found = calendarEntries.find(w => w.date === date);
-      
-      console.log('[DEBUG] Selected Date Info:', {
-        date,
-        split: currentSplit?.name,
-    hasSession: !!found,
-    completed: found?.completed ?? false
-      });
-      
-      setSelectedDate(date);
-    },
-  [selectedDate, calendarEntries, getDayOfWeek, splits]
-  );
+  // Calendar selection is no longer handled here; moved to CalendarScreen
 
   const handleStartWorkout = useCallback(async () => {
     if (!scheduledSplit) {
@@ -248,9 +227,15 @@ const ProgressScreen: React.FC = () => {
             </Text>
             </Box>
 
-            {/* Workout Heatmap (allow scrolling when dragging on it) */}
-            <Box pointerEvents="none">
-              <WorkoutHeatmap entries={calendarEntries} splits={splits} />
+            {/* Workout Heatmap navigates to Calendar */}
+            <Box>
+              <WorkoutHeatmap
+                entries={calendarEntries}
+                splits={splits}
+                onPress={() => {
+                  try { (navigation as any)?.navigate?.('Calendar'); } catch {}
+                }}
+              />
             </Box>
 
             {/* Training Volume Graph (interactive). Disable nav gestures only while interacting with the chart. */}
@@ -274,9 +259,9 @@ const ProgressScreen: React.FC = () => {
 
             
 
-            <Box >
+            <Box>
               <Pressable
-                bg="$primary500"
+                bg="rgba(80, 120, 233, 1)"
                 py="$4"
                 px="$6"
                 borderRadius="$xl"
@@ -294,25 +279,10 @@ const ProgressScreen: React.FC = () => {
                   fontWeight="$bold"
                   textAlign="center"
                 >
-                  {isFutureDate
-                    ? "Not Yet..."
-                    : isToday
-                      ? "Begin Today's Workout"
-                      : `Log workout from ${new Date(selectedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                  {"Begin Today's Workout"}
                 </Text>
               </Pressable>
             </Box>
-
-            <WorkoutCalendar
-              key={`calendar-${calendarKey}`}
-              month={currentMonth}
-              year={currentYear}
-              workouts={calendarEntries}
-              splits={splits}
-              onDayPress={handleDayPress}
-              selectedDate={selectedDate}
-              useParentInset
-            />
           </VStack>
         </Box>
       </ScrollView>

@@ -45,8 +45,8 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   const pendingXRef = React.useRef(0);
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const RIGHT_INSET = 0; // no external inset; keep spacing aligned with chart width
-  const initialPad = 15;
-  const endPad = 15;
+  const initialPad = 16;
+  const endPad = 14;
   const Y_AXIS_LABEL_WIDTH = 28;
   const Y_AXIS_THICKNESS = 1;
   // Map sessions to chart points: sort by date asc, filter invalid

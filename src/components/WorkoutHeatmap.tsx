@@ -1,12 +1,13 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { Box, HStack, VStack, Text } from '@gluestack-ui/themed';
-import { Pressable } from 'react-native';
+import { Box, HStack, VStack, Text, Pressable, Icon } from '@gluestack-ui/themed';
+import { AntDesign } from '@expo/vector-icons';
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
 import { WEEKDAYS, WeekDay } from '../types/base';
 
 interface WorkoutHeatmapProps {
   entries: WorkoutCalendarEntry[];
   splits: ProgramSplit[];
+  onPress?: () => void;
 }
 
 const BASE_CELL_SIZE = 10; // px (used as fallback before layout)
@@ -16,7 +17,7 @@ const ROWS: WeekDay[] = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
 const GREEN = 'rgba(10, 247, 73,'; // teal-500-ish base with varying alpha
 
-const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
+const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits, onPress }) => {
   const today = new Date();
   const todayMid = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()), [today]);
   const todayYmd = useMemo(() => formatYMD(todayMid), [todayMid]);
@@ -75,11 +76,25 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
   }, [todayDow, splits]);
 
   return (
-    <Box bg="#12141A" py="$3" px="$3" borderRadius="$lg" borderWidth={0} borderColor="#2A2E38">
-      <VStack mb="$3">
-        <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
-        <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>
-      </VStack>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      $pressed={{ opacity: 0.7 }}
+      bg="#12141A"
+      py="$3"
+      px="$3"
+      borderRadius="$lg"
+      borderWidth={0}
+      borderColor="#2A2E38"
+    >
+      <HStack mb="$3" alignItems="center" justifyContent="space-between">
+        <VStack>
+          <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
+          <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>
+        </VStack>
+        {/* @ts-ignore */}
+        <Icon as={AntDesign as any} name="right" color="$white" />
+      </HStack>
       <Box onLayout={handleLayout} style={{ width: '100%' }}>
         <HStack style={{ width: '100%', justifyContent: 'space-between', overflow: 'hidden' }}>
           {/* Grid: 7 rows (Mon..Sun), 30 columns (weeks), left to right oldest->latest */}
@@ -110,7 +125,7 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
           ))}
         </HStack>
       </Box>
-    </Box>
+    </Pressable>
   );
 };
 

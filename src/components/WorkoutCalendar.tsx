@@ -20,7 +20,7 @@ interface WorkoutCalendarProps {
   onDayPress?: (date: string) => void;
   splits: ProgramSplit[];
   useParentInset?: boolean; // when true, remove internal horizontal padding
-  selectedDate?: string; // controlled selected date from parent
+  selectedDate?: string | null; // controlled selected date from parent; null = no selection
 }
 
 interface MonthSection {
@@ -204,8 +204,10 @@ const WorkoutCalendar: React.FC<WorkoutCalendarProps> = ({
     };
   }, []);
 
-  // Controlled selected date: fall back to today if not provided
-  const selectedDate = controlledSelectedDate ?? todayInfo.dateString;
+  // Controlled selected date: if undefined -> fallback to today; if null -> no selection
+  const selectedDate = (typeof controlledSelectedDate === 'undefined')
+    ? todayInfo.dateString
+    : controlledSelectedDate;
 
   // Create an ultra-fast O(1) lookup for workouts
   const workoutsMap = useMemo(() => {
