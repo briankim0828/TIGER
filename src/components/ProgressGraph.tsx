@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Text, VStack } from '@gluestack-ui/themed';
+import { Box, Text, VStack, Icon } from '@gluestack-ui/themed';
+import { MaterialIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 
 // Minimal shape we need from a session
@@ -14,6 +15,8 @@ export type ProgressGraphProps = {
   height?: number;
   color?: string; // line/area color override
   emptyMessage?: string;
+  // Optional: notify parent when user is actively dragging/touching the chart area
+  onDragActiveChange?: (active: boolean) => void;
 };
 
 // Format date labels like: Apr 8
@@ -32,16 +35,26 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   sessions,
   height = 220,
   color,
-  emptyMessage = 'No data yet. Complete workouts to see progress.',
+  emptyMessage = 'No data yet. Finish workouts to see progress.',
+  onDragActiveChange,
 }) => {
   const [chartWidth, setChartWidth] = useState(0);
-  const RIGHT_INSET = 24; // px gap from right edge of the card
-  const initialPad = 10;
-  const endPad =10;
+  const [isDragging, setIsDragging] = useState(false);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const LONG_PRESS_DELAY_MS = 300;
+  const pendingXRef = React.useRef(0);
+  const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const RIGHT_INSET = 0; // no external inset; keep spacing aligned with chart width
+  const initialPad = 15;
+  const endPad = 15;
+  const Y_AXIS_LABEL_WIDTH = 28;
+  const Y_AXIS_THICKNESS = 1;
   // Map sessions to chart points: sort by date asc, filter invalid
   const { data, maxValue } = useMemo(() => {
     const cleaned = (sessions ?? [])
-      .filter((s) => s && typeof s.startedAt === 'string' && !!s.startedAt && Number.isFinite(s.totalVolumeKg as any))
+      .filter(
+        (s) => s && typeof s.startedAt === 'string' && !!s.startedAt && Number.isFinite((s.totalVolumeKg as unknown) as number)
+      )
       .map((s) => ({
         iso: s.startedAt as string,
         volume: (s.totalVolumeKg ?? 0) as number,
@@ -54,14 +67,28 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
     const pad = max > 0 ? Math.ceil(max * 0.15) : 10;
     const maxValue = max + pad;
 
-    const data = cleaned.map((c) => ({ value: c.volume, label: fmtDateLabel(c.iso) }));
+    // Determine day-based interval: every floor(n/7) + 1 days. If n<=7 => 1, 8..14=>2, 15..21=>3, etc.
+    const n = cleaned.length;
+    const intervalDays = Math.floor(n / 7) + 1;
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const toUtcMidnight = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    const firstUtc = cleaned.length ? toUtcMidnight(new Date(cleaned[0].iso)) : 0;
+
+    const data = cleaned.map((c) => {
+      const utc = toUtcMidnight(new Date(c.iso));
+      const dayIndex = firstUtc ? Math.floor((utc - firstUtc) / DAY_MS) : 0;
+      const showLabel = dayIndex % intervalDays === 0;
+      // Include iso and volume to power pointer label rendering
+      return { value: c.volume, label: showLabel ? fmtDateLabel(c.iso) : '', iso: c.iso, volume: c.volume } as any;
+    });
     return { data, maxValue };
   }, [sessions]);
 
   const computedSpacing = useMemo(() => {
     const count = data.length;
     if (!chartWidth || count <= 1) return 26;
-    const effectiveWidth = Math.max(0, chartWidth - RIGHT_INSET);
+    // Effective drawable width after y-axis labels and padding
+    const effectiveWidth = Math.max(0, chartWidth - Y_AXIS_LABEL_WIDTH - Y_AXIS_THICKNESS);
     const available = Math.max(0, effectiveWidth - initialPad - endPad);
     const s = available / (count - 1);
     return Math.max(4, s);
@@ -79,69 +106,193 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   } as const;
 
   return (
-    <Box bg={colors.cardBg} borderRadius="$lg" pr="$4" mt="$3" w="$full" overflow="hidden">
-      <Box p="$3">
+    <Box bg={colors.cardBg} borderRadius="$lg" p="$3" w="$full" overflow="hidden">
       {!!title && (
-        <Text color={colors.text} fontWeight="$bold" fontSize="$lg" mb="$1">
+        <Text color={colors.text} fontWeight="$bold" fontSize="$lg" mb="$2">
           {title}
         </Text>
       )}
-      </Box>
       <VStack w="$full">
-        <Box w="$full" onLayout={(e: any) => setChartWidth(e.nativeEvent.layout.width)}>
-          {chartWidth > 0 && (() => {
-            const effectiveWidth = Math.max(0, chartWidth);
-            return (
-              <LineChart
-                key={`pg-${effectiveWidth}-${data.length}`}
-                data={data}
-                height={height}
-                width={effectiveWidth}
-                
+        <Box
+          w="$full"
+          onLayout={(e: any) => setChartWidth(e.nativeEvent.layout.width)}
+          onTouchStart={(e: any) => {
+            if (!data.length) return;
+            const x = e.nativeEvent.locationX as number;
+            pendingXRef.current = x;
+            // Start long-press timer to begin dragging only after hold
+            if (longPressTimerRef.current) {
+              clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+            longPressTimerRef.current = setTimeout(() => {
+              const leftOffset = Y_AXIS_LABEL_WIDTH + Y_AXIS_THICKNESS + initialPad;
+              const idx = Math.round((pendingXRef.current - leftOffset) / (computedSpacing || 1));
+              const clamped = Math.max(0, Math.min(data.length - 1, idx));
+              setIsDragging(true);
+              setHoverIndex(clamped);
+              onDragActiveChange?.(true);
+              longPressTimerRef.current = null;
+            }, LONG_PRESS_DELAY_MS);
+          }}
+          onTouchMove={(e: any) => {
+            if (!data.length) return;
+            const x = e.nativeEvent.locationX as number;
+            pendingXRef.current = x;
+            if (isDragging) {
+              const leftOffset = Y_AXIS_LABEL_WIDTH + Y_AXIS_THICKNESS + initialPad;
+              const idx = Math.round((x - leftOffset) / (computedSpacing || 1));
+              const clamped = Math.max(0, Math.min(data.length - 1, idx));
+              if (hoverIndex !== clamped) setHoverIndex(clamped);
+            }
+          }}
+          onTouchEnd={() => {
+            if (longPressTimerRef.current) {
+              clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+            if (isDragging) {
+              setIsDragging(false);
+              setHoverIndex(null);
+              onDragActiveChange?.(false);
+            }
+          }}
+          onTouchCancel={() => {
+            if (longPressTimerRef.current) {
+              clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = null;
+            }
+            if (isDragging) {
+              setIsDragging(false);
+              setHoverIndex(null);
+              onDragActiveChange?.(false);
+            }
+          }}
+          position="relative"
+        >
+          {chartWidth > 0 && (
+            data.length > 0 ? (
+              (() => {
+                const effectiveWidth = Math.max(0, chartWidth);
+                return (
+                  <LineChart
+                    key={`pg-${effectiveWidth}-${data.length}`}
+                    data={data}
+                    height={height}
+                    width={effectiveWidth}
+                    thickness={4}
+                    color={colors.primary}
+                    areaChart
+                    curved
+                    curvature={0.2}
+                    isAnimated={true}
+                    animateOnDataChange={true}
+                    hideRules
+                    xAxisColor={colors.axis}
+                    yAxisColor={colors.axis}
+                    yAxisTextStyle={{ color: colors.text, fontSize: 10 }}
+                    xAxisLabelTextStyle={{ color: colors.text, fontSize: 10 }}
+                    yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
+                    yAxisLabelSuffix=""
+                    startFillColor={colors.fillStart}
+                    endFillColor={colors.fillEnd}
+                    startOpacity={0.35}
+                    endOpacity={0.02}
+                    hideDataPoints={false}
+                    dataPointsColor={colors.point}
+                    dataPointsRadius={4}
+                    initialSpacing={initialPad}
+                    endSpacing={endPad}
+                    spacing={computedSpacing}
+                    noOfSections={4}
+                    yAxisThickness={Y_AXIS_THICKNESS}
+                    xAxisThickness={1}
+                    focusEnabled={false}
+                    maxValue={maxValue}
+                  />
+                );
+              })()
+            ) : (
+              <Box bg="#12141A" borderRadius="$lg" p="$4" alignItems="center">
+                            {/* @ts-ignore */}
+                            <Icon as={MaterialIcons as any} name="event-busy" color="$gray400" size={56} />
+                            <Text color="$gray400" mt="$3" fontSize="$md" fontWeight="$semibold">No workout data yet</Text>
+                            <Text color="$gray500" fontSize="$sm" mt="$1" textAlign="center">
+                              Your workout data will be graphed here.
+                            </Text>
+                          </Box>
+            )
+          )}
+          {/* Custom drag overlay: vertical guide + tooltip */}
+          {isDragging && hoverIndex !== null && data[hoverIndex] && (
+            (() => {
+              const leftOffset = Y_AXIS_LABEL_WIDTH + Y_AXIS_THICKNESS + initialPad;
+              const x = leftOffset + (hoverIndex as number) * (computedSpacing || 1);
+              const item: any = data[hoverIndex as number];
+              const iso = item?.iso as string | undefined;
+              const vol = (item?.value ?? item?.volume) as number | undefined;
+              const date = iso ? fmtDateLabel(iso) : '';
+              const lineLeft = Math.max(0, x - 0.5);
+              const val = typeof item?.value === 'number' ? item.value : (typeof item?.volume === 'number' ? item.volume : 0);
+              const y = Math.max(0, Math.min(height, height - (maxValue > 0 ? (val / maxValue) * height : 0)));
+              return (
+                <Box position="absolute" left={0} top={0} w={chartWidth} h={height} pointerEvents="none">
+                  {/* Vertical guide line */}
+                  {/* <Box position="absolute" left={lineLeft} top={0} h={height} w={1} bg={colors.axis} /> */}
             
-                thickness={4}
-                color={colors.primary}
-                areaChart
-                curved
-                isAnimated={true}
-                animateOnDataChange={true}
-                hideRules
-                xAxisColor={colors.axis}
-                yAxisColor={colors.axis}
-                yAxisTextStyle={{ color: colors.text, fontSize: 10 }}
-                xAxisLabelTextStyle={{ color: colors.text, fontSize: 10 }}
-                yAxisLabelWidth={35}
-                yAxisLabelSuffix=""
-                startFillColor={colors.fillStart}
-                endFillColor={colors.fillEnd}
-                startOpacity={0.35}
-                endOpacity={0.02}
-                hideDataPoints={false}
-                dataPointsColor={colors.point}
-                
-                dataPointsRadius={4}
-                initialSpacing={initialPad}
-                endSpacing={endPad}
-                spacing={computedSpacing}
-                noOfSections={4}
-                yAxisThickness={1}
-                xAxisThickness={1}
-                pointerConfig={{
-                  showPointerStrip: false,
-                  pointerVanishDelay: 0,
-                  autoAdjustPointerLabelPosition: false,
-                }}
-                focusEnabled={false}
-                maxValue={maxValue}
-              />
-            );
-          })()}
+                  {/* Tooltip redesigned to match provided style */}
+                  {/* <Box position="absolute" left={Math.min(Math.max(8, x + 8), chartWidth - 120)} top={20} maxWidth={140} bg="#1F2430" px="$2" py="$1" borderRadius="$sm" borderWidth={1} borderColor={colors.axis}>
+                    <Text color={colors.text} fontSize={12}>{date}</Text>
+                    <Text color={colors.text} fontSize={12}>{vol} kg</Text> */}
+                  <Box
+                    position="absolute"
+                    left={Math.min(Math.max(30, x - 50), chartWidth - 120)}
+                    top={(() => {
+                      const TOOLTIP_HEIGHT = 60;
+                      const GAP_Y = 8; // small distance from the point
+                      const MIN_TOP = 4; // padding from top edge
+                      const MAX_TOP = height - TOOLTIP_HEIGHT - 4; // padding from bottom edge
+
+                      // Preferred: place tooltip above the point
+                      const aboveTop = Math.max(MIN_TOP, y - (TOOLTIP_HEIGHT + GAP_Y));
+                      const aboveBottom = aboveTop + TOOLTIP_HEIGHT;
+
+                      // If the point's y is the same or higher (smaller or equal) than
+                      // the tooltip's bottom when placed above (e.g., due to clamping),
+                      // render the tooltip below the point instead by GAP_Y.
+                      if (y <= aboveBottom) {
+                        const belowTop = y + GAP_Y;
+                        return Math.max(MIN_TOP, Math.min(MAX_TOP, belowTop));
+                      }
+
+                      return aboveTop;
+                    })()}
+                    w={100}
+                    h={60}
+                    style={{ justifyContent: 'center', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: 'white', fontSize: 10, marginBottom: 3, textAlign: 'center', fontWeight: 'bold' }}>
+                      {date}
+                    </Text>
+                    <Box style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: 'white' }}>
+                      <Text style={{ fontWeight: 'bold', textAlign: 'center', fontSize: 14 }}>
+                        {`${vol} kg`}
+                      </Text>
+                    </Box>
+                  </Box>
+
+                  {/* Highlight dot at the focused data point */}
+                  <Box position="absolute" left={x - 5} top={y - 10} w={10} h={10} borderRadius={999} bg={"$green300"} borderWidth={2} borderColor={colors.cardBg} />
+                </Box>
+              );
+            })()
+          )}
         </Box>
-        {data.length === 0 && (
-          <Text color="#9CA3AF" textAlign="center" style={{ marginTop: 8 }}>
+        {/* {data.length === 0 && (
+          <Text color="#9CA3AF" textAlign="center" style={{ marginTop: 2 }}>
             {emptyMessage}
           </Text>
-        )}
+        )} */}
       </VStack>
     </Box>
   );

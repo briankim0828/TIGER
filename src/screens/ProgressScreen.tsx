@@ -9,7 +9,7 @@ import { Box, Text, Pressable, VStack } from "@gluestack-ui/themed";
 import WorkoutCalendar from "../components/WorkoutCalendar";
 import WorkoutHeatmap from "../components/WorkoutHeatmap";
 import ProgressGraph from "../components/ProgressGraph";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
 import { supabase } from "../utils/supabaseClient";
@@ -19,7 +19,6 @@ import { StyleSheet } from "react-native";
 import { ScrollView } from 'react-native-gesture-handler';
 import { useOverlay } from "../contexts/OverlayContext";
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
-
 // Local WeekDay type (decoupled from legacy types/index.ts slated for removal)
 type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 
@@ -27,6 +26,7 @@ type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 interface WorkoutSession { date: string; completed: boolean }
 
 const ProgressScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
   const db = useDatabase();
   const history = useWorkoutHistory();
   const { startWorkout, getActiveSessionId } = useWorkout();
@@ -80,6 +80,15 @@ const ProgressScreen: React.FC = () => {
     return selectedDate === todayString;
   }, [selectedDate, todayString]);
 
+  // Time-based greeting
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'Good morning, Brian.';
+    if (hour >= 12 && hour < 17) return 'Good afternoon, Brian.';
+    if (hour >= 17 && hour < 23) return 'Good evening, Brian.';
+    return 'Welcome back, Brian.';
+  }, []);
+
   // Parse YYYY-MM-DD as a local date to avoid timezone shifting and map to WeekDay label
   const getDayOfWeek = useCallback((dateString: string | null) => {
     if (!dateString) return null;
@@ -123,12 +132,18 @@ const ProgressScreen: React.FC = () => {
               name: r.name,
               color: r.color ?? undefined,
               days: daysBySplit.get(r.id) ?? [],
-              exerciseCount: typeof r.exerciseCount === 'number' ? r.exerciseCount : (typeof r.exercise_count === 'string' ? parseInt(r.exercise_count, 10) : r.exercise_count ?? 0),
+              exerciseCount:
+                typeof r.exerciseCount === 'number'
+                  ? r.exerciseCount
+                  : (typeof r.exercise_count === 'string'
+                      ? parseInt(r.exercise_count, 10)
+                      : (r.exercise_count ?? 0)),
             }));
             setSplits(calendarSplits);
+            const uid = authUserId as string;
             const [entries, posts] = await Promise.all([
-              history.getWorkoutCalendarEntries(authUserId),
-              history.getWorkoutPosts(authUserId, 90),
+              history.getWorkoutCalendarEntries(uid),
+              history.getWorkoutPosts(uid, 90),
             ]);
             setCalendarEntries(entries);
             setWorkouts(entries.map((e: WorkoutCalendarEntry) => ({ date: e.date, completed: e.completed })));
@@ -221,33 +236,45 @@ const ProgressScreen: React.FC = () => {
     <GestureHandlerRootView style={styles.container}>
       <ScrollView style={{ flex: 1, backgroundColor: "#1E2028" }}>
         <Box flex={1}  >
-          <VStack space="md" p="$2">
-            <Text color="$textLight50" fontSize="$2xl" fontWeight="$bold" pb="$4">
-              My Progress
+          <VStack space="lg" p="$2">
+            <Box h={25} />
+            
+            <Box>   
+            <Text color="$textLight50" fontSize={30} fontWeight="$bold">
+              {greeting}
             </Text>
+            <Text color="$textLight500" fontSize={15} fontWeight="$normal">
+              Ready for another workout? 
+            </Text>
+            </Box>
 
             {/* Workout Heatmap (allow scrolling when dragging on it) */}
             <Box pointerEvents="none">
               <WorkoutHeatmap entries={calendarEntries} splits={splits} />
             </Box>
 
-            {/* Training Volume Graph (allow scrolling when dragging on it) */}
-            <Box pointerEvents="none">
-              <ProgressGraph title="Training Volume" sessions={graphSessions} />
+            {/* Training Volume Graph (interactive). Disable nav gestures only while interacting with the chart. */}
+            <Box>
+              <ProgressGraph
+                title="Training Volume"
+                sessions={graphSessions}
+                onDragActiveChange={(active) => {
+                  try {
+                    const parents: any[] = [];
+                    let curr: any = navigation;
+                    for (let i = 0; i < 3 && curr; i++) {
+                      parents.push(curr);
+                      curr = curr?.getParent?.();
+                    }
+                    parents.forEach((nav) => nav?.setOptions?.({ gestureEnabled: !active, swipeEnabled: !active }));
+                  } catch {}
+                }}
+              />
             </Box>
 
-            <WorkoutCalendar
-              key={`calendar-${calendarKey}`}
-              month={currentMonth}
-              year={currentYear}
-              workouts={calendarEntries}
-              splits={splits}
-              onDayPress={handleDayPress}
-              selectedDate={selectedDate}
-              useParentInset
-            />
+            
 
-            <Box py="$1" pt="$5">
+            <Box >
               <Pressable
                 bg="$primary500"
                 py="$4"
@@ -275,6 +302,17 @@ const ProgressScreen: React.FC = () => {
                 </Text>
               </Pressable>
             </Box>
+
+            <WorkoutCalendar
+              key={`calendar-${calendarKey}`}
+              month={currentMonth}
+              year={currentYear}
+              workouts={calendarEntries}
+              splits={splits}
+              onDayPress={handleDayPress}
+              selectedDate={selectedDate}
+              useParentInset
+            />
           </VStack>
         </Box>
       </ScrollView>

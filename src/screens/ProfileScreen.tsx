@@ -482,7 +482,7 @@ const ProfileScreen: React.FC = () => {
           {posts.length === 0 ? (
             <Box bg="#12141A" borderRadius="$lg" p="$6" alignItems="center">
               {/* @ts-ignore */}
-              <Icon as={MaterialIcons as any} name="event-busy" color="$gray400" size="xl" />
+              <Icon as={MaterialIcons as any} name="event-busy" color="$gray400" size={56} />
               <Text color="$gray400" mt="$3" fontSize="$md" fontWeight="$semibold">No workouts logged yet</Text>
               <Text color="$gray500" fontSize="$sm" mt="$1" textAlign="center">
                 Your logged workouts will appear here.

@@ -75,7 +75,7 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits }) => {
   }, [todayDow, splits]);
 
   return (
-    <Box bg="#12141A" py="$3" px="$3" borderRadius="$lg" mb="$4" borderWidth={0} borderColor="#2A2E38">
+    <Box bg="#12141A" py="$3" px="$3" borderRadius="$lg" borderWidth={0} borderColor="#2A2E38">
       <VStack mb="$3">
         <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
         <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>

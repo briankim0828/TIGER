@@ -168,17 +168,17 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         });
       } catch {}
       onCloseSheet();
-      toast.show({
-        placement: 'top',
-        render: ({ id }) => (
-          <Toast nativeID={id} action="success" variant="accent">
-            <VStack space="xs">
-              <ToastTitle>Workout Saved</ToastTitle>
-              <ToastDescription>Your workout session has been saved successfully.</ToastDescription>
-            </VStack>
-          </Toast>
-        ),
-      });
+      // toast.show({
+      //   placement: 'top',
+      //   render: ({ id }) => (
+      //     <Toast nativeID={id} action="success" variant="accent">
+      //       <VStack space="xs">
+      //         <ToastTitle>Workout Saved</ToastTitle>
+      //         <ToastDescription>Your workout session has been saved successfully.</ToastDescription>
+      //       </VStack>
+      //     </Toast>
+      //   ),
+      // });
     } catch (e) {
       toast.show({
         placement: 'top',
