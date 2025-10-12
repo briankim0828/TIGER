@@ -47,7 +47,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   const RIGHT_INSET = 0; // no external inset; keep spacing aligned with chart width
   const initialPad = 16;
   const endPad = 14;
-  const Y_AXIS_LABEL_WIDTH = 28;
+  const Y_AXIS_LABEL_WIDTH = 34;
   const Y_AXIS_THICKNESS = 1;
   // Map sessions to chart points: sort by date asc, filter invalid
   const { data, maxValue } = useMemo(() => {
@@ -246,29 +246,59 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                     <Text color={colors.text} fontSize={12}>{vol} kg</Text> */}
                   <Box
                     position="absolute"
-                    left={Math.min(Math.max(30, x - 50), chartWidth - 120)}
-                    top={(() => {
-                      const TOOLTIP_HEIGHT = 60;
-                      const GAP_Y = 8; // small distance from the point
-                      const MIN_TOP = 4; // padding from top edge
-                      const MAX_TOP = height - TOOLTIP_HEIGHT - 4; // padding from bottom edge
+                    {...(() => {
+                      // Decide tooltip placement:
+                      // - Prefer above the dot if there's vertical room AND the tooltip can be centered horizontally over the dot without clamping.
+                      // - Otherwise, place to the left or right side with the same GAP, and align the {vol} box vertically with the dot (not the whole label).
+                      const TOOLTIP_WIDTH = 100;
+                      const TOOLTIP_HEIGHT = 40;
+                      const GAP = 8; // consistent distance from the dot in all placements
 
-                      // Preferred: place tooltip above the point
-                      const aboveTop = Math.max(MIN_TOP, y - (TOOLTIP_HEIGHT + GAP_Y));
-                      const aboveBottom = aboveTop + TOOLTIP_HEIGHT;
+                      const MIN_LEFT = 30; // keep away from y-axis labels
+                      const MIN_TOP = 4;
+                      const MAX_TOP = height - TOOLTIP_HEIGHT - 4;
 
-                      // If the point's y is the same or higher (smaller or equal) than
-                      // the tooltip's bottom when placed above (e.g., due to clamping),
-                      // render the tooltip below the point instead by GAP_Y.
-                      if (y <= aboveBottom) {
-                        const belowTop = y + GAP_Y;
-                        return Math.max(MIN_TOP, Math.min(MAX_TOP, belowTop));
+                      const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+                      // Above placement feasibility (relative to highlight dot)
+                      const DOT_RADIUS = 5; // highlight dot is 10x10
+                      const dotTop = y - 2 * DOT_RADIUS; // dot box top
+                      const desiredAboveLeft = x - TOOLTIP_WIDTH / 2;
+                      const GAP_ABOVE = GAP + 3; // increase distance when above the dot
+                      const proposedTopAbove = dotTop - GAP_ABOVE - TOOLTIP_HEIGHT;
+                      const hasVerticalRoomAbove = proposedTopAbove >= MIN_TOP;
+                      // Allow above placement only if it can be centered with no horizontal clamping
+                      const canCenterAboveHorizontally = desiredAboveLeft >= MIN_LEFT && desiredAboveLeft + TOOLTIP_WIDTH <= chartWidth;
+                      const canPlaceAboveCentered = hasVerticalRoomAbove && canCenterAboveHorizontally;
+
+                      if (canPlaceAboveCentered) {
+                        const leftAbove = desiredAboveLeft; // no clamping needed by definition
+                        const topAbove = clamp(proposedTopAbove, MIN_TOP, MAX_TOP);
+                        return { left: leftAbove, top: topAbove, w: TOOLTIP_WIDTH, h: TOOLTIP_HEIGHT } as const;
                       }
 
-                      return aboveTop;
+                      // Side placement: choose based on available horizontal space
+                      const spaceRight = chartWidth - (x + GAP);
+                      const spaceLeft = x - GAP;
+                      let placeRight = false;
+                      if (spaceRight >= TOOLTIP_WIDTH && spaceLeft < TOOLTIP_WIDTH) placeRight = true;
+                      else if (spaceLeft >= TOOLTIP_WIDTH && spaceRight < TOOLTIP_WIDTH) placeRight = false;
+                      else placeRight = spaceRight >= spaceLeft; // tie-breaker: favor side with more room
+
+                      const leftSide = x - GAP - TOOLTIP_WIDTH;
+                      const rightSide = x + GAP;
+                      // No right-side clamp; only enforce a minimal left margin.
+                      const left = placeRight ? Math.max(MIN_LEFT, rightSide) : Math.max(MIN_LEFT, leftSide);
+
+                      // Align vertically so that the {vol} kg box (not the entire label) shares the same Y as the HIGHLIGHT DOT (not the raw data point).
+                      // Approximate the center offset of the vol box within the tooltip.
+                      // date text (fontSize 10) ~ 12px height + marginBottom(3) + vol box half-height (~14)
+                      const VOL_BOX_CENTER_OFFSET_FROM_TOP = 29; // tuned constant for visual alignment
+                      const dotCenterY = y - DOT_RADIUS; // dot center at y-5
+                      const top = clamp(dotCenterY - VOL_BOX_CENTER_OFFSET_FROM_TOP, MIN_TOP, MAX_TOP);
+
+                      return { left, top, w: TOOLTIP_WIDTH, h: TOOLTIP_HEIGHT } as const;
                     })()}
-                    w={100}
-                    h={60}
                     style={{ justifyContent: 'center', alignItems: 'center' }}
                   >
                     <Text style={{ color: 'white', fontSize: 10, marginBottom: 3, textAlign: 'center', fontWeight: 'bold' }}>
