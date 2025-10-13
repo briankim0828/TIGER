@@ -12,6 +12,7 @@ import {
   SafeAreaProvider,
   SafeAreaView,
   useSafeAreaInsets,
+  initialWindowMetrics,
 } from "react-native-safe-area-context";
 import { WorkoutProvider, useWorkout } from "./src/contexts/WorkoutContext";
 import { ElectricProvider } from "./src/electric";
@@ -240,7 +241,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const { db, live } = useElectric();
   const toast = useToast();
   return (
-    <Box bg="#1E2028" px="$3" width="$full" alignItems="center">
+    <Box bg="#1E2028" px="$3" width="$full" alignItems="center" style={{ paddingTop: insets.top }}>
       <HStack alignItems="center" style={{ height: 25 }}>
         {/* Left refresh button to trigger a remote pull */}
         <Box style={{ width: 44 }} h="$full" alignItems="flex-start" justifyContent="center" pl="$1">
@@ -454,15 +455,11 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <GluestackUIProvider config={config}>
       <ElectricProvider>
         <WorkoutProvider>
                 <OverlayProvider>
-                <SafeAreaView
-                  style={{ flex: 0, backgroundColor: "#1E2028" }}
-                  edges={["top"]}
-                />
                 <SafeAreaView
                   style={{ flex: 1, backgroundColor: "#121213ff" }}
                   edges={["left", "right", "bottom"]}

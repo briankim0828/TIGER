@@ -35,7 +35,7 @@ type WorkoutStackParamList = {
   // - Generic selection: { requestId, allowMultiple?: boolean }
   ExerciseSelectionModalScreen:
     | { splitId: string }
-    | { requestId: string; allowMultiple?: boolean };
+    | { requestId: string; allowMultiple?: boolean; disableIds?: string[] };
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
@@ -58,6 +58,7 @@ const ExerciseSelectionView = () => {
   const splitId = (route.params as any)?.splitId as string | undefined;
   const requestId = (route.params as any)?.requestId as string | undefined;
   const allowMultiple = ((route.params as any)?.allowMultiple as boolean | undefined) ?? true;
+  const disableIds = ((route.params as any)?.disableIds as string[] | undefined) ?? [];
   const db = useDatabase();
 
   const onClose = () => {
@@ -115,6 +116,7 @@ const ExerciseSelectionView = () => {
   };
 
   const handleExerciseSelect = (exercise: ExerciseLite) => {
+    if (disableIds.includes(exercise.id)) return; // disabled
     setSelectedExercises((prev) => {
       const exists = prev.some((e) => e.id === exercise.id);
       if (exists) return prev.filter((e) => e.id !== exercise.id);
@@ -247,7 +249,9 @@ const ExerciseSelectionView = () => {
             <Box flex={1}>
               <ScrollView p="$3" flex={1} showsVerticalScrollIndicator={false}>
                 {selectedBodyPart && exercisesByBodyPart[selectedBodyPart] ? (
-                  exercisesByBodyPart[selectedBodyPart].map((exercise) => (
+                  exercisesByBodyPart[selectedBodyPart].map((exercise) => {
+                    const isDisabled = disableIds.includes(exercise.id);
+                    return (
                     <Pressable
                       key={exercise.id}
                       onPress={() => handleExerciseSelect(exercise)}
@@ -262,18 +266,19 @@ const ExerciseSelectionView = () => {
                       borderRadius="$lg"
                       sx={{
                         ":pressed": {
-                          opacity: 0.7
+                          opacity: isDisabled ? 1 : 0.7
                         }
                       }}
+                      disabled={isDisabled}
                     >
                       <HStack
                         justifyContent="space-between"
                         alignItems="center"
                       >
-                        <Text color="$white" fontSize="$md">
+                        <Text color={isDisabled ? "$gray500" : "$white"} fontSize="$md">
                           {exercise.name}
                         </Text>
-                         {isExerciseSelected(exercise.id) && (
+                         {isExerciseSelected(exercise.id) && !isDisabled && (
                            <Center width="$6" height="$6" backgroundColor="#6B8EF2" borderRadius="$full">
                              {/* @ts-ignore Icon typing for vector icons */}
                              <Icon as={AntDesign as any} name="check" color="$white" size="xs" />
@@ -281,7 +286,8 @@ const ExerciseSelectionView = () => {
                          )}
                       </HStack>
                     </Pressable>
-                  ))
+                    );
+                  })
                 ) : (
                   <Center flex={1} p="$4">
                     {/* @ts-ignore Icon typing for vector icons */}

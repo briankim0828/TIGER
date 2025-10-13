@@ -9,7 +9,7 @@ import {
   Pressable,
   ScrollView,
 } from "@gluestack-ui/themed";
-import { AntDesign } from "@expo/vector-icons";
+import { AntDesign, Entypo } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Legacy types are ignored; we use DB as the source of truth
@@ -19,11 +19,12 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useDatabase } from "../db/queries";
 import { ProgramSplit } from "../types/ui";
 import type { SplitExerciseJoin } from "../db/queries/simple";
+import { registerSelectionCallback } from "../navigation/selectionRegistry";
 
 type WorkoutStackParamList = {
   WorkoutMain: undefined;
   SplitDetail: { split: ProgramSplit; newlyAddedExercises?: any[] };
-  ExerciseSelection: { splitId: string };
+  ExerciseSelection: { splitId: string } | { requestId: string; allowMultiple?: boolean; disableIds?: string[] };
 };
 
 type NavigationProp = NativeStackNavigationProp<WorkoutStackParamList>;
@@ -37,6 +38,11 @@ const SplitDetailScreen = () => {
   const { split, newlyAddedExercises } = route.params;
   const splitColor = split.color || "#2A2E38";
   const [exercises, setExercises] = useState<ExerciseRow[]>([]);
+    const [actionSheet, setActionSheet] = useState<{ visible: boolean; rowId?: string; index?: number }>(() => ({ visible: false }));
+    // Action menu bottom sheet
+    const actionMenuRef = useRef<BottomSheet>(null);
+    const actionMenuSnapPoints = useMemo(() => ["28%"], []);
+  const [optionsSheetRefMap] = useState(() => new Map<string, string>());
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ["100%"], []);
   const insets = useSafeAreaInsets();
@@ -58,11 +64,16 @@ const SplitDetailScreen = () => {
     try {
       const rows: SplitExerciseJoin[] = await db.getSplitExercises(split.id);
       const list = rows.map((r) => ({ id: r.exercise.id, name: r.exercise.name, bodyPart: r.exercise.bodyPart ?? null }));
+      // Maintain a map from exerciseId to split_exercise row id for precise ops
+      optionsSheetRefMap.clear();
+      for (const r of rows) {
+        optionsSheetRefMap.set(r.exercise.id, r.splitExerciseId);
+      }
       setExercises(list);
     } catch (e) {
       console.error('SplitDetailScreen: failed to load split exercises', e);
     }
-  }, [db, split.id]);
+  }, [db, split.id, optionsSheetRefMap]);
 
   // Initial and focus-based load
   useEffect(() => {
@@ -73,6 +84,13 @@ const SplitDetailScreen = () => {
       loadSplitExercises();
     }, [loadSplitExercises])
   );
+
+  // Open/close the action menu sheet as visibility changes
+  useEffect(() => {
+    if (actionSheet.visible) {
+      actionMenuRef.current?.expand();
+    }
+  }, [actionSheet.visible]);
 
   // Effect to handle newly added exercises passed back via route params
   useEffect(() => {
@@ -85,15 +103,49 @@ const SplitDetailScreen = () => {
 
   // Removed Supabase/DataContext persistence: DB is now the source of truth
 
-  const handleRemoveExercise = async (index: number) => {
+  const handleDeleteExercise = async (index: number) => {
     const exercise = exercises[index];
     if (!exercise) return;
     try {
-      await db.removeExerciseFromSplit(split.id, exercise.id);
+      const rowId = optionsSheetRefMap.get(exercise.id);
+      if (rowId && (db as any).deleteSplitExercise) {
+        await (db as any).deleteSplitExercise(rowId, split.id);
+      } else {
+        await db.removeExerciseFromSplit(split.id, exercise.id);
+      }
       await loadSplitExercises();
     } catch (e) {
-      console.error('SplitDetailScreen: failed to remove exercise', e);
+      console.error('SplitDetailScreen: failed to delete exercise', e);
     }
+  };
+
+  const handleReplaceExercise = async (index: number) => {
+    const exercise = exercises[index];
+    if (!exercise) return;
+    const requestId = `replace:${split.id}:${exercise.id}:${Date.now()}`;
+    registerSelectionCallback(requestId, async (items) => {
+      const chosen = items[0];
+      if (!chosen) return;
+      try {
+        const rowId = optionsSheetRefMap.get(exercise.id);
+        if (rowId && (db as any).replaceSplitExercise) {
+          await (db as any).replaceSplitExercise(rowId, chosen.id);
+        } else {
+          // Fallback: delete old, then add new at end
+          await db.removeExerciseFromSplit(split.id, exercise.id);
+          await db.addExercisesToSplit(split.id, [chosen.id], { avoidDuplicates: true });
+        }
+        await loadSplitExercises();
+      } catch (e) {
+        console.error('SplitDetailScreen: failed to replace exercise', e);
+      }
+    });
+    // Navigate to generic selection modal in single-select mode
+    navigation.navigate(
+      // @ts-ignore navigate with union params
+      'ExerciseSelection',
+      { requestId, allowMultiple: false, disableIds: exercises.map(e => e.id) }
+    );
   };
 
   // Placeholder for potential future per-exercise metadata
@@ -213,10 +265,13 @@ const SplitDetailScreen = () => {
                             <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
                           </VStack>
                         </HStack>
-                        {/* Trailing menu (no-op) */}
-                        <Button variant="link" onPress={() => handleRemoveExercise(index)}>
+                        {/* Trailing menu */}
+                        <Button
+                          variant="link"
+                          onPress={() => setActionSheet({ visible: true, index, rowId: optionsSheetRefMap.get(exercise.id) })}
+                        >
                           {/* @ts-ignore */}
-                          <Icon as={AntDesign as any} name="close" color="$red500" />
+                          <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
                         </Button>
                       </HStack>
                     </Box>
@@ -243,6 +298,50 @@ const SplitDetailScreen = () => {
               )}
             </VStack>
           </ScrollView>
+        </Box>
+      </BottomSheet>
+      {/* Per-exercise action bottom sheet as sibling to avoid nested-sheet jitter */}
+      <BottomSheet
+        ref={actionMenuRef}
+        index={-1}
+        snapPoints={actionMenuSnapPoints}
+        enablePanDownToClose
+        onClose={() => setActionSheet({ visible: false })}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
+      >
+        <Box p="$4">
+          <VStack space="md">
+            <Pressable onPress={async () => {
+              const idx = actionSheet.index ?? -1;
+              actionMenuRef.current?.close();
+              await handleDeleteExercise(idx);
+            }} accessibilityRole="button">
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore */}
+                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Text color="$red500" fontSize="$md">Delete</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+            <Pressable onPress={() => {
+              const idx = actionSheet.index ?? -1;
+              actionMenuRef.current?.close();
+              handleReplaceExercise(idx);
+            }} accessibilityRole="button">
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore */}
+                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Text color="$white" fontSize="$md">Replace</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+          </VStack>
         </Box>
       </BottomSheet>
     </Box>

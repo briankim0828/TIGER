@@ -412,6 +412,39 @@ export class ProgramBuilderDataAccess {
     return true;
   }
 
+  /**
+   * Replace a specific split_exercises row's exercise with a new exercise id.
+   * Keeps order_pos and other fields intact and enqueues an outbox update.
+   */
+  async replaceSplitExercise(rowId: string, newExerciseId: string) {
+    await this.db.update(splitExercises).set({ exerciseId: newExerciseId }).where(eq(splitExercises.id, rowId)).run();
+    await enqueueOutbox(this.sqlite, { table: 'split_exercises', op: 'update', rowId, payload: { id: rowId, exercise_id: newExerciseId } });
+    return true;
+  }
+
+  /**
+   * Delete a specific split_exercises row by id and renormalize order positions.
+   * splitId is required to renumber remaining rows.
+   */
+  async deleteSplitExercise(rowId: string, splitId: string) {
+    await this.db.delete(splitExercises).where(eq(splitExercises.id, rowId)).run();
+    await enqueueOutbox(this.sqlite, { table: 'split_exercises', op: 'delete', rowId });
+
+    // Renormalize order positions after delete
+    const rows = await this.db
+      .select({ id: splitExercises.id })
+      .from(splitExercises)
+      .where(eq(splitExercises.splitId, splitId))
+      .orderBy(asc(splitExercises.orderPos));
+    let pos = 1;
+    for (const r of rows) {
+      await this.db.update(splitExercises).set({ orderPos: pos }).where(eq(splitExercises.id, r.id)).run();
+      await enqueueOutbox(this.sqlite, { table: 'split_exercises', op: 'update', rowId: r.id as string, payload: { id: r.id, order_pos: pos } });
+      pos += 1;
+    }
+    return true;
+  }
+
   async createExercise(data: { name: string; modality?: string; bodyPart?: string }) {
     const id = newUuid();
     const normalized = normalizeExerciseInput({ name: data.name, modality: data.modality, bodyPart: data.bodyPart });
