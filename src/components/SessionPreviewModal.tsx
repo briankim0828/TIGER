@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, Entypo } from '@expo/vector-icons';
 import type { ProgramSplit } from '../types/ui';
 import { useDatabase } from '../db/queries';
 import { navigate } from '../navigation/rootNavigation';
@@ -52,10 +52,13 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const actionMenuRef = useRef<BottomSheet>(null);
   
   // State for session exercise preview (modifiable before starting)
   const [currentExercises, setCurrentExercises] = useState<ExerciseRow[]>([]);
   const snapPoints = useMemo(() => ['100%'], []);
+  const actionMenuSnapPoints = useMemo(() => ['28%'], []);
+  const [actionSheet, setActionSheet] = useState<{ visible: boolean; index?: number }>({ visible: false });
   
   // Initialize component
   useEffect(() => {
@@ -81,6 +84,13 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
     const t = setTimeout(() => bottomSheetRef.current?.expand(), 50);
     return () => clearTimeout(t);
   }, []);
+
+  // Open the action menu sheet when toggled visible
+  useEffect(() => {
+    if (actionSheet.visible) {
+      actionMenuRef.current?.expand();
+    }
+  }, [actionSheet.visible]);
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {    
@@ -116,12 +126,14 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const handleStartWorkout = useCallback(async () => {
     // If there are no exercises, do not allow starting
     if (currentExercises.length === 0) return;
+    // Trigger close animation; onChange(-1) will call onClose when animation completes
+    setIsStartPressed(false);
+    bottomSheetRef.current?.close();
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
       if (!userId) return;
       const ids = currentExercises.map(e => e.id);
-      // Allow starting without a split when none is scheduled by passing null
       const splitIdOrNull = scheduledSplit?.id ?? null;
       // If logging a workout for a past date, override startedAt to that local date at noon
       let startedAtOverride: string | undefined;
@@ -136,10 +148,10 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
           }
         }
       }
-      const { sessionId } = await startWorkout(userId, splitIdOrNull, { fromSplitExerciseIds: ids, startedAtOverride });
-      if (sessionId) bottomSheetRef.current?.close();
+      // Start session asynchronously; live session will trigger ActiveWorkoutModal
+      await startWorkout(userId, splitIdOrNull, { fromSplitExerciseIds: ids, startedAtOverride });
     } catch (e) {
-  console.error('SessionPreviewModal - failed to start workout', e);
+      console.error('SessionPreviewModal - failed to start workout', e);
     }
   }, [scheduledSplit, currentExercises, startWorkout, selectedDate]);
 
@@ -186,6 +198,33 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const handleRemoveExercise = useCallback((index: number) => {
     setCurrentExercises((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const currentIds = useMemo(() => currentExercises.map(e => e.id), [currentExercises]);
+  const handleReplaceExercise = useCallback((index: number) => {
+    const requestId = `session-preview-replace-${Date.now()}-${index}`;
+    registerSelectionCallback(requestId, async (selected: ExerciseLite[]) => {
+      const chosen = selected?.[0];
+      if (!chosen) return;
+      try {
+        const details = await db.getExerciseById(chosen.id);
+        setCurrentExercises((prev) => {
+          if (index < 0 || index >= prev.length) return prev;
+          const next = [...prev];
+          next[index] = { id: chosen.id, name: chosen.name, bodyPart: details?.bodyPart ?? null };
+          return next;
+        });
+      } catch {
+        setCurrentExercises((prev) => {
+          if (index < 0 || index >= prev.length) return prev;
+          const next = [...prev];
+          next[index] = { id: chosen.id, name: chosen.name, bodyPart: null };
+          return next;
+        });
+      }
+    });
+    // Disable existing exercise ids to avoid duplicates; single-select
+    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: false, disableIds: currentIds });
+  }, [currentIds, db]);
   
   // Local pressed-state tracking for reliable opacity feedback
   const [isCancelPressed, setIsCancelPressed] = useState(false);
@@ -202,6 +241,10 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         index={0}
         snapPoints={snapPoints}
         topInset={insets.top}
+        // Reduce layout thrash when action menu is open
+        enableOverDrag={!actionSheet.visible}
+        enableHandlePanningGesture={!actionSheet.visible}
+        enableContentPanningGesture={!actionSheet.visible}
         backdropComponent={(props) => (
           <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
         )}
@@ -258,9 +301,12 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                           <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
                         </VStack>
                       </HStack>
-                      <Button variant="link" onPress={() => handleRemoveExercise(index)}>
+                      <Button
+                        variant="link"
+                        onPress={() => setActionSheet({ visible: true, index })}
+                      >
                         {/* @ts-ignore */}
-                        <Icon as={AntDesign as any} name="close" color="$red500" />
+                        <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
                       </Button>
                     </HStack>
                   </Box>
@@ -349,6 +395,57 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               </Pressable>
             </HStack>
           </Box>
+        </Box>
+      </BottomSheet>
+
+      {/* Per-exercise action bottom sheet as sibling to avoid nested jitter */}
+      <BottomSheet
+        ref={actionMenuRef}
+        index={-1}
+        snapPoints={actionMenuSnapPoints}
+        enablePanDownToClose
+        onClose={() => setActionSheet({ visible: false })}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
+      >
+        <Box p="$4">
+          <VStack space="md">
+            <Pressable
+              onPress={() => {
+                const idx = actionSheet.index ?? -1;
+                actionMenuRef.current?.close();
+                handleRemoveExercise(idx);
+              }}
+              accessibilityRole="button"
+            >
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore */}
+                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Text color="$red500" fontSize="$md">Delete</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                const idx = actionSheet.index ?? -1;
+                actionMenuRef.current?.close();
+                handleReplaceExercise(idx);
+              }}
+              accessibilityRole="button"
+            >
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore */}
+                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Text color="$white" fontSize="$md">Replace</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+          </VStack>
         </Box>
       </BottomSheet>
     </GestureHandlerRootView>

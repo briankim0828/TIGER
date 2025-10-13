@@ -241,7 +241,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const { db, live } = useElectric();
   const toast = useToast();
   return (
-    <Box bg="#1E2028" px="$3" width="$full" alignItems="center" style={{ paddingTop: insets.top }}>
+    <Box bg="#1E2028" px="$3" width="$full" alignItems="center">
       <HStack alignItems="center" style={{ height: 25 }}>
         {/* Left refresh button to trigger a remote pull */}
         <Box style={{ width: 44 }} h="$full" alignItems="flex-start" justifyContent="center" pl="$1">
@@ -460,6 +460,10 @@ export default function App() {
       <ElectricProvider>
         <WorkoutProvider>
                 <OverlayProvider>
+                <SafeAreaView
+                  style={{ flex: 0, backgroundColor: "#1E2028" }}
+                  edges={["top"]}
+                />
                 <SafeAreaView
                   style={{ flex: 1, backgroundColor: "#121213ff" }}
                   edges={["left", "right", "bottom"]}
