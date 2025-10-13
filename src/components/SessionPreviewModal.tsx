@@ -53,30 +53,41 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
   const actionMenuRef = useRef<BottomSheet>(null);
+  const splitMenuRef = useRef<BottomSheet>(null);
   
   // State for session exercise preview (modifiable before starting)
   const [currentExercises, setCurrentExercises] = useState<ExerciseRow[]>([]);
+  const [activeSplit, setActiveSplit] = useState<ProgramSplit | null>(scheduledSplit ?? null);
   const snapPoints = useMemo(() => ['100%'], []);
   const actionMenuSnapPoints = useMemo(() => ['28%'], []);
   const [actionSheet, setActionSheet] = useState<{ visible: boolean; index?: number }>({ visible: false });
+  const splitMenuSnapPoints = useMemo(() => ['40%'], []);
+  const [splitSheet, setSplitSheet] = useState<{ visible: boolean; panel: 'root' | 'switch' }>({ visible: false, panel: 'root' });
+  const [userSplits, setUserSplits] = useState<Array<{ id: string; name: string; color?: string | null; exercise_count?: number }>>([]);
+  const [loadingSplits, setLoadingSplits] = useState(false);
   
   // Initialize component
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!scheduledSplit) { setCurrentExercises([]); return; }
+      if (!activeSplit) { setCurrentExercises([]); return; }
       try {
-        const joins = await db.getSplitExercises(scheduledSplit.id);
+        const joins = await db.getSplitExercises(activeSplit.id);
         if (cancelled) return;
         const exs: ExerciseRow[] = joins.map(j => ({ id: j.exercise.id, name: j.exercise.name, bodyPart: j.exercise.bodyPart ?? null }));
         setCurrentExercises(exs);
       } catch (e) {
-  console.warn('[SessionPreviewModal] failed to load split exercises', e);
+        console.warn('[SessionPreviewModal] failed to load split exercises', e);
         setCurrentExercises([]);
       }
     })();
     return () => { cancelled = true; };
-  }, [scheduledSplit, db]);
+  }, [activeSplit, db]);
+
+  // Keep activeSplit synced when prop changes (if user didn't override)
+  useEffect(() => {
+    if (scheduledSplit) setActiveSplit(scheduledSplit);
+  }, [scheduledSplit]);
   
   // Handle opening bottom sheet separately to ensure it works properly
   useEffect(() => {
@@ -91,6 +102,13 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
       actionMenuRef.current?.expand();
     }
   }, [actionSheet.visible]);
+
+  // Open/close split menu
+  useEffect(() => {
+    if (splitSheet.visible) {
+      splitMenuRef.current?.expand();
+    }
+  }, [splitSheet.visible]);
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {    
@@ -133,8 +151,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
       if (!userId) return;
-      const ids = currentExercises.map(e => e.id);
-      const splitIdOrNull = scheduledSplit?.id ?? null;
+  const ids = currentExercises.map(e => e.id);
+  const splitIdOrNull = activeSplit?.id ?? null;
       // If logging a workout for a past date, override startedAt to that local date at noon
       let startedAtOverride: string | undefined;
       if (selectedDate) {
@@ -153,7 +171,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
     } catch (e) {
       console.error('SessionPreviewModal - failed to start workout', e);
     }
-  }, [scheduledSplit, currentExercises, startWorkout, selectedDate]);
+  }, [activeSplit, currentExercises, startWorkout, selectedDate]);
 
   const handleAddExercise = useCallback(() => {
     // Use selection registry to add to current session preview
@@ -268,17 +286,17 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
           <HStack alignItems="flex-end" justifyContent="space-between" px="$4" pb="$2">
             <VStack>
               <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
-                {scheduledSplit ? scheduledSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
+                {activeSplit ? activeSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
               </Text>
               <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
             </VStack>
-            {/* <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => {}} px="$2">
-              <HStack alignItems="center" space="xs">
-                
-                <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
-                <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
-              </HStack>
-            </Button> */}
+            <Button
+              variant="link"
+              onPress={() => setSplitSheet({ visible: true, panel: 'root' })}
+            >
+              {/* @ts-ignore */}
+              <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+            </Button>
           </HStack>
 
           {/* Exercises list */}
@@ -395,6 +413,106 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               </Pressable>
             </HStack>
           </Box>
+        </Box>
+      </BottomSheet>
+
+      {/* Split-level menu bottom sheet */}
+      <BottomSheet
+        ref={splitMenuRef}
+        index={-1}
+        snapPoints={splitMenuSnapPoints}
+        enablePanDownToClose
+        onClose={() => setSplitSheet({ visible: false, panel: 'root' })}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
+      >
+        <Box p="$4">
+          {splitSheet.panel === 'root' ? (
+            <VStack space="md">
+              <Pressable
+                onPress={async () => {
+                  // Load splits then switch to list panel
+                  setLoadingSplits(true);
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    const userId = user?.id;
+                    if (userId) {
+                      const rows = await (db as any).getUserSplitsWithExerciseCounts?.(userId) ?? await db.getUserSplits(userId);
+                      setUserSplits(rows as any);
+                    } else {
+                      setUserSplits([]);
+                    }
+                  } catch {
+                    setUserSplits([]);
+                  } finally {
+                    setLoadingSplits(false);
+                  }
+                  setSplitSheet({ visible: true, panel: 'switch' });
+                }}
+                accessibilityRole="button"
+              >
+                <HStack alignItems="center" justifyContent="space-between" py="$3">
+                  <HStack space="md" alignItems="center">
+                    {/* @ts-ignore */}
+                    <Icon as={AntDesign as any} name="swap" color="$white" />
+                    <Text color="$white" fontSize="$md">Switch splits</Text>
+                  </HStack>
+                </HStack>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  // Load empty workout: clear active split and exercises
+                  setActiveSplit(null);
+                  setCurrentExercises([]);
+                  splitMenuRef.current?.close();
+                }}
+                accessibilityRole="button"
+              >
+                <HStack alignItems="center" justifyContent="space-between" py="$3">
+                  <HStack space="md" alignItems="center">
+                    {/* @ts-ignore */}
+                    <Icon as={AntDesign as any} name="delete" color="$red500" />
+                    <Text color="$red500" fontSize="$md">Load empty workout</Text>
+                  </HStack>
+                </HStack>
+              </Pressable>
+            </VStack>
+          ) : (
+            <VStack space="md">
+              
+              <ScrollView maxHeight={300}>
+                <VStack space="sm">
+                  {loadingSplits ? (
+                    <Text color="$gray400">Loading…</Text>
+                  ) : userSplits.length === 0 ? (
+                    <Text color="$gray500">No splits found</Text>
+                  ) : (
+                    userSplits.map((s) => (
+                      <Pressable
+                        key={s.id}
+                        onPress={() => {
+                          setActiveSplit({ id: s.id, name: s.name, color: (s as any).color ?? '#2A2E38', exerciseCount: (s as any).exercise_count ?? 0 } as ProgramSplit);
+                          splitMenuRef.current?.close();
+                        }}
+                        accessibilityRole="button"
+                      >
+                        <HStack alignItems="center" justifyContent="space-between" py="$3">
+                          <Text color="$white" fontSize="$md">{s.name}</Text>
+                          <Text color="$gray500" fontSize="$sm">{(s as any).exercise_count ?? ''}</Text>
+                        </HStack>
+                      </Pressable>
+                    ))
+                  )}
+                </VStack>
+              </ScrollView>
+              <Button variant="outline" onPress={() => setSplitSheet({ visible: true, panel: 'root' })} borderColor="$transparent">
+                <Text color="$gray300">Back</Text>
+              </Button>
+            </VStack>
+          )}
         </Box>
       </BottomSheet>
 

@@ -432,24 +432,26 @@ export default function App() {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
+    let mounted = true;
     const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!mounted) return;
+        // Defer to next tick to avoid scheduling updates during insertion effects
+        setTimeout(() => { if (mounted) setUser(user); }, 0);
+      } catch {}
     };
-    fetchUser();
+    const t = setTimeout(fetchUser, 0);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
-    );
+    const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
+      if (!mounted) return;
+      setTimeout(() => { if (mounted) setUser(session?.user ?? null); }, 0);
+    });
 
     return () => {
-      if (authListener && (authListener as any).subscription) {
-        (authListener as any).subscription.unsubscribe();
-      }
+      mounted = false;
+      clearTimeout(t);
+      (authListener as any)?.subscription?.unsubscribe?.();
     };
   }, []);
 
