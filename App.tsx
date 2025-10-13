@@ -203,6 +203,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
 });
 
+// Renders a top spacer equal to the safe area inset to ensure the status bar area is visible consistently
+const TopInsetSpacer = () => {
+  const insets = useSafeAreaInsets();
+  return <View style={{ height: insets.top, backgroundColor: "#1E2028" }} />;
+};
+
 // -----------------------------
 // Types
 // -----------------------------
@@ -462,13 +468,10 @@ export default function App() {
       <ElectricProvider>
         <WorkoutProvider>
                 <OverlayProvider>
-                <SafeAreaView
-                  style={{ flex: 0, backgroundColor: "#1E2028" }}
-                  edges={["top"]}
-                />
+                <TopInsetSpacer />
                 <SafeAreaView
                   style={{ flex: 1, backgroundColor: "#121213ff" }}
-                  edges={["left", "right", "bottom"]}
+                  edges={["left", "right"]}
                 >
                   <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
                   <NavigationContainer ref={navigationRef}>

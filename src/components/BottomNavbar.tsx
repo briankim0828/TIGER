@@ -21,7 +21,7 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
   }, []);
 
   return (
-    <Box bg="#121213ff" borderTopWidth={1} borderColor="$borderDark800" onLayout={onLayout}>
+    <Box bg="#121213ff" borderTopWidth={1} borderColor="$borderDark800" onLayout={onLayout} pb="$7">
       <HStack px="$4" space="2xl" justifyContent="space-around" alignItems="center" pt="$4" pb="$1">
         <Pressable onPress={() => onTabChange('workout')} accessibilityRole="button" accessibilityLabel="Workout Tab">
           <VStack alignItems="center" space="xs">

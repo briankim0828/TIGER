@@ -427,6 +427,7 @@ const ProfileScreen: React.FC = () => {
         contentInsetAdjustmentBehavior="automatic"
       >
       <VStack space="xl" alignItems="center" pt={8} pb={4}>
+        <Box h={25} />
         <Pressable onPress={pickImage}>
           <Avatar size="xl" bg="$primary500">
              {/* Add key to force re-render on URL change */}

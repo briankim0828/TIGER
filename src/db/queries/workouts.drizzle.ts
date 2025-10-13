@@ -504,14 +504,33 @@ export class WorkoutsDataAccess {
 
   async reorderSessionExercises(sessionId: string, nextIds: string[]): Promise<boolean> {
     return this.inTx(async () => {
-      let pos = 0;
-      for (const id of nextIds) {
-        await this.db.update(workoutExercises).set({ orderPos: pos }).where(and(eq(workoutExercises.id, id), eq(workoutExercises.sessionId, sessionId))).run();
-        await enqueueOutbox(this.sqlite, { table: 'workout_exercises', op: 'update', rowId: id, payload: { id, order_pos: pos } });
-        pos += 1;
+      // Two-phase reorder to avoid remote UNIQUE(session_id, order_pos) collisions during push
+      const TEMP_BASE = 1000;
+      // Phase 1: move all provided ids to temporary high positions in stable order
+      for (let i = 0; i < nextIds.length; i += 1) {
+        const id = nextIds[i]!;
+        const tempPos = TEMP_BASE + i;
+        await this.db
+          .update(workoutExercises)
+          .set({ orderPos: tempPos })
+          .where(and(eq(workoutExercises.id, id), eq(workoutExercises.sessionId, sessionId)))
+          .run();
+        await enqueueOutbox(this.sqlite, { table: 'workout_exercises', op: 'update', rowId: id, payload: { id, order_pos: tempPos } });
       }
-  // Notify that exercises order changed
-  this.bumpTables?.(['workout_exercises']);
+
+      // Phase 2: assign final contiguous positions starting at 0
+      for (let pos = 0; pos < nextIds.length; pos += 1) {
+        const id = nextIds[pos]!;
+        await this.db
+          .update(workoutExercises)
+          .set({ orderPos: pos })
+          .where(and(eq(workoutExercises.id, id), eq(workoutExercises.sessionId, sessionId)))
+          .run();
+        await enqueueOutbox(this.sqlite, { table: 'workout_exercises', op: 'update', rowId: id, payload: { id, order_pos: pos } });
+      }
+
+      // Notify that exercises order changed
+      this.bumpTables?.(['workout_exercises']);
       return true;
     });
   }

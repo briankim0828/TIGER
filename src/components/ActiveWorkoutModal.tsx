@@ -1,7 +1,7 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetView, BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetView, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription, Icon} from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
@@ -31,7 +31,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   // navigation handled via global ref
-  const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
+  const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, reorderSessionExercises, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   useEffect(() => {
@@ -92,6 +92,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [prevSetsByExercise, setPrevSetsByExercise] = useState<Record<string, Array<{ weightKg: number | null; reps: number | null }>>>({});
   // Track which exerciseIds we've already pre-populated to avoid duplicate inserts
   const prepopulatedExIdsRef = useRef<Set<string>>(new Set());
+  // Action menu for per-exercise operations
+  const actionMenuRef = useRef<BottomSheet>(null);
+  const actionMenuSnapPoints = useMemo(() => ['28%'], []);
+  const [actionExerciseId, setActionExerciseId] = useState<string | null>(null);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // Only allow fully open or fully closed (no partial snap point)
@@ -738,6 +742,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                           <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
                             {exercise.name}
                           </Text>
+                          <Pressable
+                            onPress={() => {
+                              setActionExerciseId(exercise.id);
+                              // Expand the action sheet
+                              actionMenuRef.current?.expand();
+                            }}
+                            accessibilityRole="button"
+                          >
+                            {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                            <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+                          </Pressable>
                         </HStack>
 
                         {/* Always-expanded sets section */}
@@ -852,6 +867,90 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               )}
             </View>
           </Animated.View>
+        </BottomSheetView>
+      </BottomSheet>
+      {/* Per-exercise action bottom sheet as sibling to avoid nested jitter */}
+      <BottomSheet
+        ref={actionMenuRef}
+        index={-1}
+        snapPoints={actionMenuSnapPoints}
+        enablePanDownToClose
+        onClose={() => setActionExerciseId(null)}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
+      >
+        <BottomSheetView style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+          <VStack space="md">
+            <Pressable
+              onPress={async () => {
+                try {
+                  const exId = actionExerciseId;
+                  if (!exId || !sessionId) return;
+                  const wexId = exerciseIdToSessionExerciseId[exId];
+                  if (!wexId) return;
+                  actionMenuRef.current?.close();
+                  await removeExerciseFromSession(wexId);
+                } catch (e) {
+                  console.error('ActiveWorkoutModal: delete exercise failed', e);
+                }
+              }}
+              accessibilityRole="button"
+            >
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Text color="$red500" fontSize="$md">Delete</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                const exId = actionExerciseId;
+                if (!exId || !sessionId) return;
+                const requestId = `session-replace-${sessionId}-${Date.now()}`;
+                registerSelectionCallback(requestId, async (items) => {
+                  const chosen = items?.[0];
+                  if (!chosen) return;
+                  try {
+                    // Capture current order and index before removal
+                    const orderBefore = (snapshot?.exercises || []).map((j) => j.sessionExerciseId);
+                    const oldWexId = exerciseIdToSessionExerciseId[exId];
+                    const insertIndex = oldWexId ? orderBefore.indexOf(oldWexId) : -1;
+
+                    if (oldWexId) {
+                      await removeExerciseFromSession(oldWexId);
+                    }
+                    const { id: newWexId } = await addExerciseToSession(sessionId, chosen.id);
+                    if (insertIndex >= 0) {
+                      // Build nextIds with new at the original position
+                      const nextIds = orderBefore.filter((id) => id !== oldWexId);
+                      nextIds.splice(insertIndex, 0, newWexId);
+                      await reorderSessionExercises(sessionId, nextIds);
+                    }
+                  } catch (e) {
+                    console.error('ActiveWorkoutModal: replace exercise failed', e);
+                  }
+                });
+                actionMenuRef.current?.close();
+                // Disable duplicates during selection
+                const disableIds = currentExercises.map(e => e.id);
+                navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: false, disableIds });
+              }}
+              accessibilityRole="button"
+            >
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Text color="$white" fontSize="$md">Replace</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
+          </VStack>
         </BottomSheetView>
       </BottomSheet>
     </GestureHandlerRootView>
