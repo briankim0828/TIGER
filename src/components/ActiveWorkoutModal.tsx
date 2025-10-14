@@ -15,6 +15,129 @@ import { useWorkoutHistory } from '../db/queries';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
+// Animated wrapper component for set rows with slide animations
+interface AnimatedSetRowProps {
+  children: React.ReactNode;
+  setKey: string;
+  isNew?: boolean;
+  isDeleting?: boolean;
+  isCompleted?: boolean;
+  onDeleteComplete?: () => void;
+}
+
+const AnimatedSetRow: React.FC<AnimatedSetRowProps> = ({
+  children,
+  setKey,
+  isNew = false,
+  isDeleting = false,
+  isCompleted = false,
+  onDeleteComplete,
+}) => {
+  const slideAnim = useRef(new Animated.Value(isNew ? -30 : 0)).current;
+  const opacityAnim = useRef(new Animated.Value(isNew ? 0 : 1)).current;
+  // Base scale used for add/delete subtle motion
+  const scaleAnim = useRef(new Animated.Value(isNew ? 0.97 : 1)).current;
+  // Pop scale used when completing a set
+  const popScale = useRef(new Animated.Value(1)).current;
+  const prevCompletedRef = useRef<boolean>(isCompleted);
+
+  useEffect(() => {
+    if (isNew) {
+      // Smooth slide down and fade in animation for new sets
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isNew, slideAnim, opacityAnim, scaleAnim]);
+
+  useEffect(() => {
+    if (isDeleting) {
+      // Smooth slide up and fade out animation for deleted sets
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: -30,
+          duration: 250,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scaleAnim, {
+          toValue: 0.95,
+          duration: 250,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start(({ finished }) => {
+        if (finished && onDeleteComplete) {
+          onDeleteComplete();
+        }
+      });
+    }
+  }, [isDeleting, slideAnim, opacityAnim, scaleAnim, onDeleteComplete]);
+
+  // Pop effect on both completion and un-completion edges
+  useEffect(() => {
+    const wasCompleted = prevCompletedRef.current;
+    if (isCompleted !== wasCompleted) {
+      // Stop any ongoing pop animation to avoid conflicting sequences
+      popScale.stopAnimation(() => {
+        Animated.sequence([
+          Animated.timing(popScale, {
+            toValue: 1.1,
+            duration: 100,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(popScale, {
+            toValue: 1,
+            duration: 120,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    }
+    prevCompletedRef.current = isCompleted;
+  }, [isCompleted, popScale]);
+
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { translateY: slideAnim },
+          { scale: Animated.multiply(scaleAnim, popScale) },
+        ],
+        opacity: opacityAnim,
+        overflow: 'hidden',
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+};
+
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
 
@@ -96,6 +219,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const actionMenuRef = useRef<BottomSheet>(null);
   const actionMenuSnapPoints = useMemo(() => ['28%'], []);
   const [actionExerciseId, setActionExerciseId] = useState<string | null>(null);
+  
+  // Animation state for sets
+  const [newlyAddedSets, setNewlyAddedSets] = useState<Set<string>>(new Set());
+  const [deletingSets, setDeletingSets] = useState<Set<string>>(new Set());
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // Only allow fully open or fully closed (no partial snap point)
@@ -189,6 +316,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
+      // Reset animation states
+      setNewlyAddedSets(new Set());
+      setDeletingSets(new Set());
   // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
@@ -201,6 +331,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
+      // Reset animation states
+      setNewlyAddedSets(new Set());
+      setDeletingSets(new Set());
   // no expansion state to reset
   // currentExercises derived from live snapshot; nothing to reset
     };
@@ -395,7 +528,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!sessionExerciseId) return;
     addingSetLockRef.current = true;
     setAddingSetFor(exerciseId);
-    (async () => { await addSet(sessionExerciseId, {}); })()
+    
+    (async () => { 
+      const newSet = await addSet(sessionExerciseId, {});
+      // Mark the new set as newly added for animation
+      if (newSet?.id) {
+        setNewlyAddedSets(prev => new Set([...prev, newSet.id]));
+        // Remove from newly added after animation completes
+        setTimeout(() => {
+          setNewlyAddedSets(prev => {
+            const next = new Set(prev);
+            next.delete(newSet.id);
+            return next;
+          });
+        }, 350); // Slightly longer than animation duration
+      }
+    })()
       .catch(console.error)
       .finally(() => {
         addingSetLockRef.current = false;
@@ -406,26 +554,67 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Delete a set (mirrors how addSet uses context; context is responsible for local+remote mutation)
   const handleDeleteSet = useCallback(async (exerciseId: string, setId: string, setIndex: number) => {
     try {
-      await deleteSet(setId);
-      // Optimistic local input cleanup
-      const key = `${exerciseId}-${setId || setIndex}`;
-      setLocalInputValues(prev => {
-        const copy = { ...prev } as any;
-        delete copy[key];
-        return copy;
-      });
-      toast.show({
-        placement: 'top',
-        render: ({ id }) => (
-          <Toast nativeID={id} action="warning" variant="accent">
-            <VStack space="xs">
-              <ToastTitle>Set deleted</ToastTitle>
-            </VStack>
-          </Toast>
-        ),
-      });
+      // Mark set as deleting to trigger animation
+      setDeletingSets(prev => new Set([...prev, setId]));
+      
+      // Wait for animation to complete before actually deleting
+      setTimeout(async () => {
+        try {
+          await deleteSet(setId);
+          // Optimistic local input cleanup
+          const key = `${exerciseId}-${setId || setIndex}`;
+          setLocalInputValues(prev => {
+            const copy = { ...prev } as any;
+            delete copy[key];
+            return copy;
+          });
+          
+          // Remove from deleting sets
+          setDeletingSets(prev => {
+            const next = new Set(prev);
+            next.delete(setId);
+            return next;
+          });
+          
+          toast.show({
+            placement: 'top',
+            render: ({ id }) => (
+              <Toast nativeID={id} action="warning" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Set deleted</ToastTitle>
+                </VStack>
+              </Toast>
+            ),
+          });
+        } catch (e) {
+          console.error('Failed to delete set', e);
+          // Remove from deleting sets on error
+          setDeletingSets(prev => {
+            const next = new Set(prev);
+            next.delete(setId);
+            return next;
+          });
+          toast.show({
+            placement: 'top',
+            render: ({ id }) => (
+              <Toast nativeID={id} action="error" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Delete failed</ToastTitle>
+                  <ToastDescription>Please try again.</ToastDescription>
+                </VStack>
+              </Toast>
+            ),
+          });
+        }
+      }, 250); // Match animation duration
     } catch (e) {
       console.error('Failed to delete set', e);
+      // Remove from deleting sets on error
+      setDeletingSets(prev => {
+        const next = new Set(prev);
+        next.delete(setId);
+        return next;
+      });
       toast.show({
         placement: 'top',
         render: ({ id }) => (
@@ -572,6 +761,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const screenWidth = Dimensions.get('window').width;
     const rightThreshold = Math.max(80, screenWidth / 2);
 
+    const isNew = newlyAddedSets.has(set.id);
+    const isDeleting = deletingSets.has(set.id);
+
     const renderRightActions = () => (
       <View style={{
         flex: 1,
@@ -587,9 +779,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       </View>
     );
 
-    return (
+    const setRowContent = (
       <Swipeable
-        key={set.id || setIndex}
         friction={0.77}
         rightThreshold={rightThreshold}
         renderRightActions={renderRightActions}
@@ -699,6 +890,26 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         </Pressable>
         </HStack>
       </Swipeable>
+    );
+
+    return (
+      <AnimatedSetRow
+        key={set.id || `${exerciseId}-set-${setIndex}`}
+        setKey={setKey}
+        isNew={isNew}
+        isDeleting={isDeleting}
+        isCompleted={isCompleted}
+        onDeleteComplete={() => {
+          // This will be called when delete animation completes
+          setDeletingSets(prev => {
+            const next = new Set(prev);
+            next.delete(set.id);
+            return next;
+          });
+        }}
+      >
+        {setRowContent}
+      </AnimatedSetRow>
     );
   };
 
