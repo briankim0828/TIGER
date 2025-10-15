@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -223,6 +223,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Animation state for sets
   const [newlyAddedSets, setNewlyAddedSets] = useState<Set<string>>(new Set());
   const [deletingSets, setDeletingSets] = useState<Set<string>>(new Set());
+  // Optimistic placeholder sets per exercise to eliminate add delay
+  const [optimisticSets, setOptimisticSets] = useState<Record<string, Array<{ id: string; hydratedId?: string }>>>({});
+
+  // Enable layout animation on Android for smooth list/button repositioning
+  useEffect(() => {
+    // @ts-ignore - RN types don't include experimental flag
+    if (Platform.OS === 'android' && UIManager?.setLayoutAnimationEnabledExperimental) {
+      // @ts-ignore
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
   
   // Snap points for different states - must be a memoized array to prevent re-renders
   // Only allow fully open or fully closed (no partial snap point)
@@ -528,20 +539,46 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (!sessionExerciseId) return;
     addingSetLockRef.current = true;
     setAddingSetFor(exerciseId);
+    // Create an immediate optimistic placeholder row (animate layout for button reposition)
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setOptimisticSets((prev) => {
+      const list = prev[exerciseId] ? [...prev[exerciseId]] : [];
+      return { ...prev, [exerciseId]: [...list, { id: tempId }] };
+    });
+    // Prepare local inputs for the placeholder row
+    const tempKey = `${exerciseId}-${tempId}`;
+    setLocalInputValues((prev) => ({
+      ...prev,
+      [tempKey]: { weightKg: '', reps: '' },
+    }));
+    // Mark placeholder as newly added so it animates in immediately
+    setNewlyAddedSets((prev) => new Set([...prev, tempId]));
+    setTimeout(() => {
+      setNewlyAddedSets((prev) => {
+        const next = new Set(prev);
+        next.delete(tempId);
+        return next;
+      });
+    }, 350);
     
-    (async () => { 
+    (async () => {
       const newSet = await addSet(sessionExerciseId, {});
-      // Mark the new set as newly added for animation
+      // Swap optimistic placeholder to real id and keep it until snapshot hydrates
       if (newSet?.id) {
-        setNewlyAddedSets(prev => new Set([...prev, newSet.id]));
-        // Remove from newly added after animation completes
-        setTimeout(() => {
-          setNewlyAddedSets(prev => {
-            const next = new Set(prev);
-            next.delete(newSet.id);
-            return next;
-          });
-        }, 350); // Slightly longer than animation duration
+        setOptimisticSets((prev) => {
+          const list = prev[exerciseId] || [];
+          const next = list.map((o) => (o.id === tempId ? { id: tempId, hydratedId: newSet.id } : o));
+          return { ...prev, [exerciseId]: next };
+        });
+        // Transfer local input key from temp to real id for continuity
+        setLocalInputValues((prev) => {
+          const prevVal = prev[tempKey] || { weightKg: '', reps: '' };
+          const copy = { ...prev } as any;
+          delete copy[tempKey];
+          copy[`${exerciseId}-${newSet.id}`] = prevVal;
+          return copy;
+        });
       }
     })()
       .catch(console.error)
@@ -554,7 +591,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Delete a set (mirrors how addSet uses context; context is responsible for local+remote mutation)
   const handleDeleteSet = useCallback(async (exerciseId: string, setId: string, setIndex: number) => {
     try {
-      // Mark set as deleting to trigger animation
+      // If deleting an optimistic placeholder, remove locally and skip API
+      if (setId.startsWith('temp-')) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setOptimisticSets((prev) => {
+          const list = prev[exerciseId] || [];
+          const next = list.filter((o) => o.id !== setId);
+          const out = { ...prev } as any;
+          if (next.length > 0) out[exerciseId] = next; else delete out[exerciseId];
+          return out;
+        });
+        setLocalInputValues((prev) => {
+          const copy = { ...prev } as any;
+          delete copy[`${exerciseId}-${setId}`];
+          return copy;
+        });
+        return;
+      }
+  // Mark set as deleting to trigger animation
+  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setDeletingSets(prev => new Set([...prev, setId]));
       
       // Wait for animation to complete before actually deleting
@@ -628,6 +683,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       });
     }
   }, [deleteSet, toast]);
+
+  // Prune hydrated optimistic placeholders when the real set appears in snapshot
+  useEffect(() => {
+    if (!currentExercises || Object.keys(optimisticSets).length === 0) return;
+    let changed = false;
+    const next: typeof optimisticSets = {};
+    for (const [exId, list] of Object.entries(optimisticSets)) {
+      const base = currentExercises.find((e) => e.id === exId);
+      const baseIds = new Set((base?.sets || []).map((s) => s.id));
+      const filtered = list.filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)));
+      if (filtered.length > 0) next[exId] = filtered;
+      if (filtered.length !== list.length) changed = true;
+    }
+    if (changed) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setOptimisticSets(next);
+    }
+  }, [currentExercises, optimisticSets]);
 
   // Function to handle the actual discard action using the context function
   const handleConfirmDiscard = useCallback(() => {
@@ -979,7 +1052,24 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             </View>
                           </HStack>
 
-                          {exercise.sets && exercise.sets.map((set, idx) => renderSetRow(set, exercise.id, idx, 0))}
+                          {(() => {
+                            const baseSets = exercise.sets || [];
+                            const optimistic = optimisticSets[exercise.id] || [];
+                            const baseIds = new Set(baseSets.map((s) => s.id));
+                            // Convert optimistic placeholders to RenderSet shape
+                            const optAsRender: RenderSet[] = optimistic
+                              // If this placeholder has been hydrated and base already includes real id, skip rendering it
+                              .filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)))
+                              .map((o) => ({
+                                // Keep a unique temp id to avoid duplicate keys with base rows
+                                id: o.id,
+                                weightKg: 0,
+                                reps: 0,
+                                isCompleted: false,
+                              }));
+                            const all = [...baseSets, ...optAsRender];
+                            return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
+                          })()}
 
                           <Pressable
                             onPressIn={() => setPressedAddSetFor(exercise.id)}
