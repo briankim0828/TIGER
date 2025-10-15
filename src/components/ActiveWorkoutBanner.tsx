@@ -58,7 +58,8 @@ const ActiveWorkoutBanner: React.FC<Props> = ({ visible, splitName, startedAtMs,
       snapPoints={snapPoints}
   topInset={0}
   bottomInset={0}
-  containerStyle={{ marginBottom: Math.max(0, insets.bottom + navHeight - StyleSheet.hairlineWidth) }}
+  // Offset exactly by measured bottom navbar height so the banner hugs right above it
+  containerStyle={{ marginBottom: Math.max(0, navHeight - StyleSheet.hairlineWidth) }}
       handleIndicatorStyle={{ backgroundColor: 'white', width: 36, height: 3 }}
       backgroundStyle={{ backgroundColor: '#2A2E38' }}
     >
