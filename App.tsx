@@ -436,6 +436,8 @@ const NavigationWrapper = () => {
 // -----------------------------
 export default function App() {
   const [user, setUser] = useState<any>(null);
+  // Track initial auth resolution to avoid flashing Login when a user exists
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -446,6 +448,9 @@ export default function App() {
         // Defer to next tick to avoid scheduling updates during insertion effects
         setTimeout(() => { if (mounted) setUser(user); }, 0);
       } catch {}
+      finally {
+        if (mounted) setAuthChecking(false);
+      }
     };
     const t = setTimeout(fetchUser, 0);
 
@@ -476,7 +481,9 @@ export default function App() {
                   <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
                   <NavigationContainer ref={navigationRef}>
                     <DismissKeyboardWrapper>
-                      {user ? (
+                      {authChecking ? (
+                        <LoadingSplash />
+                      ) : user ? (
                         <NavigationWrapper />
                       ) : (
                         <AuthNavigationWrapper />
@@ -523,5 +530,21 @@ const GlobalOverlays = () => {
         />
       )}
     </>
+  );
+};
+
+// Simple centered loading splash shown during initial auth resolution
+const LoadingSplash = () => {
+  return (
+    <Box flex={1} bg="#1E2028" alignItems="center" justifyContent="center">
+      <VStack space="md" alignItems="center">
+        <Text color="$textLight50" fontSize="$6xl" fontWeight="$bold">
+          TIGER
+        </Text>
+        <Text color="$textLight400" fontSize="$lg">
+          Loading user…
+        </Text>
+      </VStack>
+    </Box>
   );
 };
