@@ -13,7 +13,7 @@ import {
   Icon,
   Divider,
 } from "@gluestack-ui/themed";
-import { AntDesign, MaterialIcons, Feather } from "@expo/vector-icons";
+import { MaterialIcons, Feather } from "@expo/vector-icons";
 import { BODY_PARTS } from "../types/base";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -237,7 +237,7 @@ const ExerciseSelectionView = () => {
                           {exercise.name}
                         </Text>
                         {/* @ts-ignore Icon typing for vector icons */}
-                        <Icon as={AntDesign as any} name="close" color="$white" size="xs" />
+                        <Icon as={Feather as any} name="x" color="$white" size="xs" />
                       </Pressable>
                     ))}
                   </HStack>
@@ -281,7 +281,7 @@ const ExerciseSelectionView = () => {
                          {isExerciseSelected(exercise.id) && !isDisabled && (
                            <Center width="$6" height="$6" backgroundColor="#6B8EF2" borderRadius="$full">
                              {/* @ts-ignore Icon typing for vector icons */}
-                             <Icon as={AntDesign as any} name="check" color="$white" size="xs" />
+                             <Icon as={Feather as any} name="check" color="$white" size="xs" />
                            </Center>
                          )}
                       </HStack>
@@ -326,7 +326,7 @@ const ExerciseSelectionView = () => {
                   flex={1}
                 >
                   {/* @ts-ignore ButtonIcon typing for vector icons */}
-                  <ButtonIcon as={AntDesign as any} name="plus" color="$white" size="sm" />
+                  <ButtonIcon as={Feather as any} name="plus" color="$white" size="sm" />
                   <ButtonText fontSize="$sm">{`Add (${selectedExercises.length})`}</ButtonText>
                 </Button>
               </HStack>

@@ -5,7 +5,7 @@ import BottomSheet, { BottomSheetView, BottomSheetTextInput, BottomSheetBackdrop
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, HStack, VStack, Input, InputField, Button, ButtonText, Divider, useToast, Toast, ToastTitle, ToastDescription, Icon} from '@gluestack-ui/themed';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { Entypo, Ionicons, AntDesign } from '@expo/vector-icons';
+import { Entypo, Ionicons, Feather } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
@@ -777,7 +777,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </Text>
           <HStack space="xs" alignItems="center">
           {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-          <Icon as={AntDesign as any} name="calendar" color="$textLight400" size="sm" />
+          <Icon as={Feather as any} name="calendar" color="$textLight400" size="sm" />
           {!!formattedDate && (
             
             <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>{formattedDate}</Text>
@@ -1203,7 +1203,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Icon as={Feather as any} name="trash-2" color="$red500" />
                   <Text color="$red500" fontSize="$md">Delete</Text>
                 </HStack>
               </HStack>
@@ -1246,7 +1246,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Icon as={Feather as any} name="repeat" color="$white" />
                   <Text color="$white" fontSize="$md">Replace</Text>
                 </HStack>
               </HStack>

@@ -8,7 +8,7 @@ import {
 } from "@gluestack-ui/themed";
 import { Icon } from "@gluestack-ui/themed";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { AntDesign } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { WEEKDAYS, WeekDay } from "../types/base";
 import { ProgramSplit, ProgramEditMode } from "../types/ui";
 
@@ -107,7 +107,7 @@ const WeekdayItem = React.memo(
             ) : (
               <>
                 {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
-                <Icon as={AntDesign as any} name="plus" color="white" size="lg" />
+                <Icon as={Feather as any} name="plus" color="white" size="lg" />
               </>
             )}
           </Box>
@@ -281,7 +281,7 @@ const MyProgram: React.FC<MyProgramProps> = ({
               {/* Offset icon by half width (approx 6px) to center under target */}
               <Box style={{ transform: [{ translateX: -6 }] }}>
                 {/* @ts-ignore */}
-                <Icon as={AntDesign as any} name="up" color="#6B8EF2" size="xs" />
+                <Icon as={Feather as any} name="chevron-up" color="#6B8EF2" size="xs" />
               </Box>
             </Animated.View>
           )}

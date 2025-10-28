@@ -20,7 +20,7 @@ import {
   ToastDescription,
 } from '@gluestack-ui/themed';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useWorkoutHistory } from '../db/queries';
@@ -109,7 +109,7 @@ const SettingsScreen: React.FC = () => {
             style={({ pressed }) => ({ width: 44, height: '100%', justifyContent: 'center', alignItems: 'flex-start', opacity: pressed ? 0.6 : 1 })}
           >
             {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name="arrowleft" color="$white" />
+            <Icon as={Feather as any} name="arrow-left" color="$white" />
           </Pressable>
           <Box flex={1} alignItems="center">
             <Text color="$textLight50" fontSize="$xl" fontWeight="$bold">Settings</Text>

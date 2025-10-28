@@ -7,7 +7,7 @@ import {
   Icon,
   Pressable,
 } from "@gluestack-ui/themed";
-import { AntDesign } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import Animated, { 
   useAnimatedStyle, 
   withTiming, 
@@ -100,7 +100,7 @@ const ExerciseItem = React.memo(
         <HStack justifyContent="space-between" alignItems="center">
           <HStack style={{ gap: 8, alignItems: "center", flex: 1 }}>
             {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name={isExpanded ? "down" : "right"} color="#A1A1AA" size="sm" />
+            <Icon as={Feather as any} name={isExpanded ? "chevron-down" : "chevron-right"} color="#A1A1AA" size="sm" />
             <Text color="white" style={{ fontSize: 16 }}>
               {exercise.name}
             </Text>

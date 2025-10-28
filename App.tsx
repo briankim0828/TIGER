@@ -44,7 +44,7 @@ import LiveWorkoutDebug from "./src/screens/LiveWorkoutDebug";
 import DevFloatingDebug from "./src/components/DevFloatingDebug";
 import { useLiveActiveSession } from "./src/db/live/workouts";
 import { GluestackUIProvider, Box, Text, HStack, Button, Icon, useToast, Toast, ToastTitle, ToastDescription, VStack } from "@gluestack-ui/themed";
-import { AntDesign } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { config } from "./gluestack-ui.config";
 import { StatusBar } from "react-native";
 import {
@@ -243,7 +243,6 @@ interface GlobalHeaderProps {
   title: string;
 }
 const GlobalHeader = ({ title }: GlobalHeaderProps) => {
-  const insets = useSafeAreaInsets();
   const { db, live } = useElectric();
   const toast = useToast();
   return (
@@ -290,8 +289,8 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
               }
             }}
           >
-            {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name="reload1" color="$white" />
+            {/* @ts-ignore: gluestack Icon typing doesn't include `name` */}
+            <Icon as={Feather as any} name="refresh-ccw" color="$white" />
           </Button>
         </Box>
         {/* Centered title */}
@@ -315,7 +314,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
             style={({ pressed }) => ({ justifyContent: 'center', alignItems: 'center', height: '100%', width: 44, opacity: pressed ? 0.6 : 1 })}
           >
             {/* @ts-ignore gluestack Icon typing doesn't include `name` */}
-            <Icon as={AntDesign as any} name="setting" color="$white" />
+            <Icon as={Feather as any} name="settings" color="$white" />
           </Pressable>
         </Box>
       </HStack>

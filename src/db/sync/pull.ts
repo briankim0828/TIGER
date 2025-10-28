@@ -21,6 +21,41 @@ async function upsertRows(db: SQLite.SQLiteDatabase, table: string, rows: any[])
   });
 }
 
+// Special reconciler for exercise_catalog: canonicalize by slug so local IDs match remote IDs
+// This avoids UNIQUE(slug) violations and prevents downstream FK failures when child rows reference remote IDs.
+async function upsertExerciseCatalogCanonical(db: SQLite.SQLiteDatabase, rows: any[]) {
+  if (!rows.length) return;
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      const slug = (row as any)?.slug ?? null;
+      if (slug) {
+        const existing = await db.getFirstAsync<{ id: string }>(`SELECT id FROM exercise_catalog WHERE slug = ?`, [slug]);
+        if (existing && existing.id && existing.id !== row.id) {
+          // Migrate FKs to the remote/canonical ID first
+          try {
+            await db.runAsync(`UPDATE split_exercises SET exercise_id = ? WHERE exercise_id = ?`, [row.id, existing.id]);
+          } catch {}
+          try {
+            await db.runAsync(`UPDATE workout_exercises SET exercise_id = ? WHERE exercise_id = ?`, [row.id, existing.id]);
+          } catch {}
+          // Update the catalog row in-place, switching its PK to the remote ID and syncing all columns
+          const keys = Object.keys(row);
+          const setters = keys.map((k) => `${k} = ?`).join(',');
+          const values = keys.map((k) => (row as any)[k]);
+          await db.runAsync(`UPDATE exercise_catalog SET ${setters} WHERE id = ?`, [...values, existing.id]);
+          continue;
+        }
+      }
+      // No existing by slug or same id -> standard upsert by id
+      const keys = Object.keys(row);
+      const placeholders = keys.map(() => '?').join(',');
+      const updates = keys.filter(k => k !== 'id').map(k => `${k} = excluded.${k}`).join(',');
+      const sql = `INSERT INTO exercise_catalog (${keys.join(',')}) VALUES (${placeholders}) ON CONFLICT(id) DO UPDATE SET ${updates}`;
+      await db.runAsync(sql, keys.map(k => (row as any)[k]));
+    }
+  });
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -62,7 +97,11 @@ async function queryWithRetry(table: string, userId: string, attempts = 3, baseD
 export async function pullSnapshotForTable(db: SQLite.SQLiteDatabase, table: string, userId: string, log = false) {
   // Scope query per table shape; rely on RLS for child tables without user_id
   const data = await queryWithRetry(table, userId, 3, 250);
-  await upsertRows(db, table, data);
+  if (table === 'exercise_catalog') {
+    await upsertExerciseCatalogCanonical(db, data);
+  } else {
+    await upsertRows(db, table, data);
+  }
   if (log) console.log(`[sync] pulled ${data.length} rows for ${table}`);
 
   // Reconcile deletions: remove local rows that no longer exist remotely.

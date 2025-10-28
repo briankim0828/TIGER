@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import type { ProgramSplit } from '../types/ui';
 import { useDatabase } from '../db/queries';
 import { navigate } from '../navigation/rootNavigation';
@@ -214,7 +214,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
             <HStack alignItems="center" justifyContent="center" space="sm">
               {/* Calendar icon on the left */}
               {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
-              <Icon as={AntDesign as any} name="calendar" color="$white" size="md" />
+              <Icon as={Feather as any} name="calendar" color="$white" size="md" />
               <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
                 {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}
               </Text>
@@ -232,7 +232,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
             {/* <Button variant="outline" size="xs" borderColor="#6B8EF2" onPress={() => {}} px="$2">
               <HStack alignItems="center" space="xs">
                 
-                <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
+                <Icon as={Feather as any} name="repeat" color="#6B8EF2" size="xs" />
                 <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
               </HStack>
             </Button> */}
@@ -260,7 +260,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                       </HStack>
                       <Button variant="link" onPress={() => handleRemoveExercise(index)}>
                         {/* @ts-ignore */}
-                        <Icon as={AntDesign as any} name="close" color="$red500" />
+                        <Icon as={Feather as any} name="x" color="$red500" />
                       </Button>
                     </HStack>
                   </Box>
@@ -282,7 +282,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                 >
                   <HStack space="sm" justifyContent="center" alignItems="center">
                     {/* @ts-ignore */}
-                    <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                    <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
                     <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
                   </HStack>
                 </Pressable>
@@ -307,7 +307,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                     >
                       <HStack space="sm" justifyContent="center" alignItems="center">
                         {/* @ts-ignore */}
-                        <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                        <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
                         <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
                       </HStack>
                     </Pressable>

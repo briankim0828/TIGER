@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { HStack, Pressable, Text, Box, VStack } from '@gluestack-ui/themed';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { setBottomNavHeight } from '../navigation/layoutMetrics';
 
 interface BottomNavbarProps {
@@ -25,8 +25,8 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
       <HStack px="$4" space="2xl" justifyContent="space-around" alignItems="center" pt="$4" pb="$1">
         <Pressable onPress={() => onTabChange('workout')} accessibilityRole="button" accessibilityLabel="Workout Tab">
           <VStack alignItems="center" space="xs">
-            <AntDesign 
-              name="appstore-o" 
+            <Feather 
+              name="grid" 
               color={selectedTab === 'workout' ? activeHex : inactiveHex} 
               size={iconSize}
             />
@@ -40,7 +40,7 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
         </Pressable>
         <Pressable onPress={() => onTabChange('progress')} accessibilityRole="button" accessibilityLabel="Progress Tab">
           <VStack alignItems="center" space="xs">
-            <AntDesign 
+            <Feather 
               name="calendar" 
               color={selectedTab === 'progress' ? activeHex : inactiveHex} 
               size={iconSize}
@@ -55,7 +55,7 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
         </Pressable>
         <Pressable onPress={() => onTabChange('profile')} accessibilityRole="button" accessibilityLabel="Profile Tab">
           <VStack alignItems="center" space="xs">
-            <AntDesign 
+            <Feather 
               name="user" 
               color={selectedTab === 'profile' ? activeHex : inactiveHex} 
               size={iconSize}

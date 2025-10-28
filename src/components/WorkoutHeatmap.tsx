@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { Box, HStack, VStack, Text, Pressable, Icon } from '@gluestack-ui/themed';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
 import { WEEKDAYS, WeekDay } from '../types/base';
 
@@ -92,8 +92,8 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits, onPres
           <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
           <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>
         </VStack>
-        {/* @ts-ignore */}
-        <Icon as={AntDesign as any} name="right" color="$white" />
+  {/* @ts-ignore */}
+  <Icon as={Feather as any} name="chevron-right" color="$white" />
       </HStack>
       <Box onLayout={handleLayout} style={{ width: '100%' }}>
         <HStack style={{ width: '100%', justifyContent: 'space-between', overflow: 'hidden' }}>

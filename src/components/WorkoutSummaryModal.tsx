@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Box, Text, VStack, HStack, Pressable, Icon } from '@gluestack-ui/themed';
 import { Modal, StyleSheet } from 'react-native';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import type { WorkoutSummaryPayload } from '../contexts/OverlayContext';
 import { useWorkoutHistory } from '../db/queries';
 import { supabase } from '../utils/supabaseClient';
@@ -74,7 +74,7 @@ const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
           {/* Close button */}
           <Pressable onPress={onClose} position="absolute" right={10} top={10} hitSlop={8}>
             {/* @ts-ignore */}
-            <Icon as={AntDesign as any} name="close" color="$gray400" size="md" />
+            <Icon as={Feather as any} name="x" color="$gray400" size="md" />
           </Pressable>
 
           {/* Celebration */}

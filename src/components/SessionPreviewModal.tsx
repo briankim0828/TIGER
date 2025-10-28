@@ -4,7 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
-import { AntDesign, Entypo } from '@expo/vector-icons';
+import { Feather, Entypo } from '@expo/vector-icons';
 import type { ProgramSplit } from '../types/ui';
 import { useDatabase } from '../db/queries';
 import { navigate } from '../navigation/rootNavigation';
@@ -275,7 +275,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
             <HStack alignItems="center" justifyContent="center" space="sm">
               {/* Calendar icon on the left */}
               {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
-              <Icon as={AntDesign as any} name="calendar" color="$white" size="md" />
+              <Icon as={Feather as any} name="calendar" color="$white" size="md" />
               <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
                 {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}
               </Text>
@@ -346,7 +346,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                 >
                   <HStack space="sm" justifyContent="center" alignItems="center">
                     {/* @ts-ignore */}
-                    <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                    <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
                     <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
                   </HStack>
                 </Pressable>
@@ -371,7 +371,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                     >
                       <HStack space="sm" justifyContent="center" alignItems="center">
                         {/* @ts-ignore */}
-                        <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+                        <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
                         <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
                       </HStack>
                     </Pressable>
@@ -457,7 +457,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                 <HStack alignItems="center" justifyContent="space-between" py="$3">
                   <HStack space="md" alignItems="center">
                     {/* @ts-ignore */}
-                    <Icon as={AntDesign as any} name="swap" color="$white" />
+                    <Icon as={Feather as any} name="repeat" color="$white" />
                     <Text color="$white" fontSize="$md">Switch splits</Text>
                   </HStack>
                 </HStack>
@@ -474,7 +474,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                 <HStack alignItems="center" justifyContent="space-between" py="$3">
                   <HStack space="md" alignItems="center">
                     {/* @ts-ignore */}
-                    <Icon as={AntDesign as any} name="delete" color="$red500" />
+                    <Icon as={Feather as any} name="trash-2" color="$red500" />
                     <Text color="$red500" fontSize="$md">Load empty workout</Text>
                   </HStack>
                 </HStack>
@@ -542,7 +542,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore */}
-                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Icon as={Feather as any} name="trash-2" color="$red500" />
                   <Text color="$red500" fontSize="$md">Delete</Text>
                 </HStack>
               </HStack>
@@ -558,7 +558,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore */}
-                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Icon as={Feather as any} name="repeat" color="$white" />
                   <Text color="$white" fontSize="$md">Replace</Text>
                 </HStack>
               </HStack>

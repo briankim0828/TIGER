@@ -9,7 +9,7 @@ import {
   Pressable,
   ScrollView,
 } from "@gluestack-ui/themed";
-import { AntDesign, Entypo } from "@expo/vector-icons";
+import { Feather, Entypo } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Legacy types are ignored; we use DB as the source of truth
@@ -171,7 +171,7 @@ const SplitDetailScreen = () => {
     >
       <HStack space="sm" justifyContent="center" alignItems="center">
   {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
-  <Icon as={AntDesign as any} name="plus" color="#6B8EF2" size="sm" />
+  <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
         <Text color="#6B8EF2" fontSize="$md">
           Add Exercise
         </Text>
@@ -207,7 +207,7 @@ const SplitDetailScreen = () => {
               left="$2"
             >
               {/* @ts-ignore */}
-              <Icon as={AntDesign as any} name="left" color="$white" />
+              <Icon as={Feather as any} name="chevron-left" color="$white" />
             </Button>
             <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
               {split.name}
@@ -228,7 +228,7 @@ const SplitDetailScreen = () => {
             >
               <HStack alignItems="center" space="xs">
                 {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                <Icon as={AntDesign as any} name="swap" color="#6B8EF2" size="xs" />
+                <Icon as={Feather as any} name="repeat" color="#6B8EF2" size="xs" />
                 <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
               </HStack>
             </Button>
@@ -323,7 +323,7 @@ const SplitDetailScreen = () => {
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore */}
-                  <Icon as={AntDesign as any} name="delete" color="$red500" />
+                  <Icon as={Feather as any} name="trash-2" color="$red500" />
                   <Text color="$red500" fontSize="$md">Delete</Text>
                 </HStack>
               </HStack>
@@ -336,7 +336,7 @@ const SplitDetailScreen = () => {
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore */}
-                  <Icon as={AntDesign as any} name="swap" color="$white" />
+                  <Icon as={Feather as any} name="repeat" color="$white" />
                   <Text color="$white" fontSize="$md">Replace</Text>
                 </HStack>
               </HStack>

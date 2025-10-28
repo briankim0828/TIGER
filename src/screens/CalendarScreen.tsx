@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, Text, Pressable, HStack, Icon, VStack } from '@gluestack-ui/themed';
-import { AntDesign } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { ScrollView } from 'react-native-gesture-handler';
 import WorkoutCalendar from '../components/WorkoutCalendar';
@@ -188,7 +188,7 @@ const CalendarScreen: React.FC = () => {
 			<HStack alignItems="center" px="$3" py="$3" space="sm">
 				<Pressable onPress={() => navigation.goBack()} accessibilityRole="button">
 					{/* @ts-ignore */}
-					<Icon as={AntDesign as any} name="left" color="$white" />
+					<Icon as={Feather as any} name="chevron-left" color="$white" />
 				</Pressable>
 				<Text color="$white" fontSize="$xl" fontWeight="$bold">Calendar</Text>
 			</HStack>

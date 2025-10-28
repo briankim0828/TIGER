@@ -23,7 +23,7 @@ import Animated, {
   Keyframe,
   Layout,
 } from "react-native-reanimated";
-import { AntDesign, Entypo } from "@expo/vector-icons";
+import { Feather, Entypo } from "@expo/vector-icons";
 import { WeekDay } from "../types/base";
 import { ProgramSplit, ProgramEditMode } from "../types/ui";
 import { parseFontSize } from "../../helper/fontsize";
@@ -273,7 +273,7 @@ const SplitItem = React.memo(
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
-                <Icon as={AntDesign as any} name="close" color="#EF4444" size="md" />
+                <Icon as={Feather as any} name="x" color="#EF4444" size="md" />
               </Pressable>
             </HStack>
           ) : (
@@ -302,7 +302,7 @@ const SplitItem = React.memo(
                       {/* Arrow (shown in None or Splits mode, hidden in Program mode) */}
                       <Animated.View style={arrowAnimatedStyle}>
                         {/* @ts-ignore */}
-                        <Icon as={AntDesign as any} name="right" color="#A1A1AA" size="sm" />
+                        <Icon as={Feather as any} name="chevron-right" color="#A1A1AA" size="sm" />
                       </Animated.View>
                     </HStack>
                   </Animated.View>
@@ -513,7 +513,7 @@ const MySplits: React.FC<MySplitsProps> = ({
               >
                 <HStack justifyContent="center" alignItems="center" style={{ gap: 8 }}>
                   {/* @ts-ignore */}
-                  <Icon as={AntDesign as any} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} size="sm" />
+                  <Icon as={Feather as any} name="plus" color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} size="sm" />
                   <Text 
                     color={canAddMoreSplits ? "#6B8EF2" : "#A1A1AA"} 
                     style={{ fontSize: 14, fontWeight: "bold" }}
