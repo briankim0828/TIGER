@@ -39,10 +39,14 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
 
   const showSessionSummary = useCallback((payload: SessionSummaryPayload) => {
+    console.log('[OverlayContext] showSessionSummary payload', payload);
     setSessionSummary(payload);
   }, []);
 
-  const hideSessionSummary = useCallback(() => setSessionSummary(null), []);
+  const hideSessionSummary = useCallback(() => {
+    console.log('[OverlayContext] hideSessionSummary');
+    setSessionSummary(null);
+  }, []);
 
   const showWorkoutSummary = useCallback((payload: WorkoutSummaryPayload) => {
     setWorkoutSummary(payload);

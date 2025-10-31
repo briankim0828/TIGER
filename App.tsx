@@ -42,6 +42,7 @@ import ExerciseSelectionView from "./src/components/ExerciseSelectionView";
 import DebugDatabaseScreen from "./src/screens/DebugDatabaseScreen";
 import LiveWorkoutDebug from "./src/screens/LiveWorkoutDebug";
 import DevFloatingDebug from "./src/components/DevFloatingDebug";
+import BottomSheetDebugScreen from "./src/screens/BottomSheetDebugScreen";
 import { useLiveActiveSession } from "./src/db/live/workouts";
 import { GluestackUIProvider, Box, Text, HStack, Button, Icon, useToast, Toast, ToastTitle, ToastDescription, VStack } from "@gluestack-ui/themed";
 import { Feather } from "@expo/vector-icons";
@@ -228,6 +229,7 @@ type RootStackParamList = {
   LiveWorkoutDebug: undefined;
   Settings: undefined;
   Calendar: undefined;
+  BottomSheetDebug: undefined;
 };
 
 // -----------------------------
@@ -412,6 +414,7 @@ const NavigationWrapper = () => {
           <Stack.Screen name="Main" component={MainTabs} />
           {/* Settings screen (standard push) */}
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="BottomSheetDebug" component={BottomSheetDebugScreen} />
           {/* Calendar screen for logging previous workouts */}
           <Stack.Screen name="Calendar" component={CalendarScreen} />
           <Stack.Group

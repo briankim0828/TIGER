@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
 import { Feather, Entypo } from '@expo/vector-icons';
@@ -54,6 +54,10 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const bottomSheetRef = useRef<BottomSheet>(null);
   const actionMenuRef = useRef<BottomSheet>(null);
   const splitMenuRef = useRef<BottomSheet>(null);
+
+  useEffect(() => {
+    console.log('[SessionPreviewModal] bottomSheetRef mount', Boolean(bottomSheetRef.current));
+  }, []);
   
   // State for session exercise preview (modifiable before starting)
   const [currentExercises, setCurrentExercises] = useState<ExerciseRow[]>([]);
@@ -92,7 +96,11 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   // Handle opening bottom sheet separately to ensure it works properly
   useEffect(() => {
     // Open immediately to full height like SplitDetailScreen
-    const t = setTimeout(() => bottomSheetRef.current?.expand(), 50);
+    const t = setTimeout(() => {
+      const index = bottomSheetRef.current?.animatedIndex?.value;
+      console.log('[SessionPreviewModal] calling expand()', index);
+      bottomSheetRef.current?.expand();
+    }, 50);
     return () => clearTimeout(t);
   }, []);
 
@@ -112,6 +120,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {    
+    console.log('[SessionPreviewModal] handleSheetChanges', index);
     // If sheet is closed, call onClose
     if (index === -1) {
       // set the visibility of the session summary modal to false in prgressScreen
@@ -269,7 +278,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <Box flex={1}>
+        <BottomSheetView style={styles.sheetContent}>
+          <Box flex={1}>
           {/* Header with today's date centered, back button on left */}
           <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2">
             <HStack alignItems="center" justifyContent="center" space="sm">
@@ -414,6 +424,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
             </HStack>
           </Box>
         </Box>
+        </BottomSheetView>
       </BottomSheet>
 
       {/* Split-level menu bottom sheet */}
@@ -429,7 +440,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <Box p="$4">
+        <BottomSheetView style={styles.sheetContent}>
+          <Box p="$4">
           {splitSheet.panel === 'root' ? (
             <VStack space="md">
               <Pressable
@@ -513,7 +525,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               </Button>
             </VStack>
           )}
-        </Box>
+          </Box>
+        </BottomSheetView>
       </BottomSheet>
 
       {/* Per-exercise action bottom sheet as sibling to avoid nested jitter */}
@@ -529,7 +542,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <Box p="$4">
+        <BottomSheetView style={styles.sheetContent}>
+          <Box p="$4">
           <VStack space="md">
             <Pressable
               onPress={() => {
@@ -564,7 +578,8 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
               </HStack>
             </Pressable>
           </VStack>
-        </Box>
+          </Box>
+        </BottomSheetView>
       </BottomSheet>
     </GestureHandlerRootView>
   );
@@ -580,6 +595,9 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 999,
     pointerEvents: 'box-none',
+  },
+  sheetContent: {
+    flex: 1,
   },
   contentContainer: {
     flex: 1,
