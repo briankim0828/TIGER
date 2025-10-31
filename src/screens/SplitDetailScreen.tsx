@@ -14,7 +14,7 @@ import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from "@gorhom/botto
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Legacy types are ignored; we use DB as the source of truth
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { StyleSheet } from "react-native";
+import { LayoutChangeEvent, StyleSheet, useWindowDimensions } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useDatabase } from "../db/queries";
@@ -39,14 +39,28 @@ const SplitDetailScreen = () => {
   const { split, newlyAddedExercises } = route.params;
   const splitColor = split.color || "#2A2E38";
   const [exercises, setExercises] = useState<ExerciseRow[]>([]);
-    const [actionSheet, setActionSheet] = useState<{ visible: boolean; rowId?: string; index?: number }>(() => ({ visible: false }));
-    // Action menu bottom sheet
-    const actionMenuRef = useRef<BottomSheet>(null);
-    const actionMenuSnapPoints = useMemo(() => ["28%"], []);
+  const [actionSheet, setActionSheet] = useState<{ visible: boolean; rowId?: string; index?: number }>(() => ({ visible: false }));
+  // Action menu bottom sheet
+  const actionMenuRef = useRef<BottomSheet>(null);
+  const actionMenuSnapPoints = useMemo(() => ["28%"], []);
   const [optionsSheetRefMap] = useState(() => new Map<string, string>());
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ["100%"], []);
+  const [contentHeight, setContentHeight] = useState<number | null>(null);
+  const windowHeight = useWindowDimensions().height;
   const insets = useSafeAreaInsets();
+  const snapPoints = useMemo(() => {
+    const MIN_HEIGHT = 260;
+    const fallback = Math.max(windowHeight * 0.6, MIN_HEIGHT);
+    if (!contentHeight || contentHeight <= 0) return [fallback];
+    return [Math.max(contentHeight, MIN_HEIGHT)];
+  }, [contentHeight, windowHeight]);
+  const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    const MAX_HEIGHT = Math.max(windowHeight - insets.top - 24, 320);
+    const MIN_HEIGHT = 260;
+    const clamped = Math.max(Math.min(height, MAX_HEIGHT), MIN_HEIGHT);
+    setContentHeight((prev) => (prev && Math.abs(prev - clamped) < 4 ? prev : clamped));
+  }, [insets.top, windowHeight]);
   // Edit state removed; Add Exercise is always visible now
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
@@ -207,7 +221,7 @@ const SplitDetailScreen = () => {
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
       <Box flex={1} backgroundColor="transparent">
-      <BottomSheet
+  <BottomSheet
         ref={bottomSheetRef}
         index={0}
         snapPoints={snapPoints}
@@ -221,8 +235,8 @@ const SplitDetailScreen = () => {
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <BottomSheetView style={styles.sheetContent}>
-          <Box flex={1}>
+        <BottomSheetView style={styles.sheetContent} onLayout={handleContentLayout}>
+          <Box>
           {/* Centered title header with back button on the left */}
           <Box p="$4" position="relative" alignItems="center" justifyContent="center">
             <Button
@@ -263,7 +277,6 @@ const SplitDetailScreen = () => {
           </HStack>
 
           <ScrollView
-            flex={1}
             showsVerticalScrollIndicator={false}
           >
             <VStack space="lg" p="$3">
@@ -325,6 +338,7 @@ const SplitDetailScreen = () => {
                 </Box>
               )}
             </VStack>
+            <Box h={45} />
           </ScrollView>
           </Box>
         </BottomSheetView>
@@ -385,7 +399,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetContent: {
-    flex: 1,
+    width: '100%',
   },
 });
 

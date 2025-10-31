@@ -410,6 +410,7 @@ const WorkoutScreen = () => {
             scrollEventThrottle={16}
           >
             <VStack space="md" p="$2">
+              <Box h={25} />
               <MyProgram
                 splits={splits}
                 editMode={editMode}
