@@ -10,10 +10,11 @@ import {
   ScrollView,
 } from "@gluestack-ui/themed";
 import { Feather, Entypo } from "@expo/vector-icons";
-import BottomSheet, { BottomSheetBackdrop } from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Legacy types are ignored; we use DB as the source of truth
-import { ScrollView as RNScrollView } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useDatabase } from "../db/queries";
@@ -49,6 +50,19 @@ const SplitDetailScreen = () => {
   // Edit state removed; Add Exercise is always visible now
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
+
+  useEffect(() => {
+    console.log('[SplitDetailScreen] bottomSheetRef mount', Boolean(bottomSheetRef.current));
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const index = bottomSheetRef.current?.animatedIndex?.value;
+      console.log('[SplitDetailScreen] calling expand()', index);
+      bottomSheetRef.current?.expand();
+    }, 50);
+    return () => clearTimeout(timeout);
+  }, []);
 
   // Pretty-print helper for body part labels (matches SessionPreviewModal)
   const titleCase = useCallback((s: string | null | undefined) => {
@@ -179,22 +193,36 @@ const SplitDetailScreen = () => {
     </Pressable>
   );
 
+  const handleSheetChanges = useCallback((index: number) => {
+    console.log('[SplitDetailScreen] handleSheetChanges', index);
+    if (index === -1) {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      } else {
+        navigation.navigate("WorkoutMain");
+      }
+    }
+  }, [navigation]);
+
   return (
-    <Box flex={1} backgroundColor="transparent">
+    <GestureHandlerRootView style={styles.rootContainer}>
+      <Box flex={1} backgroundColor="transparent">
       <BottomSheet
         ref={bottomSheetRef}
         index={0}
         snapPoints={snapPoints}
         topInset={insets.top}
         enablePanDownToClose
-        onClose={() => navigation.goBack()}
+        onChange={handleSheetChanges}
+        onClose={() => handleSheetChanges(-1)}
         backdropComponent={(props) => (
           <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
         )}
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <Box flex={1}>
+        <BottomSheetView style={styles.sheetContent}>
+          <Box flex={1}>
           {/* Centered title header with back button on the left */}
           <Box p="$4" position="relative" alignItems="center" justifyContent="center">
             <Button
@@ -298,7 +326,8 @@ const SplitDetailScreen = () => {
               )}
             </VStack>
           </ScrollView>
-        </Box>
+          </Box>
+        </BottomSheetView>
       </BottomSheet>
       {/* Per-exercise action bottom sheet as sibling to avoid nested-sheet jitter */}
       <BottomSheet
@@ -313,7 +342,8 @@ const SplitDetailScreen = () => {
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <Box p="$4">
+        <BottomSheetView style={styles.sheetContent}>
+          <Box p="$4">
           <VStack space="md">
             <Pressable onPress={async () => {
               const idx = actionSheet.index ?? -1;
@@ -342,10 +372,21 @@ const SplitDetailScreen = () => {
               </HStack>
             </Pressable>
           </VStack>
-        </Box>
+          </Box>
+        </BottomSheetView>
       </BottomSheet>
-    </Box>
+      </Box>
+    </GestureHandlerRootView>
   );
 };
+
+const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+  },
+  sheetContent: {
+    flex: 1,
+  },
+});
 
 export default SplitDetailScreen;
