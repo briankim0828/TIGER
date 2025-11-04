@@ -39,15 +39,9 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const insets = useSafeAreaInsets();
   const db = useDatabase();
   const { startWorkout } = useWorkout();
-  // Log props when component mounts or props change
+  // Previously logged props when component mounted or props changed; removed to reduce noise
   useEffect(() => {
-  console.log('SessionPreviewModal - Activated with data:', {
-      selectedDate,
-      scheduledSplit: scheduledSplit ? {
-        name: scheduledSplit.name,
-        exerciseCount: scheduledSplit.exerciseCount
-      } : null
-    });
+    // no-op
   }, [selectedDate, scheduledSplit]);
 
   // Refs

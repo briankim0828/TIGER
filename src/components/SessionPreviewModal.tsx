@@ -40,15 +40,9 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const windowHeight = useWindowDimensions().height;
   const db = useDatabase();
   const { startWorkout } = useWorkout();
-  // Log props when component mounts or props change
+  // Previously logged props when component mounted or props changed; removed to reduce noise
   useEffect(() => {
-    console.log('SessionPreviewModal - Activated with data:', {
-      selectedDate,
-      scheduledSplit: scheduledSplit ? {
-        name: scheduledSplit.name,
-        exerciseCount: scheduledSplit.exerciseCount
-      } : null
-    });
+    // no-op
   }, [selectedDate, scheduledSplit]);
 
   // Refs
@@ -57,7 +51,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const splitMenuRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
-    console.log('[SessionPreviewModal] bottomSheetRef mount', Boolean(bottomSheetRef.current));
+    // Bottom sheet ref mounted
   }, []);
   
   // State for session exercise preview (modifiable before starting)
@@ -112,8 +106,6 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   useEffect(() => {
     // Open immediately to full height like SplitDetailScreen
     const t = setTimeout(() => {
-      const index = bottomSheetRef.current?.animatedIndex?.value;
-      console.log('[SessionPreviewModal] calling expand()', index);
       bottomSheetRef.current?.expand();
     }, 50);
     return () => clearTimeout(t);
@@ -135,7 +127,6 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {    
-    console.log('[SessionPreviewModal] handleSheetChanges', index);
     // If sheet is closed, call onClose
     if (index === -1) {
       // set the visibility of the session summary modal to false in prgressScreen

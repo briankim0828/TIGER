@@ -48,12 +48,13 @@ const SplitDetailScreen = () => {
   const [contentHeight, setContentHeight] = useState<number | null>(null);
   const windowHeight = useWindowDimensions().height;
   const insets = useSafeAreaInsets();
-  const snapPoints = useMemo(() => {
-    const MIN_HEIGHT = 260;
-    const fallback = Math.max(windowHeight * 0.6, MIN_HEIGHT);
-    if (!contentHeight || contentHeight <= 0) return [fallback];
-    return [Math.max(contentHeight, MIN_HEIGHT)];
-  }, [contentHeight, windowHeight]);
+  // const snapPoints = useMemo(() => {
+  //   const MIN_HEIGHT = 260;
+  //   const fallback = Math.max(windowHeight * 0.6, MIN_HEIGHT);
+  //   if (!contentHeight || contentHeight <= 0) return [fallback];
+  //   return [Math.max(contentHeight, MIN_HEIGHT)];
+  // }, [contentHeight, windowHeight]);
+  const snapPoints = useMemo(() => ["100%"], []);
   const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
     const MAX_HEIGHT = Math.max(windowHeight - insets.top - 24, 320);
@@ -66,13 +67,11 @@ const SplitDetailScreen = () => {
   const db = useDatabase();
 
   useEffect(() => {
-    console.log('[SplitDetailScreen] bottomSheetRef mount', Boolean(bottomSheetRef.current));
+    // Bottom sheet ref mounted
   }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      const index = bottomSheetRef.current?.animatedIndex?.value;
-      console.log('[SplitDetailScreen] calling expand()', index);
       bottomSheetRef.current?.expand();
     }, 50);
     return () => clearTimeout(timeout);
@@ -208,7 +207,6 @@ const SplitDetailScreen = () => {
   );
 
   const handleSheetChanges = useCallback((index: number) => {
-    console.log('[SplitDetailScreen] handleSheetChanges', index);
     if (index === -1) {
       if (navigation.canGoBack()) {
         navigation.goBack();
