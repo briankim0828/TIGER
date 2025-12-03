@@ -150,7 +150,7 @@ interface ActiveWorkoutModalProps {
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isVisible,
   onClose,
-  onSave
+  onSave,
 }) => {
   const insets = useSafeAreaInsets();
   // navigation handled via global ref
@@ -160,7 +160,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   useEffect(() => {
     (async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         setAuthUserId(user?.id ?? null);
       } catch {}
     })();
@@ -244,8 +246,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     let cancelled = false;
     (async () => {
       if (!isVisible) return;
-  if (!authUserId) return;
-  const sid = await getActiveSessionId(authUserId);
+      if (!authUserId) return;
+      const sid = await getActiveSessionId(authUserId);
       if (!sid) return;
       if (!cancelled) setSessionId(sid);
       // Fetch header info (split title, startedAt)
@@ -274,7 +276,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         }
       } catch {}
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isVisible, authUserId, getActiveSessionId, getSessionInfo, getSplitName]);
 
   // When we have session start and exercises, fetch previous sets for each exercise
@@ -307,9 +311,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Open/close bottom sheet based on visibility
   useEffect(() => {
     const timer = setTimeout(() => {
-  if (isVisible && bottomSheetRef.current) {
+      if (isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.expand(); // Open to full height
-  } else if (!isVisible && bottomSheetRef.current) {
+      } else if (!isVisible && bottomSheetRef.current) {
         bottomSheetRef.current.close();
       }
     }, 100);
@@ -323,30 +327,34 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       console.log('ActiveWorkoutModal - Visibility changed to false, resetting state');
       setIsEndingWorkout(false);
       // Reset to the first page when closing
-      try { Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start(); } catch {}
+      try {
+        Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start();
+      } catch {}
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
-  // no expansion state to reset
-  // currentExercises derived from live snapshot; nothing to reset
+      // no expansion state to reset
+      // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
     }
     
     return () => {
       console.log('ActiveWorkoutModal - Component cleanup, resetting state');
       setIsEndingWorkout(false);
-      try { Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start(); } catch {}
+      try {
+        Animated.timing(slideX, { toValue: 0, duration: 0, useNativeDriver: true }).start();
+      } catch {}
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
-  // no expansion state to reset
-  // currentExercises derived from live snapshot; nothing to reset
+      // no expansion state to reset
+      // currentExercises derived from live snapshot; nothing to reset
     };
   }, [isVisible]);
 
@@ -356,7 +364,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (isVisible && sessionStartedAtMs && !isBackdated) {
       interval = setInterval(() => setTick((t) => t + 1), 1000);
     }
-    return () => { if (interval) clearInterval(interval); };
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [isVisible, sessionStartedAtMs, isBackdated]);
   
   // Handle bottom sheet changes
@@ -428,7 +438,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Initialize localInputValues when exercises change
   useEffect(() => {
     if (currentExercises.length > 0) {
-  const newValues: {[key: string]: {weightKg: string, reps: string}} = {};
+      const newValues: { [key: string]: { weightKg: string; reps: string } } = {};
       
       currentExercises.forEach((exercise, exerciseIndex) => {
         if (exercise.sets) {
@@ -448,12 +458,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Handle weight input change locally (no update to context)
   const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weightKg' | 'reps', value: string) => {
-    setLocalInputValues(prev => ({
+    setLocalInputValues((prev) => ({
       ...prev,
       [setKey]: {
         ...prev[setKey],
-        [field]: value
-      }
+        [field]: value,
+      },
     }));
   }, []);
 
@@ -466,7 +476,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
     const setKey = `${exerciseId}-${set.id || setIndex}`;
     const numericValue = parseFloat(localInputValues[setKey]?.[field] || '0');
-    if (isNaN(numericValue) && (localInputValues[setKey]?.[field]?.trim() !== '')) {
+    if (isNaN(numericValue) && localInputValues[setKey]?.[field]?.trim() !== '') {
       toast.show({
         placement: 'top',
         render: ({ id }) => (
@@ -481,10 +491,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
     const currentValue = localInputValues[setKey]?.[field] || '';
-  const original = set[field as 'weightKg' | 'reps'] || 0;
+    const original = set[field as 'weightKg' | 'reps'] || 0;
     const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
     if (next !== original) {
-  updateSet(set.id, { [field]: next } as any).catch(console.error);
+      updateSet(set.id, { [field]: next } as any).catch(console.error);
     }
   }, [currentExercises, localInputValues, updateSet, toast, sessionId]);
 
@@ -609,8 +619,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         return;
       }
   // Mark set as deleting to trigger animation
-  LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setDeletingSets(prev => new Set([...prev, setId]));
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setDeletingSets((prev) => new Set([...prev, setId]));
       
       // Wait for animation to complete before actually deleting
       setTimeout(async () => {
@@ -618,14 +628,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           await deleteSet(setId);
           // Optimistic local input cleanup
           const key = `${exerciseId}-${setId || setIndex}`;
-          setLocalInputValues(prev => {
+          setLocalInputValues((prev) => {
             const copy = { ...prev } as any;
             delete copy[key];
             return copy;
           });
           
           // Remove from deleting sets
-          setDeletingSets(prev => {
+          setDeletingSets((prev) => {
             const next = new Set(prev);
             next.delete(setId);
             return next;
@@ -644,7 +654,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         } catch (e) {
           console.error('Failed to delete set', e);
           // Remove from deleting sets on error
-          setDeletingSets(prev => {
+          setDeletingSets((prev) => {
             const next = new Set(prev);
             next.delete(setId);
             return next;
@@ -665,7 +675,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     } catch (e) {
       console.error('Failed to delete set', e);
       // Remove from deleting sets on error
-      setDeletingSets(prev => {
+      setDeletingSets((prev) => {
         const next = new Set(prev);
         next.delete(setId);
         return next;
@@ -776,12 +786,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {splitTitle || 'Active Workout'}
           </Text>
           <HStack space="xs" alignItems="center">
-          {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-          <Icon as={Feather as any} name="calendar" color="$textLight400" size="sm" />
-          {!!formattedDate && (
-            
-            <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>{formattedDate}</Text>
-          )}
+            {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+            <Icon as={Feather as any} name="calendar" color="$textLight400" size="sm" />
+            {!!formattedDate && (
+              <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>
+                {formattedDate}
+              </Text>
+            )}
           </HStack>
         </VStack>
 
@@ -838,15 +849,17 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const isDeleting = deletingSets.has(set.id);
 
     const renderRightActions = () => (
-      <View style={{
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'flex-end',
-        backgroundColor: '#ef4444', // red
-        borderRadius: 8,
-        marginVertical: 2,
-      }}>
-        <View style={{ paddingRight: 10}}>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'flex-end',
+          backgroundColor: '#ef4444', // red
+          borderRadius: 8,
+          marginVertical: 2,
+        }}
+      >
+        <View style={{ paddingRight: 10 }}>
           <Text style={{ color: 'white', fontWeight: 'bold' }}>Delete</Text>
         </View>
       </View>
@@ -874,10 +887,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             borderRadius: 8,
           }}
         >
-  {/* Set number */}
-  <Text w="$10" textAlign="center" color="$textLight50" fontWeight="$bold">{setIndex + 1}</Text>
-        {/* Previous column placeholder */}
-  <Text flex={1} textAlign="center" color="$textLight200" size="sm">{previousText}</Text>
+          {/* Set number */}
+          <Text w="$10" textAlign="center" color="$textLight50" fontWeight="$bold">
+            {setIndex + 1}
+          </Text>
+          {/* Previous column placeholder */}
+          <Text flex={1} textAlign="center" color="$textLight200" size="sm">
+            {previousText}
+          </Text>
         {/* Weight (lbs) */}
         {isCompleted ? (
           <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
@@ -940,7 +957,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         )}
         {/* Completion toggle on the right */}
         <Pressable
-          onPress={() => canComplete || isCompleted ? handleToggleSetCompletion(exerciseId, setIndex) : undefined}
+          onPress={() => (canComplete || isCompleted ? handleToggleSetCompletion(exerciseId, setIndex) : undefined)}
           disabled={!canComplete && !isCompleted}
           $pressed={{ opacity: 0.9 }}
           style={{
@@ -958,7 +975,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           <Ionicons
             name="checkmark"
             size={18}
-            color={isCompleted ? '#FFFFFF' : (canComplete ? '#FFFFFF' : '#71717a')}
+            color={isCompleted ? '#FFFFFF' : canComplete ? '#FFFFFF' : '#71717a'}
           />
         </Pressable>
         </HStack>
@@ -974,7 +991,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         isCompleted={isCompleted}
         onDeleteComplete={() => {
           // This will be called when delete animation completes
-          setDeletingSets(prev => {
+          setDeletingSets((prev) => {
             const next = new Set(prev);
             next.delete(set.id);
             return next;
@@ -993,12 +1010,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         onChange={handleSheetChanges}
         enablePanDownToClose={true}
         enableContentPanningGesture={true}
-  index={isVisible ? 0 : -1}
+        index={isVisible ? 0 : -1}
         snapPoints={snapPoints}
-  topInset={insets.top}
+        topInset={insets.top}
         keyboardBehavior="extend"
         keyboardBlurBehavior="restore"
-  // Match SessionPreviewModal visuals: dark background + white notch
+        // Match SessionPreviewModal visuals: dark background + white notch
         handleIndicatorStyle={{ backgroundColor: 'white', width: 40, height: 4 }}
         backgroundStyle={{ backgroundColor: '#2A2E38' }}
       >
@@ -1007,148 +1024,161 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           <Animated.View style={{ flex: 1, width: screenW * 2, flexDirection: 'row', transform: [{ translateX: slideX }] }}>
             {/* Page 0: Active session */}
             <View style={{ width: screenW }}>
-          <Box flex={1} width="100%" display="flex" >
-            <ScrollView
-              style={styles.scrollView}
-              contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              keyboardDismissMode="on-drag"
-            >
-              <Box width="100%" pb={30}> {/* Added padding to bottom for button area */}
-                
-                {/* Exercise list with sets */}
-                <VStack space="sm" width="100%">
-                  {currentExercises.map((exercise) => (
-                    <Box key={exercise.id}>
-                      <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
-                        <HStack space="sm" alignItems="center">
-                          <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
-                            {exercise.name}
+              <Box flex={1} width="100%" display="flex">
+                <ScrollView
+                  style={styles.scrollView}
+                  contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  keyboardDismissMode="on-drag"
+                >
+                  <Box width="100%" pb={30}>
+                    {/* Exercise list with sets */}
+                    <VStack space="sm" width="100%">
+                      {currentExercises.map((exercise) => (
+                        <Box key={exercise.id}>
+                          <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
+                            <HStack space="sm" alignItems="center">
+                              <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
+                                {exercise.name}
+                              </Text>
+                              <Pressable
+                                onPress={() => {
+                                  setActionExerciseId(exercise.id);
+                                  // Expand the action sheet
+                                  actionMenuRef.current?.expand();
+                                }}
+                                accessibilityRole="button"
+                              >
+                                {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                                <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+                              </Pressable>
+                            </HStack>
+
+                            {/* Always-expanded sets section */}
+                            <VStack mt="$2" space="xs" width="100%">
+                              {/* Column headers */}
+                              <HStack alignItems="center" justifyContent="space-between" mb="$0" width="100%">
+                                <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">
+                                  Set
+                                </Text>
+                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
+                                  Previous
+                                </Text>
+                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
+                                  lbs
+                                </Text>
+                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
+                                  Reps
+                                </Text>
+                                <View style={{ width: 28, alignItems: 'center' }}>
+                                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                                </View>
+                              </HStack>
+
+                              {(() => {
+                                const baseSets = exercise.sets || [];
+                                const optimistic = optimisticSets[exercise.id] || [];
+                                const baseIds = new Set(baseSets.map((s) => s.id));
+                                // Convert optimistic placeholders to RenderSet shape
+                                const optAsRender: RenderSet[] = optimistic
+                                  // If this placeholder has been hydrated and base already includes real id, skip rendering it
+                                  .filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)))
+                                  .map((o) => ({
+                                    // Keep a unique temp id to avoid duplicate keys with base rows
+                                    id: o.id,
+                                    weightKg: 0,
+                                    reps: 0,
+                                    isCompleted: false,
+                                  }));
+                                const all = [...baseSets, ...optAsRender];
+                                return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
+                              })()}
+
+                              <Pressable
+                                onPressIn={() => setPressedAddSetFor(exercise.id)}
+                                onPressOut={() => setPressedAddSetFor(null)}
+                                onPress={() => handleAddNewSet(exercise.id)}
+                                disabled={addingSetFor === exercise.id}
+                                bg="#1E222C"
+                                py="$1"
+                                px="$3"
+                                borderRadius="$md"
+                                style={{ width: '100%', opacity: pressedAddSetFor === exercise.id ? 0.7 : 1 }}
+                              >
+                                <Text color="$textLight200" textAlign="center">
+                                  + Add Set
+                                </Text>
+                              </Pressable>
+                            </VStack>
+                          </Box>
+                        </Box>
+                      ))}
+                    </VStack>
+
+                    <Box mt="$1" mb="$1" px="$2">
+                      <Pressable
+                        onPressIn={() => setIsAddExercisesPressed(true)}
+                        onPressOut={() => setIsAddExercisesPressed(false)}
+                        onPress={handleAddExercisePress}
+                        bg="#1A2E5A"
+                        style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', opacity: isAddExercisesPressed ? 0.8 : 1 }}
+                        py="$1"
+                        px="$6"
+                        borderRadius="$lg"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <HStack alignItems="center" space="sm">
+                          <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
+                          <Text color="#3B82F6" fontSize="$md" fontWeight="$bold">
+                            Add Exercises
                           </Text>
-                          <Pressable
-                            onPress={() => {
-                              setActionExerciseId(exercise.id);
-                              // Expand the action sheet
-                              actionMenuRef.current?.expand();
-                            }}
-                            accessibilityRole="button"
-                          >
-                            {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                            <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
-                          </Pressable>
                         </HStack>
-
-                        {/* Always-expanded sets section */}
-                        <VStack mt="$2" space="xs" width="100%">
-                          {/* Column headers */}
-                          <HStack alignItems="center" justifyContent="space-between" mb="$0" width="100%">
-                            <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">Set</Text>
-                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">Previous</Text>
-                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">lbs</Text>
-                            <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">Reps</Text>
-                            <View style={{ width: 28, alignItems: 'center' }}>
-                              <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                            </View>
-                          </HStack>
-
-                          {(() => {
-                            const baseSets = exercise.sets || [];
-                            const optimistic = optimisticSets[exercise.id] || [];
-                            const baseIds = new Set(baseSets.map((s) => s.id));
-                            // Convert optimistic placeholders to RenderSet shape
-                            const optAsRender: RenderSet[] = optimistic
-                              // If this placeholder has been hydrated and base already includes real id, skip rendering it
-                              .filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)))
-                              .map((o) => ({
-                                // Keep a unique temp id to avoid duplicate keys with base rows
-                                id: o.id,
-                                weightKg: 0,
-                                reps: 0,
-                                isCompleted: false,
-                              }));
-                            const all = [...baseSets, ...optAsRender];
-                            return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
-                          })()}
-
-                          <Pressable
-                            onPressIn={() => setPressedAddSetFor(exercise.id)}
-                            onPressOut={() => setPressedAddSetFor(null)}
-                            onPress={() => handleAddNewSet(exercise.id)}
-                            disabled={addingSetFor === exercise.id}
-                            bg="#1E222C"
-                            py="$1"
-                            px="$3"
-                            borderRadius="$md"
-                            style={{ width: '100%', opacity: pressedAddSetFor === exercise.id ? 0.7 : 1 }}
-                          >
-                            <Text color="$textLight200" textAlign="center">+ Add Set</Text>
-                          </Pressable>
-                        </VStack>
-                      </Box>
+                      </Pressable>
                     </Box>
-                  ))}
-                </VStack>
-                
-                <Box mt="$1" mb="$1" px="$2">
-                  <Pressable
-                    onPressIn={() => setIsAddExercisesPressed(true)}
-                    onPressOut={() => setIsAddExercisesPressed(false)}
-                    onPress={handleAddExercisePress}
-                    bg="#1A2E5A"
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', opacity: isAddExercisesPressed ? 0.8 : 1 }}
-                    py="$1"
-                    px="$6"
-                    borderRadius="$lg"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <HStack alignItems="center" space="sm">
-                      <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
-                      <Text color="#3B82F6" fontSize="$md" fontWeight="$bold">Add Exercises</Text>
-                    </HStack>
-                  </Pressable>
-                </Box>
 
-                <Box mb="$5" px="$2">
-                  <Pressable
-                    onPressIn={() => setIsCancelWorkoutPressed(true)}
-                    onPressOut={() => setIsCancelWorkoutPressed(false)}
-                    bg="#6d3434ff"
-                    py="$1"
-                    px="$6"
-                    borderRadius="$lg"
-                    alignItems="center"
-                    justifyContent="center"
-                    style={{ opacity: isCancelWorkoutPressed ? 0.7 : 1 }}
-                    onPress={async () => {
-                      // Cancel workout: close modal and delete workout
-                      if (sessionId) {
-                        try {
-                          await deleteWorkout(sessionId);
-                          bottomSheetRef.current?.close();
-                          toast.show({
-                            placement: 'top',
-                            render: ({ id }) => (
-                              <Toast nativeID={id} action="info" variant="accent">
-                                <VStack space="xs">
-                                  <ToastTitle>Workout Discarded</ToastTitle>
-                                </VStack>
-                              </Toast>
-                            ),
-                          });
-                        } catch (e) {
-                          console.error('Failed to discard workout', e);
-                        }
-                      }
-                    }}
-                  >
-                    <Text color="$red400" fontSize="$md" fontWeight="$bold" textAlign="center">Cancel Workout</Text>
-                  </Pressable>
-                </Box>
+                    <Box mb="$5" px="$2">
+                      <Pressable
+                        onPressIn={() => setIsCancelWorkoutPressed(true)}
+                        onPressOut={() => setIsCancelWorkoutPressed(false)}
+                        bg="#6d3434ff"
+                        py="$1"
+                        px="$6"
+                        borderRadius="$lg"
+                        alignItems="center"
+                        justifyContent="center"
+                        style={{ opacity: isCancelWorkoutPressed ? 0.7 : 1 }}
+                        onPress={async () => {
+                          // Cancel workout: close modal and delete workout
+                          if (sessionId) {
+                            try {
+                              await deleteWorkout(sessionId);
+                              bottomSheetRef.current?.close();
+                              toast.show({
+                                placement: 'top',
+                                render: ({ id }) => (
+                                  <Toast nativeID={id} action="info" variant="accent">
+                                    <VStack space="xs">
+                                      <ToastTitle>Workout Discarded</ToastTitle>
+                                    </VStack>
+                                  </Toast>
+                                ),
+                              });
+                            } catch (e) {
+                              console.error('Failed to discard workout', e);
+                            }
+                          }
+                        }}
+                      >
+                        <Text color="$red400" fontSize="$md" fontWeight="$bold" textAlign="center">
+                          Cancel Workout
+                        </Text>
+                      </Pressable>
+                    </Box>
+                  </Box>
+                </ScrollView>
               </Box>
-            </ScrollView>
-          </Box>
             </View>
             {/* Page 1: Save Session screen */}
             <View style={{ width: screenW }}>
