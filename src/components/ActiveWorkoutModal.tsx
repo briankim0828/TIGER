@@ -152,6 +152,32 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const debugLayout = useCallback((label: string, e: any) => {
+    try {
+      const { x, y, width, height } = e.nativeEvent.layout;
+      console.log(`[ActiveWorkoutModal][layout] ${label}`, { x, y, width, height });
+    } catch (err) {
+      console.log(`[ActiveWorkoutModal][layout] ${label} error`, err);
+    }
+  }, []);
+
+  const debugScroll = useCallback((label: string, e: any) => {
+    try {
+      const {
+        contentOffset: { y },
+        contentSize: { height: contentHeight },
+        layoutMeasurement: { height: viewportHeight },
+      } = e.nativeEvent;
+      console.log(`[ActiveWorkoutModal][scroll] ${label}`, {
+        offsetY: y,
+        contentHeight,
+        viewportHeight,
+        maxScroll: contentHeight - viewportHeight,
+      });
+    } catch (err) {
+      console.log(`[ActiveWorkoutModal][scroll] ${label} error`, err);
+    }
+  }, []);
   const insets = useSafeAreaInsets();
   // navigation handled via global ref
   const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, reorderSessionExercises, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
@@ -371,17 +397,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // Handle bottom sheet changes
   const handleSheetChanges = useCallback((index: number) => {
+    console.log('[ActiveWorkoutModal] BottomSheet onChange index', index, {
+      snapPoints,
+    });
     // If sheet is closed, call onClose
     if (index === -1) {
       // console.log('ActiveWorkoutModal - Sheet closed, calling onClose');
       onClose();
     }
-  }, [onClose]);
+  }, [onClose, snapPoints]);
   
   // Sliding two-page layout inside BottomSheet
   const [pageIndex, setPageIndex] = useState(0); // 0 = active, 1 = save
   const slideX = useRef(new Animated.Value(0)).current;
-  const screenW = Dimensions.get('window').width;
+  const windowDims = Dimensions.get('window');
+  const screenW = windowDims.width;
 
   const animateToIndex = useCallback((idx: number) => {
     setPageIndex(idx);
@@ -1019,20 +1049,48 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: 'white', width: 40, height: 4 }}
         backgroundStyle={{ backgroundColor: '#2A2E38' }}
       >
-        <BottomSheetView style={styles.contentContainer}>
+        <BottomSheetView
+          style={styles.contentContainer}
+          onLayout={(e) => debugLayout('BottomSheetView', e)}
+        >
           {pageIndex === 0 ? renderHeader() : null}
-          <Animated.View style={{ flex: 1, width: screenW * 2, flexDirection: 'row', transform: [{ translateX: slideX }] }}>
+          <Animated.View
+            style={{ flex: 1, width: screenW * 2, flexDirection: 'row', transform: [{ translateX: slideX }] }}
+          >
             {/* Page 0: Active session */}
-            <View style={{ width: screenW }}>
-              <Box flex={1} width="100%" display="flex">
+            <View
+              style={{ width: screenW }}
+              onLayout={(e) => debugLayout('Page0Wrapper', e)}
+            >
+              <Box flex={1} onLayout={(e) => debugLayout('Page0ScrollContainer', e)}>
                 <ScrollView
-                  style={styles.scrollView}
-                  contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+                  style={[
+                    styles.scrollView,
+                    {
+                      // Explicit viewport height: window height minus safe area top/bottom
+                      // and an allowance for the header/handle. This prevents the sheet
+                      // from making the ScrollView as tall as itself and forces a
+                      // smaller viewport so contentHeight can exceed viewportHeight.
+                      height: windowDims.height - insets.top - insets.bottom - 80,
+                    },
+                  ]}
+                  contentContainerStyle={[
+                    styles.scrollContent,
+                    { paddingBottom: insets.bottom + 40 },
+                  ]}
                   keyboardShouldPersistTaps="handled"
                   nestedScrollEnabled
                   keyboardDismissMode="on-drag"
+                  onLayout={(e) => debugLayout('ScrollView', e)}
+                  onScroll={(e) => debugScroll('ScrollView', e)}
+                  scrollEventThrottle={16}
                 >
-                  <Box width="100%" pb={30}>
+                  <Box
+                    width="100%"
+                    pb={30}
+                    // This box wraps all scrollable content including bottom buttons
+                    onLayout={(e) => debugLayout('ScrollContentRoot', e)}
+                  >
                     {/* Exercise list with sets */}
                     <VStack space="sm" width="100%">
                       {currentExercises.map((exercise) => (
@@ -1116,7 +1174,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       ))}
                     </VStack>
 
-                    <Box mt="$1" mb="$1" px="$2">
+                    <Box
+                      mt="$1"
+                      mb="$1"
+                      px="$2"
+                      onLayout={(e) => debugLayout('AddExercisesBox', e)}
+                    >
                       <Pressable
                         onPressIn={() => setIsAddExercisesPressed(true)}
                         onPressOut={() => setIsAddExercisesPressed(false)}
@@ -1138,7 +1201,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       </Pressable>
                     </Box>
 
-                    <Box mb="$5" px="$2">
+                    <Box
+                      mb="$5"
+                      px="$2"
+                      onLayout={(e) => debugLayout('CancelWorkoutBox', e)}
+                    >
                       <Pressable
                         onPressIn={() => setIsCancelWorkoutPressed(true)}
                         onPressOut={() => setIsCancelWorkoutPressed(false)}
@@ -1299,11 +1366,10 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
   },
   contentContainer: {
-    flex: 1,
     width: '100%',
     paddingBottom: 0,
     backgroundColor: '#2A2E38',
-  paddingHorizontal: 0,
+	paddingHorizontal: 0,
   },
   scrollView: {
     flex: 1,
