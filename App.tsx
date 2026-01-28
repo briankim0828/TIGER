@@ -82,7 +82,7 @@ try {
 // Active Workout Modal Container
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
-  const { endWorkout, getSessionInfo, getSplitName } = useWorkout();
+  const { endWorkout, getSessionInfo, getSplitName, getActiveSessionId } = useWorkout();
   const [isVisible, setIsVisible] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
@@ -158,10 +158,37 @@ const ActiveWorkoutModalContainer = () => {
   };
 
   const handleModalClose = () => {
-  // On swipe-down, keep session active but suppress the modal and show banner
-  setIsVisible(false);
-  setIsSuppressed(true);
-  if (sessionId) setBannerVisible(true);
+    // Called when the ActiveWorkoutModal bottom sheet closes.
+    // We only want to show the banner if a workout session is *still active*.
+    // This avoids the banner lingering after Finish/Cancel/Discard, where the
+    // modal closes but the "live active session" hook may not have re-rendered yet.
+    setIsVisible(false);
+    setIsSuppressed(true);
+    setBannerVisible(false);
+
+    // Re-check from the DB (source of truth) on the next tick.
+    setTimeout(async () => {
+      try {
+        if (!authUserId) {
+          setIsSuppressed(false);
+          setBannerVisible(false);
+          return;
+        }
+        const activeId = await getActiveSessionId(authUserId);
+        if (activeId) {
+          setSessionId(activeId);
+          setBannerVisible(true);
+        } else {
+          setIsSuppressed(false);
+          setBannerVisible(false);
+          setSessionId(null);
+        }
+      } catch {
+        // If we can't determine, default to hiding the banner.
+        setIsSuppressed(false);
+        setBannerVisible(false);
+      }
+    }, 0);
   };
 
   return (
