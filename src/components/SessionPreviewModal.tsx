@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import { LayoutChangeEvent, StyleSheet, useWindowDimensions } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,7 +37,6 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
       .join(' ');
   }, []);
   const insets = useSafeAreaInsets();
-  const windowHeight = useWindowDimensions().height;
   const db = useDatabase();
   const { startWorkout } = useWorkout();
   // Previously logged props when component mounted or props changed; removed to reduce noise
@@ -57,21 +56,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   // State for session exercise preview (modifiable before starting)
   const [currentExercises, setCurrentExercises] = useState<ExerciseRow[]>([]);
   const [activeSplit, setActiveSplit] = useState<ProgramSplit | null>(scheduledSplit ?? null);
-  const [contentHeight, setContentHeight] = useState<number | null>(null);
-  const snapPoints = useMemo(() => {
-    const MIN_HEIGHT = 280;
-    const fallback = Math.max(windowHeight * 0.65, MIN_HEIGHT);
-    if (!contentHeight || contentHeight <= 0) return [fallback];
-    return [Math.max(contentHeight, MIN_HEIGHT)];
-  }, [contentHeight, windowHeight]);
-
-  const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
-    const next = event.nativeEvent.layout.height;
-    const MAX_HEIGHT = Math.max(windowHeight - insets.top - 24, 320);
-    const MIN_HEIGHT = 280;
-    const clamped = Math.max(Math.min(next, MAX_HEIGHT), MIN_HEIGHT);
-    setContentHeight((prev) => (prev && Math.abs(prev - clamped) < 4 ? prev : clamped));
-  }, [insets.top, windowHeight]);
+  const snapPoints = useMemo(() => ['100%'], []);
   const actionMenuSnapPoints = useMemo(() => ['28%'], []);
   const [actionSheet, setActionSheet] = useState<{ visible: boolean; index?: number }>({ visible: false });
   const splitMenuSnapPoints = useMemo(() => ['40%'], []);
@@ -273,9 +258,11 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         enablePanDownToClose
         index={0}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
+        animateOnMount
         topInset={insets.top}
         // Reduce layout thrash when action menu is open
-        enableOverDrag={!actionSheet.visible}
+        enableOverDrag={false}
         enableHandlePanningGesture={!actionSheet.visible}
         enableContentPanningGesture={!actionSheet.visible}
         backdropComponent={(props) => (
@@ -284,7 +271,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <BottomSheetView style={styles.sheetContent} onLayout={handleContentLayout}>
+        <BottomSheetView style={styles.sheetContent}>
           <Box>
           {/* Header with today's date centered, back button on left */}
           <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2">
@@ -399,7 +386,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
           </ScrollView>
 
           {/* Bottom action buttons */}
-          <Box p="$4" pb="$12">
+          <Box p="$4" >
             <HStack space="sm">
               <Pressable
                 backgroundColor="$red500"
@@ -603,6 +590,7 @@ const styles = StyleSheet.create({
     pointerEvents: 'box-none',
   },
   sheetContent: {
+    flex: 1,
     width: '100%',
   },
   contentContainer: {
