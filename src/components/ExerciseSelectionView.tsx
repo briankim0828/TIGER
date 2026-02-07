@@ -197,7 +197,7 @@ const ExerciseSelectionView = () => {
                   }}
                 >
                   <Text
-                    color={selectedBodyPart === bodyPart ? "$white" : "$gray400"}
+                    color="$white"
                     fontWeight={
                       selectedBodyPart === bodyPart ? "$semibold" : "$normal"
                     }
