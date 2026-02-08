@@ -178,15 +178,6 @@ const SettingsScreen: React.FC = () => {
           </Button>
 
           <Button
-            variant="outline"
-            action="secondary"
-            size="lg"
-            onPress={() => (navigation as any).navigate('BottomSheetDebug')}
-          >
-            <ButtonText>Open Bottom Sheet Debug</ButtonText>
-          </Button>
-
-          <Button
             variant="solid"
             action="secondary"
             size="lg"
