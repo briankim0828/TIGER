@@ -25,7 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useUnit } from '../contexts/UnitContext';
 import { useWorkoutHistory } from '../db/queries';
-import { signOutUser, getCurrentUser } from '../supabase/supabaseProfile';
+import { signOutUser, getCurrentUser, deleteMyAccount } from '../supabase/supabaseProfile';
 
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -35,6 +35,9 @@ const SettingsScreen: React.FC = () => {
   const history = useWorkoutHistory();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const cancelRef = React.useRef(null);
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = React.useState(false);
+  const deleteAccountCancelRef = React.useRef(null);
+  const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
 
   const handleLogout = async () => {
     try {
@@ -93,6 +96,46 @@ const SettingsScreen: React.FC = () => {
         ),
       });
       setIsAlertOpen(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      setIsDeletingAccount(true);
+      const { error } = await deleteMyAccount();
+      if (error) throw error;
+
+      setIsDeleteAccountOpen(false);
+
+      // Best-effort: clear local auth state/session.
+      await signOutUser();
+
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Account Deleted</ToastTitle>
+              <ToastDescription>Your account and data have been deleted.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } catch (error) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Error</ToastTitle>
+              <ToastDescription>Failed to delete account.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+      setIsDeleteAccountOpen(false);
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -200,6 +243,18 @@ const SettingsScreen: React.FC = () => {
           >
             <ButtonText color="$red600">Clear All Workout Data</ButtonText>
           </Button>
+
+          <Button
+            variant="solid"
+            action="negative"
+            size="lg"
+            mt={2}
+            onPress={() => setIsDeleteAccountOpen(true)}
+            bg="$red600"
+            $pressed={{ bg: '$red700' }}
+          >
+            <ButtonText>Delete Account</ButtonText>
+          </Button>
         </VStack>
       </Box>
 
@@ -231,6 +286,40 @@ const SettingsScreen: React.FC = () => {
               </Button>
               <Button bg="$red600" action="negative" onPress={handleClearAllData}>
                 <ButtonText>Clear Data</ButtonText>
+              </Button>
+            </HStack>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm dialog for deleting account */}
+      <AlertDialog
+        isOpen={isDeleteAccountOpen}
+        leastDestructiveRef={deleteAccountCancelRef}
+        onClose={() => setIsDeleteAccountOpen(false)}
+      >
+        <AlertDialogBackdrop />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <Text fontWeight="$bold">Delete Account</Text>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <Text size="sm">
+              This will permanently delete your account and all related content from the database. This action cannot be undone.
+            </Text>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <HStack space="sm" width="100%" justifyContent="flex-end">
+              <Button
+                variant="outline"
+                action="secondary"
+                onPress={() => setIsDeleteAccountOpen(false)}
+                ref={deleteAccountCancelRef}
+              >
+                <ButtonText>Cancel</ButtonText>
+              </Button>
+              <Button bg="$red600" action="negative" isDisabled={isDeletingAccount} onPress={handleDeleteAccount}>
+                <ButtonText>{isDeletingAccount ? 'Deleting…' : 'Delete'}</ButtonText>
               </Button>
             </HStack>
           </AlertDialogFooter>

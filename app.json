@@ -1,7 +1,7 @@
 {
   "expo": {
-  "name": "TIGER",
-  "slug": "tiger",
+    "name": "TIGER",
+    "slug": "tiger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -17,18 +17,20 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jbk.PR"
+      "bundleIdentifier": "com.jbk.tigerfitness"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.jbk.PR"
+      "package": "com.jbk.tigerfitness"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": []
+    "plugins": [
+      "expo-web-browser"
+    ]
   }
 }

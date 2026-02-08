@@ -4,6 +4,7 @@ import {
   VStack,
   Button,
   ButtonText,
+  ButtonIcon,
   useToast,
   Toast,
   ToastTitle,
@@ -16,6 +17,19 @@ import { supabase } from "../utils/supabaseClient";
 import { StyleSheet, TextInput } from "react-native";
 import { parseFontSize } from "../../helper/fontsize";
 import { useNavigation } from "@react-navigation/native";
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import * as AuthSession from 'expo-auth-session';
+import Constants from 'expo-constants';
+import { AntDesign } from '@expo/vector-icons';
+import {
+  GOOGLE_EXPO_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+} from '@env';
+
+WebBrowser.maybeCompleteAuthSession();
 
 const LoginScreen = () => {
   const toast = useToast();
@@ -25,6 +39,98 @@ const LoginScreen = () => {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
+
+  const isExpoGo = Constants.appOwnership === 'expo';
+  const hasGoogleClientId = Boolean(
+    GOOGLE_EXPO_CLIENT_ID || GOOGLE_IOS_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID
+  );
+
+  const googleRedirectUri = React.useMemo(() => {
+    if (!isExpoGo) return undefined;
+    try {
+      // Deprecated but still the simplest way to get the stable auth.expo.io proxy URL for Expo Go.
+      return AuthSession.getRedirectUrl('oauthredirect');
+    } catch {
+      return undefined;
+    }
+  }, [isExpoGo]);
+
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
+    clientId: GOOGLE_EXPO_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || 'MISSING_GOOGLE_CLIENT_ID',
+    iosClientId: GOOGLE_IOS_CLIENT_ID,
+    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+    webClientId: GOOGLE_WEB_CLIENT_ID,
+    ...(googleRedirectUri ? { redirectUri: googleRedirectUri } : {}),
+  });
+
+  React.useEffect(() => {
+    (async () => {
+      if (!googleResponse) return;
+      if (googleResponse.type !== 'success') return;
+
+      const idToken =
+        (googleResponse as any).params?.id_token ||
+        (googleResponse as any).authentication?.idToken ||
+        undefined;
+      if (!idToken) {
+        toast.show({
+          placement: 'top',
+          render: ({ id }) => (
+            <Toast nativeID={id} action="error" variant="solid">
+              <VStack space="xs">
+                <ToastTitle>Google Sign In Failed</ToastTitle>
+                <ToastDescription>Missing Google ID token.</ToastDescription>
+              </VStack>
+            </Toast>
+          ),
+        });
+        return;
+      }
+
+      const { error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+
+      if (error) {
+        toast.show({
+          placement: 'top',
+          render: ({ id }) => (
+            <Toast nativeID={id} action="error" variant="solid">
+              <VStack space="xs">
+                <ToastTitle>Google Sign In Failed</ToastTitle>
+                <ToastDescription>{error.message ?? 'Unable to authenticate with Google.'}</ToastDescription>
+              </VStack>
+            </Toast>
+          ),
+        });
+        return;
+      }
+
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Signed In with Google</ToastTitle>
+            </VStack>
+          </Toast>
+        ),
+      });
+    })().catch(() => {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Google Sign In Failed</ToastTitle>
+              <ToastDescription>An unexpected error occurred.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    });
+  }, [googleResponse, toast]);
 
   console.log("🚀 ~ LoginScreen ~ email:", email);
 
@@ -105,6 +211,38 @@ const LoginScreen = () => {
     }
   };
 
+  const handleGoogleSignUp = async () => {
+    try {
+      if (!hasGoogleClientId) {
+        toast.show({
+          placement: 'top',
+          render: ({ id }) => (
+            <Toast nativeID={id} action="error" variant="solid">
+              <VStack space="xs">
+                <ToastTitle>Google Sign Up Not Configured</ToastTitle>
+                <ToastDescription>Missing Google OAuth client IDs in .env.</ToastDescription>
+              </VStack>
+            </Toast>
+          ),
+        });
+        return;
+      }
+      await googlePromptAsync();
+    } catch (e) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Google Sign Up Failed</ToastTitle>
+              <ToastDescription>{e instanceof Error ? e.message : 'An unknown error occurred'}</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    }
+  };
+
   return (
     <Box flex={1} bg="#1E2028" pt={20} testID="login-screen-box">
       <Center flex={1} px="$4">
@@ -152,6 +290,22 @@ const LoginScreen = () => {
           >
             <ButtonText>{isSignUp ? "Sign Up" : "Sign In"}</ButtonText>
           </Button>
+
+          {isSignUp && (
+            <Button
+              size="lg"
+              variant="outline"
+              action="secondary"
+              onPress={handleGoogleSignUp}
+              isDisabled={!googleRequest}
+              backgroundColor="$white"
+              borderColor="$transparent"
+            >
+              {/* @ts-ignore ButtonIcon typing for vector icons */}
+              <ButtonIcon as={AntDesign as any} name="google" mr="$2" />
+              <ButtonText>Continue with Google</ButtonText>
+            </Button>
+          )}
 
           <Button
             size="lg"

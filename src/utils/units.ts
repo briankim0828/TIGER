@@ -2,6 +2,11 @@ export type UnitSystem = 'kg' | 'lb';
 
 const KG_TO_LB = 2.2046226218;
 
+function roundWeight(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.round(value);
+}
+
 export function unitLabel(unit: UnitSystem): string {
   return unit === 'lb' ? 'lbs' : 'kg';
 }
@@ -15,11 +20,13 @@ export function lbToKg(lb: number): number {
 }
 
 export function toDisplayWeight(valueKg: number, unit: UnitSystem): number {
-  return unit === 'lb' ? kgToLb(valueKg) : valueKg;
+  const display = unit === 'lb' ? kgToLb(valueKg) : valueKg;
+  return roundWeight(display);
 }
 
 export function toStorageKg(displayValue: number, unit: UnitSystem): number {
-  return unit === 'lb' ? lbToKg(displayValue) : displayValue;
+  const kg = unit === 'lb' ? lbToKg(displayValue) : displayValue;
+  return roundWeight(kg);
 }
 
 export function formatNumber(value: number, decimals = 1): string {
@@ -33,8 +40,9 @@ export function formatNumber(value: number, decimals = 1): string {
 
 export function formatWeightFromKg(kg: number | null | undefined, unit: UnitSystem, decimals = 1): string {
   if (kg === null || kg === undefined) return '';
-  const display = toDisplayWeight(kg, unit);
-  return formatNumber(display, decimals);
+  // We always show weights as integers across the app.
+  const displayInt = toDisplayWeight(kg, unit);
+  return formatNumber(displayInt, 0);
 }
 
 export function formatVolumeFromKg(totalVolumeKg: number | null | undefined, unit: UnitSystem, decimals = 0): string {

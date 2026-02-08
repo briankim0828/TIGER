@@ -99,6 +99,11 @@ async function pushToServer(db: SQLite.SQLiteDatabase, item: any) {
   const op = item.op as string;
   const rowId = item.row_id as string;
   const payload = item.payload ? JSON.parse(item.payload) : undefined;
+  // Normalize numeric payloads (defensive): keep weights as integers across sync.
+  if (table === 'workout_sets' && payload && typeof payload === 'object' && (payload as any).weight_kg !== undefined && (payload as any).weight_kg !== null) {
+    const v = Number((payload as any).weight_kg);
+    if (Number.isFinite(v)) (payload as any).weight_kg = Math.round(v);
+  }
   // Schema sanitation for specific tables
   if (table === 'split_day_assignments' && payload && typeof payload === 'object') {
     // Remote schema does not have created_at/updated_at

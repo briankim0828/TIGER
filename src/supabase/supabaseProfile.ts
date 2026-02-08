@@ -40,6 +40,21 @@ export const signOutUser = async (): Promise<{ error: any | null }> => {
   }
 };
 
+/**
+ * Permanently deletes the currently authenticated user and all related data.
+ * Backed by the Postgres RPC function public.delete_my_account().
+ */
+export const deleteMyAccount = async (): Promise<{ error: any | null }> => {
+  try {
+    const { error } = await supabase.rpc('delete_my_account');
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    return { error };
+  }
+};
+
 // --- User Profile ---
 
 /**
