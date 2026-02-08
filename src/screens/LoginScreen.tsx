@@ -14,7 +14,7 @@ import {
   Text,
 } from "@gluestack-ui/themed";
 import { supabase } from "../utils/supabaseClient";
-import { StyleSheet, TextInput } from "react-native";
+import { Platform, StyleSheet, TextInput } from "react-native";
 import { parseFontSize } from "../../helper/fontsize";
 import { useNavigation } from "@react-navigation/native";
 import * as WebBrowser from 'expo-web-browser';
@@ -40,28 +40,35 @@ const LoginScreen = () => {
   const [displayName, setDisplayName] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
 
-  const isExpoGo = Constants.appOwnership === 'expo';
+  const executionEnvironment = (Constants as any).executionEnvironment as string | undefined;
+  const isExpoGo = executionEnvironment === 'storeClient';
+  const needsIosClientId = Platform.OS === 'ios';
+  const needsAndroidClientId = Platform.OS === 'android';
   const hasGoogleClientId = Boolean(
-    GOOGLE_EXPO_CLIENT_ID || GOOGLE_IOS_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_WEB_CLIENT_ID
+    (!needsIosClientId || GOOGLE_IOS_CLIENT_ID) && (!needsAndroidClientId || GOOGLE_ANDROID_CLIENT_ID)
   );
 
-  const googleRedirectUri = React.useMemo(() => {
-    if (!isExpoGo) return undefined;
-    try {
-      // Deprecated but still the simplest way to get the stable auth.expo.io proxy URL for Expo Go.
-      return AuthSession.getRedirectUrl('oauthredirect');
-    } catch {
-      return undefined;
-    }
-  }, [isExpoGo]);
+  const redirectUri = React.useMemo(() => {
+    // In a Dev Client / standalone build, this resolves to a real app-scheme redirect:
+    //   tiger://oauth
+    // Expo Go often cannot reliably use auth.expo.io proxy anymore.
+    return AuthSession.makeRedirectUri({ scheme: 'tiger', path: 'oauth' });
+  }, []);
 
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
-    clientId: GOOGLE_EXPO_CLIENT_ID || GOOGLE_WEB_CLIENT_ID || 'MISSING_GOOGLE_CLIENT_ID',
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    ...(googleRedirectUri ? { redirectUri: googleRedirectUri } : {}),
-  });
+  console.log('[GoogleAuth] redirectUri', redirectUri);
+
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest(
+    {
+      // Dev Client / native builds
+      iosClientId: GOOGLE_IOS_CLIENT_ID,
+      androidClientId: GOOGLE_ANDROID_CLIENT_ID,
+      // Keep web client for web platform (and harmless on native)
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+
+      scopes: ['openid', 'profile', 'email'],
+      redirectUri,
+    } as any
+  );
 
   React.useEffect(() => {
     (async () => {
@@ -105,6 +112,31 @@ const LoginScreen = () => {
           ),
         });
         return;
+      }
+
+      // Ensure our app-specific display_name is set for Google sign-ups.
+      // Supabase typically provides name/full_name in user_metadata, but our app uses display_name.
+      try {
+        const { data } = await supabase.auth.getUser();
+        const user = data?.user;
+        const meta: any = (user as any)?.user_metadata ?? {};
+        const existing = (meta?.display_name ?? '').toString().trim();
+        if (!existing) {
+          const candidate = (
+            meta?.full_name ||
+            meta?.name ||
+            meta?.given_name ||
+            (user?.email ? user.email.split('@')[0] : '')
+          )
+            ?.toString()
+            .trim();
+
+          if (candidate) {
+            await supabase.auth.updateUser({ data: { display_name: candidate } });
+          }
+        }
+      } catch {
+        // Non-fatal: continue even if metadata update fails.
       }
 
       toast.show({
@@ -213,14 +245,39 @@ const LoginScreen = () => {
 
   const handleGoogleSignUp = async () => {
     try {
+      if (isExpoGo) {
+        toast.show({
+          placement: 'top',
+          render: ({ id }) => (
+            <Toast nativeID={id} action="error" variant="solid">
+              <VStack space="xs">
+                <ToastTitle>Google Sign Up Requires Dev Build</ToastTitle>
+                <ToastDescription>
+                  Google OAuth is unreliable in Expo Go. Build a development client via EAS and try again.
+                </ToastDescription>
+              </VStack>
+            </Toast>
+          ),
+        });
+        return;
+      }
+
       if (!hasGoogleClientId) {
+        const missing: string[] = [];
+        if (needsIosClientId && !GOOGLE_IOS_CLIENT_ID) missing.push('GOOGLE_IOS_CLIENT_ID');
+        if (needsAndroidClientId && !GOOGLE_ANDROID_CLIENT_ID) missing.push('GOOGLE_ANDROID_CLIENT_ID');
+
         toast.show({
           placement: 'top',
           render: ({ id }) => (
             <Toast nativeID={id} action="error" variant="solid">
               <VStack space="xs">
                 <ToastTitle>Google Sign Up Not Configured</ToastTitle>
-                <ToastDescription>Missing Google OAuth client IDs in .env.</ToastDescription>
+                <ToastDescription>
+                  {missing.length
+                    ? `Missing in .env: ${missing.join(', ')}`
+                    : 'Missing Google OAuth client IDs in .env.'}
+                </ToastDescription>
               </VStack>
             </Toast>
           ),
@@ -302,8 +359,8 @@ const LoginScreen = () => {
               borderColor="$transparent"
             >
               {/* @ts-ignore ButtonIcon typing for vector icons */}
-              <ButtonIcon as={AntDesign as any} name="google" mr="$2" />
-              <ButtonText>Continue with Google</ButtonText>
+              <ButtonIcon as={AntDesign as any} name="google" mr="$2" size={28} />
+              <ButtonText color="#111111">Sign up with Google</ButtonText>
             </Button>
           )}
 

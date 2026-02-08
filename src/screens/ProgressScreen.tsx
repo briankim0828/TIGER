@@ -31,11 +31,21 @@ const ProgressScreen: React.FC = () => {
   const history = useWorkoutHistory();
   const { startWorkout, getActiveSessionId } = useWorkout();
   const [authUserId, setAuthUserId] = React.useState<string | null>(null);
+  const [userFirstName, setUserFirstName] = React.useState<string>('');
   React.useEffect(() => {
     (async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         setAuthUserId(user?.id ?? null);
+
+        const meta: any = (user as any)?.user_metadata ?? {};
+        const display =
+          (meta?.display_name ?? meta?.full_name ?? meta?.name ?? '')
+            .toString()
+            .trim() ||
+          (user?.email ? user.email.split('@')[0] : '');
+        const first = display.toString().trim().split(/\s+/)[0] ?? '';
+        setUserFirstName(first);
       } catch {}
     })();
   }, []);
@@ -95,11 +105,12 @@ const ProgressScreen: React.FC = () => {
   // Time-based greeting
   const greeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return 'Good morning, Brian.';
-    if (hour >= 12 && hour < 17) return 'Good afternoon, Brian.';
-    if (hour >= 17 && hour < 23) return 'Good evening, Brian.';
-    return 'Welcome back, Brian.';
-  }, []);
+    const suffix = userFirstName ? `, ${userFirstName}.` : '.';
+    if (hour >= 5 && hour < 12) return `Good morning${suffix}`;
+    if (hour >= 12 && hour < 17) return `Good afternoon${suffix}`;
+    if (hour >= 17 && hour < 23) return `Good evening${suffix}`;
+    return `Welcome back${suffix}`;
+  }, [userFirstName]);
 
   // Parse YYYY-MM-DD as a local date to avoid timezone shifting and map to WeekDay label
   const getDayOfWeek = useCallback((dateString: string | null) => {

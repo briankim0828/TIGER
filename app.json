@@ -2,6 +2,7 @@
   "expo": {
     "name": "TIGER",
     "slug": "tiger",
+    "scheme": "tiger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -31,6 +32,11 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a6a44c16-607b-4dde-815b-d96f5962885f"
+      }
+    }
   }
 }
