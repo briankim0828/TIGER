@@ -72,7 +72,7 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits, onPres
   ), [today]);
   const splitLabel = useMemo(() => {
     const todaySplit = getSplitForDay(ROWS[(todayDow + 6) % 7] as WeekDay, splits);
-    return todaySplit ? todaySplit.name : 'No split scheduled';
+    return todaySplit ? todaySplit.name : 'Empty Workout';
   }, [todayDow, splits]);
 
   return (
