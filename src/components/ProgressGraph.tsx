@@ -3,7 +3,7 @@ import { Box, Text, VStack, Icon, HStack, Pressable } from '@gluestack-ui/themed
 import { Entypo, MaterialIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
 import { useUnit } from '../contexts/UnitContext';
-import { formatVolumeFromKg, unitLabel } from '../utils/units';
+import { formatVolumeFromKg, kgToLb, unitLabel } from '../utils/units';
 
 // Minimal shape we need from a session
 export type ProgressGraphSession = {
@@ -75,7 +75,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
       )
       .map((s) => ({
         iso: s.startedAt as string,
-        volume: (s.totalVolumeKg ?? 0) as number,
+        volumeKg: (s.totalVolumeKg ?? 0) as number,
       }))
       .filter((s) => !isNaN(Date.parse(s.iso)))
       .sort((a, b) => Date.parse(a.iso) - Date.parse(b.iso));
@@ -83,7 +83,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
     // Show at most the most recent 9 points (chronological within the window).
     const cleaned = cleanedAll.length > 9 ? cleanedAll.slice(cleanedAll.length - 9) : cleanedAll;
 
-    const values = cleaned.map((c) => c.volume);
+    const values = cleaned.map((c) => (unit === 'lb' ? kgToLb(c.volumeKg) : c.volumeKg));
     const max = values.length ? Math.max(...values) : 0;
     const pad = max > 0 ? Math.ceil(max * 0.15) : 10;
     const maxValue = max + pad;
@@ -104,11 +104,12 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
 
     const data = cleaned.map((c, idx) => {
       const showLabel = labelIndexes.has(idx);
+      const displayVolume = unit === 'lb' ? kgToLb(c.volumeKg) : c.volumeKg;
       // Include iso and volume to power pointer label rendering
-      return { value: c.volume, label: showLabel ? fmtAxisDateLabel(c.iso) : '', iso: c.iso, volume: c.volume } as any;
+      return { value: displayVolume, label: showLabel ? fmtAxisDateLabel(c.iso) : '', iso: c.iso, volumeKg: c.volumeKg } as any;
     });
     return { data, maxValue };
-  }, [sessions]);
+  }, [sessions, unit]);
 
   const computedSpacing = useMemo(() => {
     const count = data.length;
@@ -216,7 +217,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                 const effectiveWidth = Math.max(0, chartWidth);
                 return (
                   <LineChart
-                    key={`pg-${effectiveWidth}-${data.length}`}
+                    key={`pg-${unit}-${effectiveWidth}-${data.length}`}
                     data={data}
                     height={height}
                     width={effectiveWidth}
@@ -237,6 +238,12 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                     xAxisLabelTextStyle={{ color: colors.text, fontSize: 10 }}
                     yAxisLabelWidth={Y_AXIS_LABEL_WIDTH}
                     yAxisLabelSuffix=""
+                    formatYLabel={(label: string) => {
+                      // Only the origin label (0) should show units.
+                      const n = Number(String(label).replace(/,/g, '').trim());
+                      if (Number.isFinite(n) && n === 0) return unitLabel(unit);
+                      return label;
+                    }}
                     startFillColor={colors.fillStart}
                     endFillColor={colors.fillEnd}
                     startOpacity={0.35}
@@ -273,7 +280,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
               const x = leftOffset + (hoverIndex as number) * (computedSpacing || 1);
               const item: any = data[hoverIndex as number];
               const iso = item?.iso as string | undefined;
-              const vol = (item?.value ?? item?.volume) as number | undefined;
+              const volumeKg = (item?.volumeKg ?? 0) as number;
               const date = iso ? fmtOverlayDateLabel(iso) : '';
               const lineLeft = Math.max(0, x - 0.5);
               const val = typeof item?.value === 'number' ? item.value : (typeof item?.volume === 'number' ? item.volume : 0);
@@ -349,7 +356,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                     </Text>
                     <Box style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: 'white' }}>
                       <Text style={{ fontWeight: 'bold', textAlign: 'center', fontSize: 14 }}>
-                        {`${formatVolumeFromKg(vol ?? 0, unit)} ${unitLabel(unit)}`}
+                        {`${formatVolumeFromKg(volumeKg, unit)} ${unitLabel(unit)}`}
                       </Text>
                     </Box>
                   </Box>

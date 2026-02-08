@@ -48,7 +48,15 @@ const LoginScreen = () => {
         }
 
         console.log("Starting signup process with email:", email);
-        result = await supabase.auth.signUp({ email, password });
+        result = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              display_name: displayName.trim(),
+            },
+          },
+        });
         
         if (result.error) {
           console.error("Auth signup error:", result.error);
@@ -56,41 +64,7 @@ const LoginScreen = () => {
         }
         
         console.log("Auth signup successful, user created:", result.data.user?.id);
-        const userId = result.data.user?.id;
-        
-        if (!userId) {
-          throw new Error("User ID not found after signup");
-        }
-        
-        console.log("Inserting into users table with ID:", userId);
-        const { data: userData, error: usersError } = await supabase
-          .from("users")
-          .insert({ id: userId, email: result.data.user?.email });
-        
-        console.log("Users table response:", { data: userData, error: usersError });
-          
-        if (usersError && Object.keys(usersError).length > 0) {
-          console.error("Error inserting into users table:", usersError);
-          throw usersError;
-        }
-        
-        console.log("Inserting into profiles table with display name:", displayName);
-        const { data: profileData, error: profileError } = await supabase
-          .from("profiles")
-          .insert({ 
-            user_id: userId, 
-            email: result.data.user?.email, 
-            display_name: displayName,
-            avatar_id: null
-          });
-          
-        console.log("Profiles table response:", { data: profileData, error: profileError });
-          
-        if (profileError && Object.keys(profileError).length > 0) {
-          console.error("Error inserting into profiles table:", profileError);
-          throw profileError;
-        }
-        
+
         console.log("Signup process completed successfully");
       } else {
         console.log("Starting sign in process with email:", email);
