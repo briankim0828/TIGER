@@ -5,6 +5,8 @@ import { TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useWorkout } from '../contexts/WorkoutContext';
+import { useUnit } from '../contexts/UnitContext';
+import { unitLabel } from '../utils/units';
 
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
@@ -37,6 +39,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const toast = useToast();
   const { endWorkout, deleteWorkout, setSessionNote } = useWorkout();
   const { showWorkoutSummary } = useOverlay();
+  const { unit } = useUnit();
   const [note, setNote] = useState<string>('');
   const [sessionName, setSessionName] = useState<string>(splitTitle || '');
   // Backdated editables
@@ -44,7 +47,6 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [customStart, setCustomStart] = useState<Date | null>(null);
   const [customDurationMin, setCustomDurationMin] = useState<number>(60);
-  const LB_PER_KG = 2.20462;
 
   // Reset when switching to a different session and sync name upward once
   useEffect(() => {
@@ -66,13 +68,13 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);
     const setCount = sets.length;
-    // UI uses lbs throughout: sum weight(lbs) * reps
-    const volumeLbs = sets.reduce((sum, s) => {
-      const lbs = Number(s.weightKg || 0); // Note: field name is weightKg, but UI treats it as lbs
+    // Storage convention: weights are stored in kilograms.
+    const volumeKg = sets.reduce((sum, s) => {
+      const kg = Number(s.weightKg || 0);
       const reps = Number(s.reps || 0);
-      return sum + (lbs * reps);
+      return sum + (kg * reps);
     }, 0);
-    return { setCount, volumeLbs };
+    return { setCount, volumeKg };
   }, [currentExercises]);
 
   const durationText = useMemo(() => {
@@ -102,15 +104,16 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   }, [sessionStartedAtMs, isBackdated, customStart]);
 
   const volumeText = useMemo(() => {
-    const n = metrics.volumeLbs || 0;
+    const volumeKg = metrics.volumeKg || 0;
+    const display = unit === 'lb' ? (volumeKg * 2.2046226218) : volumeKg;
     // Show one decimal like the screenshot
-    return `${n.toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} lbs`;
-  }, [metrics.volumeLbs]);
+    return `${display.toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} ${unitLabel(unit)}`;
+  }, [metrics.volumeKg, unit]);
 
   const handleSave = useCallback(async () => {
     try {
       const setCount = metrics.setCount;
-      const totalVolumeKg = Math.round(((metrics.volumeLbs ?? 0) / LB_PER_KG));
+      const totalVolumeKg = Math.round((metrics.volumeKg ?? 0));
       // Compute overrides and duration consistently for both save paths
       let durationMin: number | undefined = undefined;
       let startedAtOverride: string | undefined;
@@ -192,7 +195,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         ),
       });
     }
-  }, [metrics.setCount, metrics.volumeLbs, LB_PER_KG, sessionStartedAtMs, isBackdated, elapsedSecAtFinish, sessionName, onSaveOverride, note, setSessionNote, endWorkout, sessionId, onCloseSheet, toast]);
+  }, [metrics.setCount, metrics.volumeKg, sessionStartedAtMs, isBackdated, customStart, customDurationMin, elapsedSecAtFinish, sessionName, onSaveOverride, note, setSessionNote, endWorkout, sessionId, onCloseSheet, toast, showWorkoutSummary, currentExercises, splitTitle]);
 
   const handleDiscard = useCallback(async () => {
     try {

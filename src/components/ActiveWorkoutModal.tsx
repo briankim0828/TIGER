@@ -10,6 +10,8 @@ import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
 import { supabase } from '../utils/supabaseClient';
+import { useUnit } from '../contexts/UnitContext';
+import { formatWeightFromKg, nearlyEqual, toStorageKg, unitLabel } from '../utils/units';
 import SaveSessionScreen from './SaveSessionScreen';
 import { useWorkoutHistory } from '../db/queries';
 
@@ -152,33 +154,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   onClose,
   onSave,
 }) => {
-  const debugLayout = useCallback((label: string, e: any) => {
-    try {
-      const { x, y, width, height } = e.nativeEvent.layout;
-      console.log(`[ActiveWorkoutModal][layout] ${label}`, { x, y, width, height });
-    } catch (err) {
-      console.log(`[ActiveWorkoutModal][layout] ${label} error`, err);
-    }
-  }, []);
-
-  const debugScroll = useCallback((label: string, e: any) => {
-    try {
-      const {
-        contentOffset: { y },
-        contentSize: { height: contentHeight },
-        layoutMeasurement: { height: viewportHeight },
-      } = e.nativeEvent;
-      console.log(`[ActiveWorkoutModal][scroll] ${label}`, {
-        offsetY: y,
-        contentHeight,
-        viewportHeight,
-        maxScroll: contentHeight - viewportHeight,
-      });
-    } catch (err) {
-      console.log(`[ActiveWorkoutModal][scroll] ${label} error`, err);
-    }
-  }, []);
   const insets = useSafeAreaInsets();
+  const { unit } = useUnit();
+  const weightLabel = unitLabel(unit);
   // navigation handled via global ref
   const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, reorderSessionExercises, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
@@ -475,7 +453,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           exercise.sets.forEach((set, setIndex) => {
             const key = `${exercise.id}-${set.id || setIndex}`;
             newValues[key] = {
-              weightKg: set.weightKg > 0 ? String(set.weightKg) : '',
+              // Store display-unit values in the input; convert on save.
+              weightKg: set.weightKg > 0 ? formatWeightFromKg(set.weightKg, unit, 1) : '',
               reps: set.reps > 0 ? String(set.reps) : ''
             };
           });
@@ -484,7 +463,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       
       setLocalInputValues(newValues);
     }
-  }, [currentExercises]);
+  }, [currentExercises, unit]);
 
   // Handle weight input change locally (no update to context)
   const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weightKg' | 'reps', value: string) => {
@@ -521,12 +500,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       return;
     }
     const currentValue = localInputValues[setKey]?.[field] || '';
-    const original = set[field as 'weightKg' | 'reps'] || 0;
-    const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
-    if (next !== original) {
-      updateSet(set.id, { [field]: next } as any).catch(console.error);
+    if (field === 'weightKg') {
+      const originalKg = set.weightKg || 0;
+      const nextDisplay = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? (unit === 'lb' ? 0 : originalKg) : numericValue);
+      const nextKg = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? originalKg : toStorageKg(nextDisplay, unit));
+      if (!nearlyEqual(nextKg, originalKg, 1e-3)) {
+        updateSet(set.id, { weightKg: nextKg } as any).catch(console.error);
+      }
+    } else {
+      const original = set.reps || 0;
+      const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
+      if (next !== original) {
+        updateSet(set.id, { reps: next } as any).catch(console.error);
+      }
     }
-  }, [currentExercises, localInputValues, updateSet, toast, sessionId]);
+  }, [currentExercises, localInputValues, updateSet, toast, unit]);
 
   // Handle set completion toggle
   const handleToggleSetCompletion = useCallback((exerciseId: string, setIndex: number) => {
@@ -562,12 +550,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         });
         return;
       }
-      updateSet(s.id, { weightKg: w, reps: r, isCompleted: true } as any).catch(console.error);
+      const wKg = toStorageKg(w, unit);
+      updateSet(s.id, { weightKg: wKg, reps: r, isCompleted: true } as any).catch(console.error);
     } else {
       // Un-completing: allow editing again
       updateSet(s.id, { isCompleted: false } as any).catch(console.error);
     }
-  }, [currentExercises, localInputValues, updateSet, toast]);
+  }, [currentExercises, localInputValues, updateSet, toast, unit]);
   
   // Handle Add Set button click
   const handleAddNewSet = useCallback((exerciseId: string) => {
@@ -864,7 +853,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const prevSets = prevSetsByExercise[exerciseId] || [];
     const prevForIndex = prevSets[setIndex];
     const previousText = prevForIndex && prevForIndex.weightKg != null && prevForIndex.reps != null
-      ? `${prevForIndex.weightKg} lbs x ${prevForIndex.reps}`
+      ? `${formatWeightFromKg(prevForIndex.weightKg, unit, 1)} ${weightLabel} x ${prevForIndex.reps}`
       : '—';
 
     const isCompleted = !!set.isCompleted;
@@ -925,11 +914,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           <Text flex={1} textAlign="center" color="$textLight200" size="sm">
             {previousText}
           </Text>
-        {/* Weight (lbs) */}
+        {/* Weight */}
         {isCompleted ? (
           <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
             <InputField
-              value={(localValue.weightKg ?? '').toString().trim() || (set.weightKg ? String(set.weightKg) : '')}
+              value={(localValue.weightKg ?? '').toString().trim() || (set.weightKg ? formatWeightFromKg(set.weightKg, unit, 1) : '')}
               editable={false}
               color="$textLight50"
               textAlign="center"
@@ -940,7 +929,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             <InputField
               // @ts-ignore - render RN input via bottom sheet aware text input
               as={BottomSheetTextInput as any}
-              placeholder="lbs"
+              placeholder={weightLabel}
               value={localValue.weightKg}
               onChangeText={(text) => handleInputChange(exerciseId, setKey, 'weightKg', text)}
               onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
@@ -1051,7 +1040,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       >
         <BottomSheetView
           style={styles.contentContainer}
-          onLayout={(e) => debugLayout('BottomSheetView', e)}
         >
           {pageIndex === 0 ? renderHeader() : null}
           <Animated.View
@@ -1060,9 +1048,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             {/* Page 0: Active session */}
             <View
               style={{ width: screenW }}
-              onLayout={(e) => debugLayout('Page0Wrapper', e)}
             >
-              <Box flex={1} onLayout={(e) => debugLayout('Page0ScrollContainer', e)}>
+              <Box flex={1}>
                 <ScrollView
                   style={[
                     styles.scrollView,
@@ -1081,15 +1068,12 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   keyboardShouldPersistTaps="handled"
                   nestedScrollEnabled
                   keyboardDismissMode="on-drag"
-                  onLayout={(e) => debugLayout('ScrollView', e)}
-                  onScroll={(e) => debugScroll('ScrollView', e)}
                   scrollEventThrottle={16}
                 >
                   <Box
                     width="100%"
                     pb={30}
                     // This box wraps all scrollable content including bottom buttons
-                    onLayout={(e) => debugLayout('ScrollContentRoot', e)}
                   >
                     {/* Exercise list with sets */}
                     <VStack space="sm" width="100%">
@@ -1124,7 +1108,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                   Previous
                                 </Text>
                                 <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
-                                  lbs
+                                  {weightLabel}
                                 </Text>
                                 <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
                                   Reps
@@ -1178,7 +1162,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                       mt="$1"
                       mb="$1"
                       px="$2"
-                      onLayout={(e) => debugLayout('AddExercisesBox', e)}
                     >
                       <Pressable
                         onPressIn={() => setIsAddExercisesPressed(true)}
@@ -1204,7 +1187,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     <Box
                       mb="$5"
                       px="$2"
-                      onLayout={(e) => debugLayout('CancelWorkoutBox', e)}
                     >
                       <Pressable
                         onPressIn={() => setIsCancelWorkoutPressed(true)}

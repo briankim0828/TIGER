@@ -5,6 +5,8 @@ import { Feather } from '@expo/vector-icons';
 import type { WorkoutSummaryPayload } from '../contexts/OverlayContext';
 import { useWorkoutHistory } from '../db/queries';
 import { supabase } from '../utils/supabaseClient';
+import { useUnit } from '../contexts/UnitContext';
+import { formatVolumeFromKg, unitLabel } from '../utils/units';
 
 interface WorkoutSummaryModalProps extends WorkoutSummaryPayload {
   onClose: () => void;
@@ -26,6 +28,7 @@ const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
   onClose,
 }) => {
   const history = useWorkoutHistory();
+  const { unit } = useUnit();
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [totalCompleted, setTotalCompleted] = useState<number>(1);
 
@@ -115,7 +118,7 @@ const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
               </VStack>
               <VStack>
                 <Text color="$gray400" fontSize="$xs">Volume</Text>
-                <Text color="$white" fontWeight="$semibold">{(totalVolumeKg ?? 0).toLocaleString()} kg</Text>
+                <Text color="$white" fontWeight="$semibold">{formatVolumeFromKg(totalVolumeKg, unit)} {unitLabel(unit)}</Text>
               </VStack>
             </HStack>
             {/* Exercises */}

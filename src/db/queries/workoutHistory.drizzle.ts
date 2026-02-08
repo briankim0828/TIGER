@@ -26,6 +26,7 @@ export type WorkoutPostExercise = {
 
 export type WorkoutPost = {
   sessionId: string;
+  splitId: string | null;
   sessionName: string | null;
   note: string | null;
   durationMin: number | null;
@@ -149,6 +150,7 @@ export class WorkoutHistoryDataAccess {
     const sessions = await this.db
       .select({
         id: workoutSessions.id,
+        splitId: workoutSessions.splitId,
         sessionName: workoutSessions.sessionName,
         note: workoutSessions.note,
         durationMin: workoutSessions.durationMin,
@@ -192,6 +194,7 @@ export class WorkoutHistoryDataAccess {
     // 4) Map sessions into posts, preserving order from sessions[] (newest first)
     const posts: WorkoutPost[] = sessions.map((s) => ({
       sessionId: s.id as string,
+      splitId: (s.splitId ?? null) as string | null,
       sessionName: (s.sessionName ?? null) as string | null,
       note: (s.note ?? null) as string | null,
       durationMin: (s.durationMin ?? null) as number | null,

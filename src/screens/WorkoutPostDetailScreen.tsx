@@ -5,6 +5,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { useWorkout } from '../contexts/WorkoutContext';
+import { useUnit } from '../contexts/UnitContext';
+import { formatVolumeFromKg, formatWeightFromKg, unitLabel } from '../utils/units';
 import type { WorkoutPost } from '../db/queries/workoutHistory.drizzle';
 import type { SessionExerciseJoin, WorkoutSetRow } from '../db/queries/workouts.drizzle';
 
@@ -17,15 +19,10 @@ type Snapshot = {
   setsByExercise: Record<string, WorkoutSetRow[]>;
 };
 
-const formatWeight = (kg: number | null | undefined) => {
-  if (kg === null || kg === undefined) return '';
-  const rounded = Math.round(kg * 100) / 100;
-  return rounded.toFixed(2);
-};
-
 const WorkoutPostDetailScreen: React.FC = () => {
   const navigation = useNavigation();
   const toast = useToast();
+  const { unit } = useUnit();
   const route = useRoute<RouteProp<WorkoutPostDetailParams, 'WorkoutPostDetail'>>();
   const { post } = route.params;
   const { getSessionSnapshot, deleteWorkout } = useWorkout();
@@ -105,7 +102,7 @@ const WorkoutPostDetailScreen: React.FC = () => {
                   Volume
                 </Text>
                 <Text color="$white" fontWeight="$semibold">
-                  {(post.totalVolumeKg ?? 0).toLocaleString()} kg
+                  {formatVolumeFromKg(post.totalVolumeKg, unit)} {unitLabel(unit)}
                 </Text>
               </VStack>
 
@@ -168,9 +165,9 @@ const WorkoutPostDetailScreen: React.FC = () => {
                           const setNum = (typeof s.setOrder === 'number' ? s.setOrder : parseInt(String(s.setOrder), 10)) + 1;
                           const reps = s.reps ?? null;
                           const weight = s.weightKg ?? null;
-                          const weightText = showWeight ? (weight === null || weight === undefined ? '--' : formatWeight(weight)) : '';
+                          const weightText = showWeight ? (weight === null || weight === undefined ? '--' : formatWeightFromKg(weight, unit, 1)) : '';
                           const right = showWeight
-                            ? `${weightText} kg x ${reps ?? '--'}`
+                            ? `${weightText} ${unitLabel(unit)} x ${reps ?? '--'}`
                             : `${reps ?? '--'}`;
                           return (
                             <HStack key={s.id} justifyContent="space-between" alignItems="center">

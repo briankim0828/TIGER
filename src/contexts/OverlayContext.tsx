@@ -27,6 +27,9 @@ interface OverlayContextValue {
   showWorkoutSummary: (payload: WorkoutSummaryPayload) => void;
   hideWorkoutSummary: () => void;
   workoutSummary: WorkoutSummaryPayload | null;
+  // Global signal: bump to indicate workout history changed (e.g., finished workout)
+  workoutDataVersion: number;
+  bumpWorkoutDataVersion: () => void;
   liveDebugEnabled: boolean;
   setLiveDebugEnabled: (value: boolean) => void;
 }
@@ -36,6 +39,7 @@ const OverlayContext = createContext<OverlayContextValue | undefined>(undefined)
 export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [sessionSummary, setSessionSummary] = useState<SessionSummaryPayload | null>(null);
   const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummaryPayload | null>(null);
+  const [workoutDataVersion, setWorkoutDataVersion] = useState<number>(0);
   const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
 
   const showSessionSummary = useCallback((payload: SessionSummaryPayload) => {
@@ -49,10 +53,17 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const showWorkoutSummary = useCallback((payload: WorkoutSummaryPayload) => {
     setWorkoutSummary(payload);
   }, []);
-  const hideWorkoutSummary = useCallback(() => setWorkoutSummary(null), []);
+  const hideWorkoutSummary = useCallback(() => {
+    setWorkoutSummary(null);
+    setWorkoutDataVersion((v) => v + 1);
+  }, []);
+
+  const bumpWorkoutDataVersion = useCallback(() => {
+    setWorkoutDataVersion((v) => v + 1);
+  }, []);
 
   return (
-    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, liveDebugEnabled, setLiveDebugEnabled }}>
+    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled }}>
       {children}
     </OverlayContext.Provider>
   );

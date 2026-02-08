@@ -1,12 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Box, Text, VStack, Icon } from '@gluestack-ui/themed';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Box, Text, VStack, Icon, HStack, Pressable } from '@gluestack-ui/themed';
+import { Entypo, MaterialIcons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-gifted-charts';
+import { useUnit } from '../contexts/UnitContext';
+import { formatVolumeFromKg, unitLabel } from '../utils/units';
 
 // Minimal shape we need from a session
 export type ProgressGraphSession = {
   startedAt: string | null;
   totalVolumeKg: number | null;
+  splitId?: string | null;
 };
 
 export type ProgressGraphProps = {
@@ -17,10 +20,22 @@ export type ProgressGraphProps = {
   emptyMessage?: string;
   // Optional: notify parent when user is actively dragging/touching the chart area
   onDragActiveChange?: (active: boolean) => void;
+  onPressCustomize?: () => void;
 };
 
-// Format date labels like: Apr 8
-function fmtDateLabel(iso: string): string {
+// X-axis labels: compact numeric format to prevent truncation (e.g., 10/2, 2/14)
+function fmtAxisDateLabel(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  } catch {
+    return '';
+  }
+}
+
+// Overlay tooltip: keep short month style (e.g., Oct 2, Feb 14)
+function fmtOverlayDateLabel(iso: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
@@ -37,7 +52,9 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   color,
   emptyMessage = 'No data yet. Finish workouts to see progress.',
   onDragActiveChange,
+  onPressCustomize,
 }) => {
+  const { unit } = useUnit();
   const [chartWidth, setChartWidth] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -46,12 +63,13 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   const longPressTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const RIGHT_INSET = 0; // no external inset; keep spacing aligned with chart width
   const initialPad = 17;
-  const endPad = 14;
+  // Provide enough right padding so the last x-axis label isn't clipped.
+  const endPad = 10;
   const Y_AXIS_LABEL_WIDTH = 34;
   const Y_AXIS_THICKNESS = 1;
   // Map sessions to chart points: sort by date asc, filter invalid
   const { data, maxValue } = useMemo(() => {
-    const cleaned = (sessions ?? [])
+    const cleanedAll = (sessions ?? [])
       .filter(
         (s) => s && typeof s.startedAt === 'string' && !!s.startedAt && Number.isFinite((s.totalVolumeKg as unknown) as number)
       )
@@ -62,24 +80,32 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
       .filter((s) => !isNaN(Date.parse(s.iso)))
       .sort((a, b) => Date.parse(a.iso) - Date.parse(b.iso));
 
+    // Show at most the most recent 9 points (chronological within the window).
+    const cleaned = cleanedAll.length > 9 ? cleanedAll.slice(cleanedAll.length - 9) : cleanedAll;
+
     const values = cleaned.map((c) => c.volume);
     const max = values.length ? Math.max(...values) : 0;
     const pad = max > 0 ? Math.ceil(max * 0.15) : 10;
     const maxValue = max + pad;
 
-    // Determine day-based interval: every floor(n/7) + 1 days. If n<=7 => 1, 8..14=>2, 15..21=>3, etc.
+    // Show first, middle, last labels (max 3), index-based.
     const n = cleaned.length;
-    const intervalDays = Math.floor(n / 7) + 1;
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const toUtcMidnight = (d: Date) => Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-    const firstUtc = cleaned.length ? toUtcMidnight(new Date(cleaned[0].iso)) : 0;
+    const labelIndexes = new Set<number>();
+    if (n === 1) {
+      labelIndexes.add(0);
+    } else if (n === 2) {
+      labelIndexes.add(0);
+      labelIndexes.add(1);
+    } else if (n >= 3) {
+      labelIndexes.add(0);
+      labelIndexes.add(Math.floor((n - 1) / 2));
+      labelIndexes.add(n - 1);
+    }
 
-    const data = cleaned.map((c) => {
-      const utc = toUtcMidnight(new Date(c.iso));
-      const dayIndex = firstUtc ? Math.floor((utc - firstUtc) / DAY_MS) : 0;
-      const showLabel = dayIndex % intervalDays === 0;
+    const data = cleaned.map((c, idx) => {
+      const showLabel = labelIndexes.has(idx);
       // Include iso and volume to power pointer label rendering
-      return { value: c.volume, label: showLabel ? fmtDateLabel(c.iso) : '', iso: c.iso, volume: c.volume } as any;
+      return { value: c.volume, label: showLabel ? fmtAxisDateLabel(c.iso) : '', iso: c.iso, volume: c.volume } as any;
     });
     return { data, maxValue };
   }, [sessions]);
@@ -93,6 +119,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
     const s = available / (count - 1);
     return Math.max(4, s);
   }, [chartWidth, data.length]);
+
 
   // Theme colors (using RGBA where animated)
   const colors = {
@@ -108,9 +135,22 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
   return (
     <Box bg={colors.cardBg} borderRadius="$lg" p="$3" w="$full" overflow="hidden">
       {!!title && (
-        <Text color={colors.text} fontWeight="$bold" fontSize="$lg" mb="$2">
-          {title}
-        </Text>
+        <HStack alignItems="center" justifyContent="space-between" mb="$2">
+          <Text color={colors.text} fontWeight="$bold" fontSize="$lg">
+            {title}
+          </Text>
+          {!!onPressCustomize && (
+            <Pressable
+              onPress={onPressCustomize}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Graph customization"
+            >
+              {/* @ts-ignore gluestack Icon typing doesn't include `name` but runtime is fine */}
+              <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" size="md" />
+            </Pressable>
+          )}
+        </HStack>
       )}
       <VStack w="$full">
         <Box
@@ -180,6 +220,9 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                     data={data}
                     height={height}
                     width={effectiveWidth}
+                    disableScroll
+                    bounces={false}
+                    overScrollMode="never"
                     thickness={4}
                     color={colors.primary}
                     areaChart
@@ -231,7 +274,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
               const item: any = data[hoverIndex as number];
               const iso = item?.iso as string | undefined;
               const vol = (item?.value ?? item?.volume) as number | undefined;
-              const date = iso ? fmtDateLabel(iso) : '';
+              const date = iso ? fmtOverlayDateLabel(iso) : '';
               const lineLeft = Math.max(0, x - 0.5);
               const val = typeof item?.value === 'number' ? item.value : (typeof item?.volume === 'number' ? item.volume : 0);
               const y = Math.max(0, Math.min(height, height - (maxValue > 0 ? (val / maxValue) * height : 0)));
@@ -243,7 +286,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                   {/* Tooltip redesigned to match provided style */}
                   {/* <Box position="absolute" left={Math.min(Math.max(8, x + 8), chartWidth - 120)} top={20} maxWidth={140} bg="#1F2430" px="$2" py="$1" borderRadius="$sm" borderWidth={1} borderColor={colors.axis}>
                     <Text color={colors.text} fontSize={12}>{date}</Text>
-                    <Text color={colors.text} fontSize={12}>{vol} kg</Text> */}
+                    <Text color={colors.text} fontSize={12}>{vol}</Text> */}
                   <Box
                     position="absolute"
                     {...(() => {
@@ -290,7 +333,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                       // No right-side clamp; only enforce a minimal left margin.
                       const left = placeRight ? Math.max(MIN_LEFT, rightSide) : Math.max(MIN_LEFT, leftSide);
 
-                      // Align vertically so that the {vol} kg box (not the entire label) shares the same Y as the HIGHLIGHT DOT (not the raw data point).
+                      // Align vertically so that the volume box (not the entire label) shares the same Y as the HIGHLIGHT DOT (not the raw data point).
                       // Approximate the center offset of the vol box within the tooltip.
                       // date text (fontSize 10) ~ 12px height + marginBottom(3) + vol box half-height (~14)
                       const VOL_BOX_CENTER_OFFSET_FROM_TOP = 29; // tuned constant for visual alignment
@@ -306,7 +349,7 @@ const ProgressGraph: React.FC<ProgressGraphProps> = ({
                     </Text>
                     <Box style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: 'white' }}>
                       <Text style={{ fontWeight: 'bold', textAlign: 'center', fontSize: 14 }}>
-                        {`${vol} kg`}
+                        {`${formatVolumeFromKg(vol ?? 0, unit)} ${unitLabel(unit)}`}
                       </Text>
                     </Box>
                   </Box>

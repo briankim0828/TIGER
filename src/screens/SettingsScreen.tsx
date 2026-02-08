@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useOverlay } from '../contexts/OverlayContext';
+import { useUnit } from '../contexts/UnitContext';
 import { useWorkoutHistory } from '../db/queries';
 import { signOutUser, getCurrentUser } from '../supabase/supabaseProfile';
 
@@ -30,6 +31,7 @@ const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const toast = useToast();
   const { liveDebugEnabled, setLiveDebugEnabled } = useOverlay();
+  const { unit, setUnit } = useUnit();
   const history = useWorkoutHistory();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const cancelRef = React.useRef(null);
@@ -118,6 +120,43 @@ const SettingsScreen: React.FC = () => {
         </HStack>
 
         <VStack space="md">
+          {/* Unit toggle */}
+          <Box bg="#12141A" borderRadius="$lg" p="$3" borderWidth={1} borderColor="#2A2E38">
+            <HStack alignItems="center" justifyContent="space-between">
+              <Text color="$textLight50" fontSize="$md" fontWeight="$semibold">Unit</Text>
+              <HStack space="sm">
+                <Pressable
+                  onPress={() => setUnit('kg')}
+                  px="$3"
+                  py="$2"
+                  borderRadius="$md"
+                  bg={unit === 'kg' ? '#1E2028' : 'transparent'}
+                  borderWidth={1}
+                  borderColor={unit === 'kg' ? '#6B8EF2' : '#2A2E38'}
+                  $pressed={{ opacity: 0.8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Set unit to kilograms"
+                >
+                  <Text color="$textLight50" fontWeight={unit === 'kg' ? '$bold' : '$normal'}>kg</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setUnit('lb')}
+                  px="$3"
+                  py="$2"
+                  borderRadius="$md"
+                  bg={unit === 'lb' ? '#1E2028' : 'transparent'}
+                  borderWidth={1}
+                  borderColor={unit === 'lb' ? '#6B8EF2' : '#2A2E38'}
+                  $pressed={{ opacity: 0.8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Set unit to pounds"
+                >
+                  <Text color="$textLight50" fontWeight={unit === 'lb' ? '$bold' : '$normal'}>lbs</Text>
+                </Pressable>
+              </HStack>
+            </HStack>
+          </Box>
+
           {__DEV__ && (
             <Button
               variant="outline"

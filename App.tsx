@@ -28,6 +28,7 @@ import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
 import SessionPreviewModal from "./src/components/SessionPreviewModal";
 import WorkoutSummaryModal from "./src/components/WorkoutSummaryModal";
 import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
+import { UnitProvider } from "./src/contexts/UnitContext";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
 import {
@@ -506,6 +507,7 @@ export default function App() {
       <ElectricProvider>
         <WorkoutProvider>
                 <OverlayProvider>
+                <UnitProvider>
                 <TopInsetSpacer />
                 <SafeAreaView
                   style={{ flex: 1, backgroundColor: "#121213ff" }}
@@ -528,6 +530,7 @@ export default function App() {
                 <GlobalOverlays />
                   <ActiveWorkoutModalContainer />
                   <DevFloatingDebug />
+                </UnitProvider>
                 </OverlayProvider>
               </WorkoutProvider>
           </ElectricProvider>

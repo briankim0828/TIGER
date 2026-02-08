@@ -42,6 +42,8 @@ import {
   uploadAvatar,
 } from '../supabase/supabaseProfile';
 import { useOverlay } from '../contexts/OverlayContext';
+import { useUnit } from '../contexts/UnitContext';
+import { formatVolumeFromKg, unitLabel } from '../utils/units';
 
 type WorkoutTab = {
   id: number;
@@ -64,7 +66,8 @@ const iconMapping: IconMappingType = {
 const ProfileScreen: React.FC = () => {
   const navigation = useNavigation();
   const toast = useToast(); // gluestack-ui toast hook
-  const { liveDebugEnabled, setLiveDebugEnabled } = useOverlay();
+  const { liveDebugEnabled, setLiveDebugEnabled, workoutDataVersion } = useOverlay();
+  const { unit } = useUnit();
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -191,14 +194,14 @@ const ProfileScreen: React.FC = () => {
     setAvatarImageError(false);
   }, [avatarUrl]);
 
-  const fetchUserStats = async () => {
+  const fetchUserStats = useCallback(async () => {
     try {
   const s = await history.getWorkoutStats(user?.id ?? authUserId ?? '');
       setStats(s);
     } catch (error) {
       console.error('Error fetching stats (local DB):', error);
     }
-  };
+  }, [history, user?.id, authUserId]);
 
   const refreshPosts = useCallback(async () => {
     try {
@@ -215,14 +218,21 @@ const ProfileScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       refreshPosts();
+      fetchUserStats();
       return () => {};
-    }, [refreshPosts])
+    }, [refreshPosts, fetchUserStats, workoutDataVersion])
   );
 
   // Also refresh after user is available
   useEffect(() => {
     if (user) refreshPosts();
   }, [user, refreshPosts]);
+
+  // Refresh when a workout completes (ActiveWorkoutModal disappears)
+  useEffect(() => {
+    refreshPosts();
+    fetchUserStats();
+  }, [workoutDataVersion, refreshPosts, fetchUserStats]);
 
   const handleLogout = async () => {
     try {
@@ -533,7 +543,7 @@ const ProfileScreen: React.FC = () => {
                   </VStack>
                   <VStack>
                     <Text color="$gray400" fontSize="$xs">Volume</Text>
-                    <Text color="$white" fontWeight="$semibold">{(p.totalVolumeKg ?? 0).toLocaleString()} kg</Text>
+                    <Text color="$white" fontWeight="$semibold">{formatVolumeFromKg(p.totalVolumeKg, unit)} {unitLabel(unit)}</Text>
                   </VStack>
                 </HStack>
 

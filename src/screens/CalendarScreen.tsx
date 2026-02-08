@@ -16,7 +16,7 @@ const CalendarScreen: React.FC = () => {
 	const db = useDatabase();
 	const history = useWorkoutHistory();
 	const { startWorkout } = useWorkout();
-	const { showSessionSummary, showWorkoutSummary } = useOverlay();
+	const { showSessionSummary, showWorkoutSummary, workoutDataVersion } = useOverlay();
 
 	const [authUserId, setAuthUserId] = useState<string | null>(null);
 	useEffect(() => {
@@ -100,7 +100,7 @@ const CalendarScreen: React.FC = () => {
 			}
 		})();
 		return () => { canceled = true; };
-	}, [authUserId, db, history]);
+	}, [authUserId, db, history, workoutDataVersion]);
 
 	// Month list: current month and previous 5
 	const months = useMemo(() => {
