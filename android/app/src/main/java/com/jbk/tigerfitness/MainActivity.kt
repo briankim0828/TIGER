@@ -1,4 +1,4 @@
-package com.jbk.PR
+package com.jbk.tigerfitness
 
 import android.os.Build
 import android.os.Bundle

@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.jbk.PR'
+    namespace 'com.jbk.tigerfitness'
     defaultConfig {
-        applicationId 'com.jbk.PR'
+        applicationId 'com.jbk.tigerfitness'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

@@ -259,7 +259,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.jbk.PR";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.jbk.tigerfitness";
 				PRODUCT_NAME = "TIGER";
 				SWIFT_OBJC_BRIDGING_HEADER = "TIGER/TIGER-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -288,7 +288,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.jbk.PR";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.jbk.tigerfitness";
 				PRODUCT_NAME = "TIGER";
 				SWIFT_OBJC_BRIDGING_HEADER = "TIGER/TIGER-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
