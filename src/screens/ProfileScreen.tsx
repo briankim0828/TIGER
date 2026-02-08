@@ -499,7 +499,11 @@ const ProfileScreen: React.FC = () => {
             })();
             const sessionTitle = p.sessionName || 'Workout';
             return (
-              <Box key={p.sessionId} bg="#12141A" borderRadius="$lg" p="$4">
+              <Pressable
+                key={p.sessionId}
+                onPress={() => (navigation as any).navigate('WorkoutPostDetail', { post: p })}
+              >
+                <Box bg="#12141A" borderRadius="$lg" p="$4">
                 {/* Header: avatar letter, username, date */}
                 <HStack alignItems="center" justifyContent="space-between" mb="$2">
                   <HStack alignItems="center" space="sm">
@@ -551,7 +555,8 @@ const ProfileScreen: React.FC = () => {
                     </HStack>
                   ))}
                 </VStack>
-              </Box>
+                </Box>
+              </Pressable>
             );
           })
           )}

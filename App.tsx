@@ -21,6 +21,7 @@ import ProgressScreen from "./src/screens/ProgressScreen";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import CalendarScreen from "./src/screens/CalendarScreen";
+import WorkoutPostDetailScreen from "./src/screens/WorkoutPostDetailScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
 import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
@@ -52,6 +53,7 @@ import {
   createMaterialTopTabNavigator,
   MaterialTopTabBarProps,
 } from "@react-navigation/material-top-tabs";
+import type { WorkoutPost } from "./src/db/queries/workoutHistory.drizzle";
 import { useElectric } from "./src/electric";
 import { pullAllSnapshots } from "./src/db/sync/pull";
 
@@ -257,6 +259,7 @@ type RootStackParamList = {
   Settings: undefined;
   Calendar: undefined;
   BottomSheetDebug: undefined;
+  WorkoutPostDetail: { post: WorkoutPost };
 };
 
 // -----------------------------
@@ -444,6 +447,7 @@ const NavigationWrapper = () => {
           <Stack.Screen name="BottomSheetDebug" component={BottomSheetDebugScreen} />
           {/* Calendar screen for logging previous workouts */}
           <Stack.Screen name="Calendar" component={CalendarScreen} />
+          <Stack.Screen name="WorkoutPostDetail" component={WorkoutPostDetailScreen} />
           <Stack.Group
             screenOptions={{ presentation: "modal", headerShown: false }}
           >
