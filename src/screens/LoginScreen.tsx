@@ -40,6 +40,10 @@ const LoginScreen = () => {
   const [displayName, setDisplayName] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
 
+  const [authView, setAuthView] = useState<"auth" | "confirm-email">("auth");
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState("");
+  const [isResendingConfirmEmail, setIsResendingConfirmEmail] = useState(false);
+
   const executionEnvironment = (Constants as any).executionEnvironment as string | undefined;
   const isExpoGo = executionEnvironment === 'storeClient';
   const needsIosClientId = Platform.OS === 'ios';
@@ -166,6 +170,67 @@ const LoginScreen = () => {
 
   console.log("🚀 ~ LoginScreen ~ email:", email);
 
+  const isEmailNotConfirmedError = (err: unknown) => {
+    const code = (err as any)?.code;
+    const message = (err as any)?.message;
+    return (
+      code === "email_not_confirmed" ||
+      (typeof message === "string" && message.toLowerCase().includes("email not confirmed"))
+    );
+  };
+
+  const handleResendConfirmationEmail = async () => {
+    const targetEmail = (pendingConfirmEmail || email).trim();
+    if (!targetEmail) {
+      toast.show({
+        placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="warning" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Input Required</ToastTitle>
+              <ToastDescription>Please enter your email address.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+      return;
+    }
+
+    setIsResendingConfirmEmail(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: "signup", email: targetEmail });
+      if (error) throw error;
+
+      toast.show({
+        placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Confirmation Email Sent</ToastTitle>
+              <ToastDescription>Check your inbox and spam folder.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } catch (error) {
+      toast.show({
+        placement: "top",
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Resend Failed</ToastTitle>
+              <ToastDescription>
+                {error instanceof Error ? error.message : "An unknown error occurred"}
+              </ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsResendingConfirmEmail(false);
+    }
+  };
+
   const handleAuth = async () => {
     try {
       let result;
@@ -204,12 +269,20 @@ const LoginScreen = () => {
         console.log("Auth signup successful, user created:", result.data.user?.id);
 
         console.log("Signup process completed successfully");
+
+        setPendingConfirmEmail(email.trim());
+        setAuthView("confirm-email");
       } else {
         console.log("Starting sign in process with email:", email);
         result = await supabase.auth.signInWithPassword({ email, password });
         
         if (result.error) {
           console.error("Sign in error:", result.error);
+          if (isEmailNotConfirmedError(result.error)) {
+            setPendingConfirmEmail(email.trim());
+            setAuthView("confirm-email");
+            return;
+          }
           throw result.error;
         }
         
@@ -303,82 +376,125 @@ const LoginScreen = () => {
   return (
     <Box flex={1} bg="#1E2028" pt={20} testID="login-screen-box">
       <Center flex={1} px="$4">
-        <VStack space="md" w="100%">
-          <Heading color="$textLight50" size="2xl" mb="$8" textAlign="center">
-            {isSignUp ? "Create Account" : "Welcome Back"}
-          </Heading>
+        {authView === "confirm-email" ? (
+          <VStack space="md" w="100%">
+            <Heading color="$textLight50" size="2xl" mb="$2" textAlign="center">
+              Confirm Your Email
+            </Heading>
+            <Text color="$textLight200" textAlign="center">
+              Your email hasn’t been confirmed yet. Please confirm your email, then come back and sign in.
+            </Text>
+            {!!pendingConfirmEmail.trim() && (
+              <Text color="$textLight200" textAlign="center">
+                Email: {pendingConfirmEmail.trim()}
+              </Text>
+            )}
 
-          <TextInput
-            placeholder="Email"
-            value={email}
-            onChangeText={setEmail}
-            style={styles.input}
-            placeholderTextColor="gray"
-            autoCapitalize="none"
-            keyboardType="email-address"
-          />
-
-          <TextInput
-            placeholder="Password"
-            value={password}
-            style={styles.input}
-            placeholderTextColor="gray"
-            onChangeText={setPassword}
-            secureTextEntry={true}
-          />
-
-          {isSignUp && (
-            <TextInput
-              placeholder="Display Name"
-              value={displayName}
-              onChangeText={setDisplayName}
-              style={styles.input}
-              placeholderTextColor="gray"
-            />
-          )}
-
-          <Button
-            size="lg"
-            variant="solid"
-            action="primary"
-            onPress={handleAuth}
-            bg="$primary500"
-            $pressed={{ bg: "$primary600" }}
-          >
-            <ButtonText>{isSignUp ? "Sign Up" : "Sign In"}</ButtonText>
-          </Button>
-
-          {isSignUp && (
             <Button
               size="lg"
-              variant="outline"
-              action="secondary"
-              onPress={handleGoogleSignUp}
-              isDisabled={!googleRequest}
-              backgroundColor="$white"
-              borderColor="$transparent"
+              variant="solid"
+              action="primary"
+              onPress={handleResendConfirmationEmail}
+              bg="$primary500"
+              $pressed={{ bg: "$primary600" }}
+              isDisabled={isResendingConfirmEmail}
             >
-              {/* @ts-ignore ButtonIcon typing for vector icons */}
-              <ButtonIcon as={AntDesign as any} name="google" mr="$2" size={28} />
-              <ButtonText color="#111111">Sign up with Google</ButtonText>
+              <ButtonText color="$textLight50">
+                {isResendingConfirmEmail ? "Sending..." : "Resend Confirmation Email"}
+              </ButtonText>
             </Button>
-          )}
 
-          <Button
-            size="lg"
-            variant="link"
-            onPress={() => {
-              setIsSignUp(!isSignUp);
-              if (!isSignUp) setDisplayName("");
-            }}
-          >
-            <ButtonText color="$primary500">
-              {isSignUp
-                ? "Already have an account? Sign In"
-                : "Need an account? Sign Up"}
-            </ButtonText>
-          </Button>
-        </VStack>
+            <Button
+              size="lg"
+              variant="link"
+              onPress={() => {
+                setAuthView("auth");
+                setPendingConfirmEmail("");
+              }}
+            >
+              <ButtonText color="$white">Back to Sign In</ButtonText>
+            </Button>
+          </VStack>
+        ) : (
+          <VStack space="md" w="100%">
+            <Heading color="$textLight50" size="2xl" mb="$8" textAlign="center">
+              {isSignUp ? "Create Account" : "Welcome Back"}
+            </Heading>
+
+            <TextInput
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              style={styles.input}
+              placeholderTextColor="gray"
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+
+            <TextInput
+              placeholder="Password"
+              value={password}
+              style={styles.input}
+              placeholderTextColor="gray"
+              onChangeText={setPassword}
+              secureTextEntry={true}
+            />
+
+            {isSignUp && (
+              <TextInput
+                placeholder="Display Name"
+                value={displayName}
+                onChangeText={setDisplayName}
+                style={styles.input}
+                placeholderTextColor="gray"
+              />
+            )}
+
+            <Button
+              size="lg"
+              variant="solid"
+              action="primary"
+              onPress={handleAuth}
+              bg="$primary500"
+              $pressed={{ bg: "$primary600" }}
+            >
+              <ButtonText color="$textLight50">{isSignUp ? "Sign Up" : "Sign In"}</ButtonText>
+            </Button>
+
+            {isSignUp && (
+              <Button
+                size="lg"
+                variant="outline"
+                action="secondary"
+                onPress={handleGoogleSignUp}
+                isDisabled={!googleRequest}
+                backgroundColor="$white"
+                borderColor="$transparent"
+              >
+                {/* @ts-ignore ButtonIcon typing for vector icons */}
+                <ButtonIcon as={AntDesign as any} name="google" mr="$2" size={28} />
+                <ButtonText color="#111111">Sign up with Google</ButtonText>
+              </Button>
+            )}
+
+            <Button
+              size="lg"
+              variant="link"
+              onPress={() => {
+                setIsSignUp(!isSignUp);
+                setAuthView("auth");
+                setPendingConfirmEmail("");
+                if (!isSignUp) setDisplayName("");
+              }}
+            >
+              <ButtonText color="$primary500">
+                {isSignUp
+                  ? "Already have an account? Sign In"
+                  : "Need an account? Sign Up"}
+              </ButtonText>
+            </Button>
+          </VStack>
+        )}
       </Center>
     </Box>
   );

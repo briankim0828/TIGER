@@ -229,6 +229,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Animation state for sets
   const [newlyAddedSets, setNewlyAddedSets] = useState<Set<string>>(new Set());
   const [deletingSets, setDeletingSets] = useState<Set<string>>(new Set());
+  // Optimistic UI overrides for responsiveness
+  const [optimisticCompletedBySetId, setOptimisticCompletedBySetId] = useState<Record<string, boolean>>({});
+  const [completionInFlight, setCompletionInFlight] = useState<Set<string>>(new Set());
+  const [optimisticDeletedSetIds, setOptimisticDeletedSetIds] = useState<Set<string>>(new Set());
+  const deleteHideTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   // Optimistic placeholder sets per exercise to eliminate add delay
   const [optimisticSets, setOptimisticSets] = useState<Record<string, Array<{ id: string; hydratedId?: string }>>>({});
 
@@ -523,16 +528,22 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const s = ex.sets[setIndex];
     if (!s) return;
 
+    if (completionInFlight.has(s.id)) return;
+
     const setKey = `${exerciseId}-${s.id || setIndex}`;
     const local = localInputValues[setKey] || { weightKg: '', reps: '' };
     const hasWeight = (local.weightKg ?? '').toString().trim() !== '';
     const hasReps = (local.reps ?? '').toString().trim() !== '';
     const canComplete = hasWeight && hasReps;
 
-    // If attempting to complete but inputs are not present, ignore
-    if (!s.isCompleted && !canComplete) return;
+    const displayIsCompleted = optimisticCompletedBySetId[s.id] ?? s.isCompleted;
 
-    if (!s.isCompleted) {
+    // If attempting to complete but inputs are not present, ignore
+    if (!displayIsCompleted && !canComplete) return;
+
+    const nextIsCompleted = !displayIsCompleted;
+
+    if (nextIsCompleted) {
       // Completing: persist current values and set isCompleted=true
       const w = parseFloat(local.weightKg);
       const r = parseFloat(local.reps);
@@ -551,12 +562,61 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         return;
       }
       const wKg = toStorageKg(w, unit);
-      updateSet(s.id, { weightKg: wKg, reps: r, isCompleted: true } as any).catch(console.error);
+
+      setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: true }));
+      setCompletionInFlight((prev) => new Set([...prev, s.id]));
+      updateSet(s.id, { weightKg: wKg, reps: r, isCompleted: true } as any)
+        .catch((e) => {
+          setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: false }));
+          toast.show({
+            placement: 'top',
+            render: ({ id }) => (
+              <Toast nativeID={id} action="error" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Update failed</ToastTitle>
+                  <ToastDescription>Please try again.</ToastDescription>
+                </VStack>
+              </Toast>
+            ),
+          });
+          console.error(e);
+        })
+        .finally(() => {
+          setCompletionInFlight((prev) => {
+            const next = new Set(prev);
+            next.delete(s.id);
+            return next;
+          });
+        });
     } else {
       // Un-completing: allow editing again
-      updateSet(s.id, { isCompleted: false } as any).catch(console.error);
+      setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: false }));
+      setCompletionInFlight((prev) => new Set([...prev, s.id]));
+      updateSet(s.id, { isCompleted: false } as any)
+        .catch((e) => {
+          setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: true }));
+          toast.show({
+            placement: 'top',
+            render: ({ id }) => (
+              <Toast nativeID={id} action="error" variant="accent">
+                <VStack space="xs">
+                  <ToastTitle>Update failed</ToastTitle>
+                  <ToastDescription>Please try again.</ToastDescription>
+                </VStack>
+              </Toast>
+            ),
+          });
+          console.error(e);
+        })
+        .finally(() => {
+          setCompletionInFlight((prev) => {
+            const next = new Set(prev);
+            next.delete(s.id);
+            return next;
+          });
+        });
     }
-  }, [currentExercises, localInputValues, updateSet, toast, unit]);
+  }, [currentExercises, completionInFlight, localInputValues, optimisticCompletedBySetId, updateSet, toast, unit]);
   
   // Handle Add Set button click
   const handleAddNewSet = useCallback((exerciseId: string) => {
@@ -637,29 +697,35 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         });
         return;
       }
-  // Mark set as deleting to trigger animation
+
+      // Mark set as deleting to trigger animation
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setDeletingSets((prev) => new Set([...prev, setId]));
-      
-      // Wait for animation to complete before actually deleting
-      setTimeout(async () => {
-        try {
-          await deleteSet(setId);
-          // Optimistic local input cleanup
+
+      // After the animation duration, hide the row optimistically so it can't pop back
+      if (deleteHideTimersRef.current[setId]) {
+        clearTimeout(deleteHideTimersRef.current[setId]);
+      }
+      deleteHideTimersRef.current[setId] = setTimeout(() => {
+        setOptimisticDeletedSetIds((prev) => new Set([...prev, setId]));
+        setDeletingSets((prev) => {
+          const next = new Set(prev);
+          next.delete(setId);
+          return next;
+        });
+        delete deleteHideTimersRef.current[setId];
+      }, 250);
+
+      // Delete immediately (DB + outbox), while animation runs
+      deleteSet(setId)
+        .then(() => {
           const key = `${exerciseId}-${setId || setIndex}`;
           setLocalInputValues((prev) => {
             const copy = { ...prev } as any;
             delete copy[key];
             return copy;
           });
-          
-          // Remove from deleting sets
-          setDeletingSets((prev) => {
-            const next = new Set(prev);
-            next.delete(setId);
-            return next;
-          });
-          
+
           toast.show({
             placement: 'top',
             render: ({ id }) => (
@@ -670,14 +736,28 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Toast>
             ),
           });
-        } catch (e) {
+        })
+        .catch((e) => {
           console.error('Failed to delete set', e);
-          // Remove from deleting sets on error
+
+          // Cancel pending hide timer if still waiting
+          if (deleteHideTimersRef.current[setId]) {
+            clearTimeout(deleteHideTimersRef.current[setId]);
+            delete deleteHideTimersRef.current[setId];
+          }
+
+          // Roll back optimistic state
+          setOptimisticDeletedSetIds((prev) => {
+            const next = new Set(prev);
+            next.delete(setId);
+            return next;
+          });
           setDeletingSets((prev) => {
             const next = new Set(prev);
             next.delete(setId);
             return next;
           });
+
           toast.show({
             placement: 'top',
             render: ({ id }) => (
@@ -689,8 +769,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               </Toast>
             ),
           });
-        }
-      }, 250); // Match animation duration
+        });
     } catch (e) {
       console.error('Failed to delete set', e);
       // Remove from deleting sets on error
@@ -712,6 +791,46 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       });
     }
   }, [deleteSet, toast]);
+
+  // Prune optimistic completion overrides when snapshot catches up
+  useEffect(() => {
+    if (!currentExercises) return;
+    const keys = Object.keys(optimisticCompletedBySetId);
+    if (keys.length === 0) return;
+    let changed = false;
+    const next: Record<string, boolean> = { ...optimisticCompletedBySetId };
+    for (const ex of currentExercises) {
+      for (const s of ex.sets) {
+        const override = optimisticCompletedBySetId[s.id];
+        if (override === undefined) continue;
+        if (s.isCompleted === override) {
+          delete next[s.id];
+          changed = true;
+        }
+      }
+    }
+    if (changed) setOptimisticCompletedBySetId(next);
+  }, [currentExercises, optimisticCompletedBySetId]);
+
+  // Prune optimistic deletions once snapshot no longer includes the set
+  useEffect(() => {
+    if (!currentExercises) return;
+    if (optimisticDeletedSetIds.size === 0) return;
+    const snapshotIds = new Set<string>();
+    for (const ex of currentExercises) {
+      for (const s of ex.sets) snapshotIds.add(s.id);
+    }
+    const toRemove: string[] = [];
+    optimisticDeletedSetIds.forEach((id) => {
+      if (!snapshotIds.has(id)) toRemove.push(id);
+    });
+    if (toRemove.length === 0) return;
+    setOptimisticDeletedSetIds((prev) => {
+      const next = new Set(prev);
+      for (const id of toRemove) next.delete(id);
+      return next;
+    });
+  }, [currentExercises, optimisticDeletedSetIds]);
 
   // Prune hydrated optimistic placeholders when the real set appears in snapshot
   useEffect(() => {
@@ -856,7 +975,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       ? `${formatWeightFromKg(prevForIndex.weightKg, unit, 1)} ${weightLabel} x ${prevForIndex.reps}`
       : '—';
 
-    const isCompleted = !!set.isCompleted;
+    const isCompleted = optimisticCompletedBySetId[set.id] ?? !!set.isCompleted;
     const hasWeight = (localValue.weightKg ?? '').toString().trim() !== '';
     const hasReps = (localValue.reps ?? '').toString().trim() !== '';
     const canComplete = hasWeight && hasReps;
@@ -1008,14 +1127,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         isNew={isNew}
         isDeleting={isDeleting}
         isCompleted={isCompleted}
-        onDeleteComplete={() => {
-          // This will be called when delete animation completes
-          setDeletingSets((prev) => {
-            const next = new Set(prev);
-            next.delete(set.id);
-            return next;
-          });
-        }}
       >
         {setRowContent}
       </AnimatedSetRow>
@@ -1133,7 +1244,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                     reps: 0,
                                     isCompleted: false,
                                   }));
-                                const all = [...baseSets, ...optAsRender];
+                                const all = [...baseSets, ...optAsRender].filter(
+                                  (s) => !optimisticDeletedSetIds.has(s.id)
+                                );
                                 return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
                               })()}
 
