@@ -89,11 +89,15 @@ const WorkoutHeatmap: React.FC<WorkoutHeatmapProps> = ({ entries, splits, onPres
     >
       <HStack mb="$3" alignItems="center" justifyContent="space-between">
         <VStack>
-          <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
+          <HStack alignItems="center" style={{ gap: 5 }}>
+            {/* @ts-ignore */}
+            <Icon as={Feather as any} name="calendar" color="$white" opacity={0.7} size="sm" />
+            <Text color="white" opacity={0.7} fontSize="$sm">{dateLabel}</Text>
+          </HStack>
           <Text color="white" fontSize="$md" fontWeight="$bold">{splitLabel}</Text>
         </VStack>
-  {/* @ts-ignore */}
-  <Icon as={Feather as any} name="chevron-right" color="$white" />
+        {/* @ts-ignore */}
+        <Icon as={Feather as any} name="chevron-right" color="$white" />
       </HStack>
       <Box onLayout={handleLayout} style={{ width: '100%' }}>
         <HStack style={{ width: '100%', justifyContent: 'space-between', overflow: 'hidden' }}>

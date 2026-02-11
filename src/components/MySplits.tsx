@@ -285,7 +285,7 @@ const SplitItem = React.memo(
                 <Text
                   key="name"
                   color="white"
-                  style={{ fontSize: 18, fontWeight: "bold", flex: 1 }}
+                  style={{ fontSize: 18, fontWeight: "normal", flex: 1 }}
                   numberOfLines={1}
                   ellipsizeMode="tail"
                 >

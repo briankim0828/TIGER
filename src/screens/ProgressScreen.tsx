@@ -246,7 +246,7 @@ const ProgressScreen: React.FC = () => {
             <Text color="$textLight50" fontSize={30} fontWeight="$bold">
               {greeting}
             </Text>
-            <Text color="$textLight500" fontSize={15} fontWeight="$normal">
+            <Text color="$white" opacity={0.7} fontSize={15} fontWeight="$normal">
               Ready for another workout? 
             </Text>
             </Box>
