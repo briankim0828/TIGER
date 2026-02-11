@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing, LayoutAnimation, Platform, UIManager, Vibration } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -563,6 +563,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
       const wKg = toStorageKg(w, unit);
 
+      try { Vibration.vibrate(1); } catch {}
       setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: true }));
       setCompletionInFlight((prev) => new Set([...prev, s.id]));
       updateSet(s.id, { weightKg: wKg, reps: r, isCompleted: true } as any)

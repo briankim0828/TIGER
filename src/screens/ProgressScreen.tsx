@@ -304,7 +304,7 @@ const ProgressScreen: React.FC = () => {
                   fontWeight="$bold"
                   textAlign="center"
                 >
-                  {"Begin Today's Workout"}
+                  {"Start Today's Workout"}
                 </Text>
               </Pressable>
             </Box>

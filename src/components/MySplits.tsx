@@ -20,8 +20,10 @@ import Animated, {
   withTiming,
   withSequence,
   withDelay,
-  Keyframe,
   Layout,
+  FadeInDown,
+  FadeOutUp,
+  Easing,
 } from "react-native-reanimated";
 import { Feather, Entypo } from "@expo/vector-icons";
 import { WeekDay } from "../types/base";
@@ -31,11 +33,11 @@ import { parseFontSize } from "../../helper/fontsize";
 // Constants
 const COLORS = [
   "#1254a1",
-  "#00C2C7",
+  "#00adb3",
   "#1d7322",
-  "#b0b02a",
-  "#db7e2c",
-  "#D72638",
+  "#9c9c23",
+  "#bd6b23",
+  "#af1f2e",
 ];
 const MAX_SPLITS = 7;
 
@@ -485,14 +487,9 @@ const MySplits: React.FC<MySplitsProps> = ({
           {/* Add Split Button (only in splits edit mode) */}
           {editMode === "splits" && (
             <Animated.View
-              entering={new Keyframe({
-                0: { opacity: 0, transform: [{ translateY: -10 }] },
-                100: { opacity: 1, transform: [{ translateY: 0 }] },
-              }).duration(200)}
-              exiting={new Keyframe({
-                0: { opacity: 1, transform: [{ translateY: 0 }] },
-                100: { opacity: 0, transform: [{ translateY: -10 }] },
-              }).duration(200)}
+              entering={FadeInDown.duration(240).easing(Easing.out(Easing.cubic))}
+              exiting={FadeOutUp.duration(200).easing(Easing.in(Easing.cubic))}
+              layout={Layout.duration(200)}
               style={addBtnAnimatedStyle}
             >
               <Pressable

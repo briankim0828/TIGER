@@ -6,6 +6,7 @@ import {
   Keyboard,
   Dimensions,
   TouchableWithoutFeedback,
+  Vibration,
 } from "react-native";
 import { ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { WeekDay } from "../types/base";
@@ -125,9 +126,14 @@ const WorkoutScreen = () => {
     }
     // If we're currently editing splits, keep the edited list and ref in sync so UI reflects DB changes
     if (editMode === 'splits') {
-      const clone = JSON.parse(JSON.stringify(ui));
-      setEditedSplits(clone);
-      editedSplitsRef.current = clone;
+      const prior = editedSplitsRef.current ?? [];
+      const overrideById = new Map(prior.map((s) => [s.id, s]));
+      const merged = ui.map((s) => {
+        const override = overrideById.get(s.id);
+        return override ? { ...s, name: override.name, color: override.color } : s;
+      });
+      setEditedSplits(merged);
+      editedSplitsRef.current = merged;
     }
     } catch (e) {
       console.error('WorkoutScreen: Failed to fetch splits from DB', e);
@@ -250,7 +256,8 @@ const WorkoutScreen = () => {
       console.warn('Cannot create split: user not authenticated');
       return;
     }
-    db.createSplit({ userId: AUTH_USER_ID, name: nextName, color: "#FF5733" })
+    try { Vibration.vibrate(1); } catch {}
+    db.createSplit({ userId: AUTH_USER_ID, name: nextName, color: "#cfcfcf" })
       .then(async (created) => {
         setEditingSplitId(created.id);
         await fetchSplits();
