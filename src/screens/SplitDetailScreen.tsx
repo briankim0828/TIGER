@@ -7,14 +7,13 @@ import {
   Button,
   VStack,
   Pressable,
-  ScrollView,
 } from "@gluestack-ui/themed";
 import { Feather, Entypo } from "@expo/vector-icons";
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
+import BottomSheet, { BottomSheetBackdrop, BottomSheetFlatList, BottomSheetView } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 // Legacy types are ignored; we use DB as the source of truth
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { LayoutChangeEvent, StyleSheet, useWindowDimensions } from "react-native";
+import { StyleSheet } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useDatabase } from "../db/queries";
@@ -45,23 +44,8 @@ const SplitDetailScreen = () => {
   const actionMenuSnapPoints = useMemo(() => ["28%"], []);
   const [optionsSheetRefMap] = useState(() => new Map<string, string>());
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const [contentHeight, setContentHeight] = useState<number | null>(null);
-  const windowHeight = useWindowDimensions().height;
   const insets = useSafeAreaInsets();
-  // const snapPoints = useMemo(() => {
-  //   const MIN_HEIGHT = 260;
-  //   const fallback = Math.max(windowHeight * 0.6, MIN_HEIGHT);
-  //   if (!contentHeight || contentHeight <= 0) return [fallback];
-  //   return [Math.max(contentHeight, MIN_HEIGHT)];
-  // }, [contentHeight, windowHeight]);
   const snapPoints = useMemo(() => ["100%"], []);
-  const handleContentLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    const MAX_HEIGHT = Math.max(windowHeight - insets.top - 24, 320);
-    const MIN_HEIGHT = 260;
-    const clamped = Math.max(Math.min(height, MAX_HEIGHT), MIN_HEIGHT);
-    setContentHeight((prev) => (prev && Math.abs(prev - clamped) < 4 ? prev : clamped));
-  }, [insets.top, windowHeight]);
   // Edit state removed; Add Exercise is always visible now
   // No need for ref to themed ScrollView (type mismatch)
   const db = useDatabase();
@@ -206,6 +190,69 @@ const SplitDetailScreen = () => {
     </Pressable>
   );
 
+  const renderExerciseItem = useCallback(
+    ({ item, index }: { item: ExerciseRow; index: number }) => (
+      <Box backgroundColor="transparent" p="$2">
+        <HStack alignItems="center" justifyContent="space-between">
+          <HStack space="md" alignItems="center" flex={1}>
+            {/* Avatar with first letter */}
+            <Box
+              width={48}
+              height={48}
+              backgroundColor={splitColor}
+              borderRadius="$md"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                {item.name.charAt(0).toUpperCase()}
+              </Text>
+            </Box>
+            <VStack flex={1}>
+              <Text color="$white" fontSize="$md" numberOfLines={1}>
+                {item.name}
+              </Text>
+              <Text color="$gray400" fontSize="$sm">{titleCase(item.bodyPart)}</Text>
+            </VStack>
+          </HStack>
+          {/* Trailing menu */}
+          <Button
+            variant="link"
+            onPress={() => setActionSheet({ visible: true, index, rowId: optionsSheetRefMap.get(item.id) })}
+          >
+            {/* @ts-ignore */}
+            <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+          </Button>
+        </HStack>
+      </Box>
+    ),
+    [optionsSheetRefMap, splitColor, titleCase]
+  );
+
+  const renderListFooter = useCallback(() => (
+    <Box>
+      {exercises.length > 0 ? <Box mt="$2">{addExerciseButton}</Box> : null}
+      <Box h={45} />
+    </Box>
+  ), [addExerciseButton, exercises.length]);
+
+  const renderListEmpty = useCallback(() => (
+    <Box
+      backgroundColor="transparent"
+      borderRadius="$lg"
+      p="$3"
+      borderWidth="$0"
+      borderColor="$gray700"
+    >
+      <VStack space="xl" alignItems="center">
+        <Text color="$gray400" fontSize="$lg">
+          Add exercises to {split.name} day
+        </Text>
+        <Box width="$full">{addExerciseButton}</Box>
+      </VStack>
+    </Box>
+  ), [addExerciseButton, split.name]);
+
   const handleSheetChanges = useCallback((index: number) => {
     if (index === -1) {
       if (navigation.canGoBack()) {
@@ -224,6 +271,7 @@ const SplitDetailScreen = () => {
         index={0}
         snapPoints={snapPoints}
         topInset={insets.top}
+        enableDynamicSizing={false}
         enablePanDownToClose
         onChange={handleSheetChanges}
         onClose={() => handleSheetChanges(-1)}
@@ -233,113 +281,43 @@ const SplitDetailScreen = () => {
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <BottomSheetView style={styles.sheetContent} onLayout={handleContentLayout}>
-          <Box>
-          {/* Centered title header with back button on the left */}
-          <Box p="$4" position="relative" alignItems="center" justifyContent="center">
-            <Button
-              variant="link"
-              onPress={() => {
-                // Close sheet then navigate back
-                bottomSheetRef.current?.close();
-              }}
-              position="absolute"
-              left="$2"
-            >
-              {/* @ts-ignore */}
-              <Icon as={Feather as any} name="chevron-left" color="$white" />
-            </Button>
-            <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
-              {split.name}
-            </Text>
-          </Box>
+        {/* Centered title header with back button on the left */}
+        <Box p="$4" position="relative" alignItems="center" justifyContent="center">
+          <Text color="$white" fontSize="$xl" fontWeight="$bold" numberOfLines={1}>
+            {split.name}
+          </Text>
+        </Box>
 
-          {/* Summary row with total count and Reorder button (no-op) */}
-          <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
-            <Text color="$gray400" fontSize="$sm">
-              Total of {exercises.length}
-            </Text>
-            <Button
-              variant="outline"
-              size="xs"
-              borderColor="#6B8EF2"
-              onPress={() => { /* no-op for now */ }}
-              px="$2"
-            >
-              <HStack alignItems="center" space="xs">
-                {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                <Icon as={Feather as any} name="repeat" color="#6B8EF2" size="xs" />
-                <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
-              </HStack>
-            </Button>
-          </HStack>
-
-          <ScrollView
-            showsVerticalScrollIndicator={false}
+        {/* Summary row with total count and Reorder button (no-op) */}
+        <HStack alignItems="center" justifyContent="space-between" px="$4" pb="$2">
+          <Text color="$gray400" fontSize="$sm">
+            Total of {exercises.length}
+          </Text>
+          <Button
+            variant="outline"
+            size="xs"
+            borderColor="#6B8EF2"
+            onPress={() => { /* no-op for now */ }}
+            px="$2"
           >
-            <VStack space="lg" p="$3">
-              {exercises.length > 0 ? (
-                <VStack space="md">
-                  {exercises.map((exercise, index) => (
-                    <Box key={exercise.id} backgroundColor="transparent" p="$2">
-                      <HStack alignItems="center" justifyContent="space-between">
-                        <HStack space="md" alignItems="center" flex={1}>
-                          {/* Avatar with first letter */}
-                          <Box
-                            width={48}
-                            height={48}
-                            backgroundColor={splitColor}
-                            borderRadius="$md"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            <Text color="$white" fontWeight="$bold" fontSize="$lg">
-                              {exercise.name.charAt(0).toUpperCase()}
-                            </Text>
-                          </Box>
-                          <VStack flex={1}>
-                            <Text color="$white" fontSize="$md" numberOfLines={1}>
-                              {exercise.name}
-                            </Text>
-                            <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
-                          </VStack>
-                        </HStack>
-                        {/* Trailing menu */}
-                        <Button
-                          variant="link"
-                          onPress={() => setActionSheet({ visible: true, index, rowId: optionsSheetRefMap.get(exercise.id) })}
-                        >
-                          {/* @ts-ignore */}
-                          <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
-                        </Button>
-                      </HStack>
-                    </Box>
-                  ))}
+            <HStack alignItems="center" space="xs">
+              {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+              <Icon as={Feather as any} name="repeat" color="#6B8EF2" size="xs" />
+              <Text color="#6B8EF2" fontSize="$xs">Reorder</Text>
+            </HStack>
+          </Button>
+        </HStack>
 
-                  {/* Always show Add Exercise button */}
-                  <Box mt="$2">{addExerciseButton}</Box>
-                </VStack>
-              ) : (
-                <Box
-                  backgroundColor="transparent"
-                  borderRadius="$lg"
-                  p="$3"
-                  borderWidth="$0"
-                  borderColor="$gray700"
-                >
-                  <VStack space="xl" alignItems="center">
-                    <Text color="$gray400" fontSize="$lg">
-                      Add exercises to {split.name} day
-                    </Text>
-                    <Box width="$full">{addExerciseButton}</Box>
-                  </VStack>
-                </Box>
-              )}
-            </VStack>
-            <Box h={45} />
-          </ScrollView>
-          </Box>
-        </BottomSheetView>
+        <BottomSheetFlatList
+          data={exercises}
+          renderItem={renderExerciseItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={renderListEmpty}
+          ListFooterComponent={renderListFooter}
+          ItemSeparatorComponent={() => <Box height="$3" />}
+        />
       </BottomSheet>
       {/* Per-exercise action bottom sheet as sibling to avoid nested-sheet jitter */}
       <BottomSheet
@@ -398,6 +376,9 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     width: '100%',
+  },
+  listContent: {
+    padding: 12,
   },
 });
 
