@@ -33,13 +33,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useWorkoutHistory } from '../db/queries';
 import type { WorkoutPost } from '../db/queries/workoutHistory.drizzle';
 import {
-  UserProfile,
   getCurrentUser,
   signOutUser,
-  fetchUserProfileFromSupabase,
-  updateUserProfileAvatar,
   getAvatarPublicUrl,
   uploadAvatar,
+  updateAuthUserAvatarPath,
 } from '../supabase/supabaseProfile';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useUnit } from '../contexts/UnitContext';
@@ -69,7 +67,6 @@ const ProfileScreen: React.FC = () => {
   const { liveDebugEnabled, setLiveDebugEnabled, workoutDataVersion } = useOverlay();
   const { unit } = useUnit();
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [stats, setStats] = useState({
@@ -124,70 +121,56 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
-  const fetchUserProfile = useCallback(async () => {
-    if (!user) return;
-
-    try {
-      const profileData = await fetchUserProfileFromSupabase(user.id);
-      setUserProfile(profileData);
-
-      if (profileData?.avatar_id) {
-        const avatarUrl = getAvatarPublicUrl(profileData.avatar_id);
-        setCachedAvatarUrl(avatarUrl);
-      }
-    } catch (error) {
-      // Error logged within fetchUserProfileFromSupabase
-      // Handle UI feedback if needed
-       toast.show({
-        placement: "top",
-        render: ({ id }) => {
-          return (
-            <Toast nativeID={id} action="error" variant="accent">
-              <VStack space="xs">
-                <ToastTitle>Error</ToastTitle>
-                <ToastDescription>Failed to fetch profile.</ToastDescription>
-              </VStack>
-            </Toast>
-          );
-        },
-      });
-    }
-  }, [user, toast]); // Added toast dependency
-
   useEffect(() => {
     fetchUserData();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      fetchUserProfile();
-      fetchUserStats();
-      // refreshPosts referenced below; call after it's defined
-    }
-  }, [user, fetchUserProfile]);
+  const accountDisplayName = useMemo(() => {
+    const meta: any = (user as any)?.user_metadata ?? {};
+    const fromMeta = (
+      meta?.display_name ??
+      meta?.full_name ??
+      meta?.name ??
+      meta?.given_name ??
+      ''
+    )
+      .toString()
+      .trim();
+
+    if (fromMeta) return fromMeta;
+    if (user?.email) return user.email.split('@')[0];
+    return 'User';
+  }, [user]);
+
+  const avatarPathFromAuth = useMemo(() => {
+    const meta: any = (user as any)?.user_metadata ?? {};
+    const raw = (meta?.avatar_id ?? meta?.avatar_path ?? '').toString().trim();
+    return raw || null;
+  }, [user]);
 
   const avatarUrl = useMemo(() => {
     if (cachedAvatarUrl) {
       return cachedAvatarUrl;
     }
 
-    if (userProfile?.avatar_id) {
-      const url = getAvatarPublicUrl(userProfile.avatar_id);
+    if (avatarPathFromAuth) {
+      const url = getAvatarPublicUrl(avatarPathFromAuth);
       if (url) {
-          // Defer state update slightly
-          setTimeout(() => setCachedAvatarUrl(url), 0);
-          return url;
+        // Defer state update slightly
+        setTimeout(() => setCachedAvatarUrl(url), 0);
+        return url;
       }
     }
 
     // Fallback logic (remains the same)
-    const initials = userProfile?.display_name?.charAt(0) ||
-                    user?.email?.charAt(0)?.toUpperCase() ||
-                    '?';
+    const initials =
+      accountDisplayName?.charAt(0)?.toUpperCase() ||
+      user?.email?.charAt(0)?.toUpperCase() ||
+      '?';
     const color = '6B8EF2'; // Brand blue color
     return `https://ui-avatars.com/api/?name=${initials}&background=${color}&color=fff&size=256&bold=true`;
 
-  }, [userProfile, cachedAvatarUrl, user]);
+  }, [cachedAvatarUrl, user, accountDisplayName, avatarPathFromAuth]);
 
   // Reset image error state whenever the avatar URL changes
   useEffect(() => {
@@ -213,6 +196,13 @@ const ProfileScreen: React.FC = () => {
       console.warn('Failed to load workout posts', e);
     }
   }, [history, user?.id, authUserId]);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+      // refreshPosts referenced below; call after it's defined
+    }
+  }, [user, fetchUserStats]);
 
   // Refresh posts whenever Profile gains focus
   useFocusEffect(
@@ -323,14 +313,10 @@ const ProfileScreen: React.FC = () => {
       // Update local state immediately for better UX
       setCachedAvatarUrl(publicUrl + `?t=${new Date().getTime()}`); // Append timestamp to bypass cache
 
-      const updatedProfile = await updateUserProfileAvatar(user.id, filePath);
-
-      if (!updatedProfile) {
-        console.error('Failed to update profile after avatar upload');
-        throw new Error('Failed to update profile');
+      const { error } = await updateAuthUserAvatarPath(filePath);
+      if (error) {
+        console.warn('Failed to persist avatar metadata; image will still display for this session.');
       }
-
-      setUserProfile(updatedProfile); // Update profile state
 
       toast.show({
         placement: "top",
@@ -420,8 +406,8 @@ const ProfileScreen: React.FC = () => {
     );
   }
 
-  const displayName = userProfile?.display_name || user?.email?.split('@')[0] || 'User';
-  const fallbackName = userProfile?.display_name || user?.email || 'User';
+  const displayName = accountDisplayName;
+  const fallbackName = accountDisplayName || user?.email || 'User';
 
 
   return (

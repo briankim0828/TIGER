@@ -211,8 +211,9 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         });
       }
     });
-    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true });
-  }, []);
+    const disableIds = currentExercises.map((e) => e.id);
+    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true, disableIds });
+  }, [currentExercises, db]);
 
   const handleRemoveExercise = useCallback((index: number) => {
     setCurrentExercises((prev) => prev.filter((_, i) => i !== index));
@@ -376,7 +377,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         <BottomSheetFlatList
           data={currentExercises}
           renderItem={renderExerciseItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: ExerciseRow) => item.id}
           style={[styles.listScroll, listViewportInset ? { marginBottom: listViewportInset } : null]}
           contentContainerStyle={listContentStyle}
           showsVerticalScrollIndicator={false}

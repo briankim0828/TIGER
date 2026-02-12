@@ -177,7 +177,10 @@ const SplitDetailScreen = () => {
         }
       }}
       onPress={() => {
-        navigation.navigate("ExerciseSelection", { splitId: split.id });
+        navigation.navigate(
+          "ExerciseSelection",
+          { splitId: split.id, disableIds: exercises.map((e) => e.id) } as any
+        );
       }}
     >
       <HStack space="sm" justifyContent="center" alignItems="center">
@@ -246,7 +249,7 @@ const SplitDetailScreen = () => {
     >
       <VStack space="xl" alignItems="center">
         <Text color="$gray400" fontSize="$lg">
-          Add exercises to {split.name} day
+          Add exercises to {split.name}
         </Text>
         <Box width="$full">{addExerciseButton}</Box>
       </VStack>
@@ -311,7 +314,7 @@ const SplitDetailScreen = () => {
         <BottomSheetFlatList
           data={exercises}
           renderItem={renderExerciseItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: ExerciseRow) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={renderListEmpty}

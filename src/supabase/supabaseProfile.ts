@@ -2,15 +2,6 @@ import { supabase } from '../utils/supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { decode } from 'base64-arraybuffer';
 
-// Interface for profile data from profiles table
-export interface UserProfile {
-  user_id: string;
-  email: string;
-  display_name: string;
-  avatar_id: string | null;
-  updated_at: string;
-}
-
 // --- User Authentication ---
 
 /**
@@ -55,27 +46,22 @@ export const deleteMyAccount = async (): Promise<{ error: any | null }> => {
   }
 };
 
-// --- User Profile ---
-
-/**
- * Fetches the user profile data from the 'profiles' table.
- */
-export const fetchUserProfileFromSupabase = async (_userId: string): Promise<UserProfile | null> => {
-  // Profiles table no longer exists; return null to avoid errors.
-  // console.log('[supabaseProfile] profiles table removed; skipping remote fetch.');
-  return null;
-};
-
-/**
- * Updates the avatar_id in the user's profile.
- */
-export const updateUserProfileAvatar = async (_userId: string, _avatarId: string): Promise<UserProfile | null> => {
-  // Profiles table removed; there's nothing to update remotely.
-  console.log('[supabaseProfile] update avatar skipped; profiles table removed.');
-  return null;
-};
-
 // --- Avatar Storage ---
+
+/**
+ * Persists the current user's avatar storage path on the auth user object.
+ * This avoids relying on a separate profile table.
+ */
+export const updateAuthUserAvatarPath = async (avatarPath: string): Promise<{ error: any | null }> => {
+  try {
+    const { error } = await supabase.auth.updateUser({ data: { avatar_id: avatarPath } });
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Supabase: Error updating auth user avatar metadata:', error);
+    return { error };
+  }
+};
 
 /**
  * Gets the public URL for an avatar from Supabase Storage.

@@ -893,7 +893,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
     });
     // Navigate with a generic selection request
-    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true });
+    const disableIds = currentExercises.map((e) => e.id);
+    navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true, disableIds });
   };
 
   const [splitTitle, setSplitTitle] = useState<string>('');
