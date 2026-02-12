@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Box, Text, Pressable, VStack, HStack, Button, Icon, ScrollView } from '@gluestack-ui/themed';
 import { Feather, Entypo } from '@expo/vector-icons';
@@ -37,6 +37,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
       .join(' ');
   }, []);
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
   const db = useDatabase();
   const { startWorkout } = useWorkout();
   // Previously logged props when component mounted or props changed; removed to reduce noise
@@ -247,8 +248,79 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   // Local pressed-state tracking for reliable opacity feedback
   const [isCancelPressed, setIsCancelPressed] = useState(false);
   const [isStartPressed, setIsStartPressed] = useState(false);
-  const [isAddPressed, setIsAddPressed] = useState(false);
   const startDisabled = currentExercises.length === 0;
+  const [footerHeight, setFooterHeight] = useState(0);
+  const bottomLift = useMemo(
+    () => Math.max(insets.bottom, Math.round(height * 0.12)),
+    [height, insets.bottom]
+  );
+  const listViewportInset = useMemo(
+    () => Math.max(0, footerHeight + 25),
+    [footerHeight]
+  );
+  const listContentStyle = useMemo(
+    () => styles.listContent,
+    []
+  );
+  const renderExerciseItem = useCallback(
+    ({ item, index }: { item: ExerciseRow; index: number }) => (
+      <Box >
+        <Box backgroundColor="transparent" p="$1">
+          <HStack alignItems="center" justifyContent="space-between">
+            <HStack space="md" alignItems="center" flex={1}>
+              {/* Avatar with first letter */}
+              <Box width={48} height={48} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
+                <Text color="$white" fontWeight="$bold" fontSize="$lg">
+                  {item.name.charAt(0).toUpperCase()}
+                </Text>
+              </Box>
+              <VStack flex={1}>
+                <Text color="$white" fontSize="$md" numberOfLines={1}>{item.name}</Text>
+                <Text color="$gray400" fontSize="$sm">{titleCase(item.bodyPart)}</Text>
+              </VStack>
+            </HStack>
+            <Button
+              variant="link"
+              onPress={() => setActionSheet({ visible: true, index })}
+            >
+              {/* @ts-ignore */}
+              <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+            </Button>
+          </HStack>
+        </Box>
+      </Box>
+    ),
+    [titleCase]
+  );
+  const renderListFooter = useCallback(() => (
+    <Box pt="$4" pb="$4">
+      <Pressable
+        width="$full"
+        borderStyle="dashed"
+        borderWidth="$1"
+        borderColor="#6B8EF2"
+        backgroundColor="transparent"
+        borderRadius="$lg"
+        py="$2"
+        onPress={handleAddExercise}
+      >
+        <HStack space="sm" justifyContent="center" alignItems="center">
+          {/* @ts-ignore */}
+          <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
+          <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
+        </HStack>
+      </Pressable>
+    </Box>
+  ), [handleAddExercise]);
+  const renderListEmpty = useCallback(() => (
+    <Box px="$3">
+      <Box backgroundColor="transparent" borderRadius="$lg" p="$3">
+        <VStack space="xl" alignItems="center">
+          <Text color="$gray400" fontSize="$md">Add exercises to this session</Text>
+        </VStack>
+      </Box>
+    </Box>
+  ), []);
   
   return (
     <GestureHandlerRootView style={styles.rootContainer}>
@@ -271,122 +343,59 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
         handleIndicatorStyle={{ backgroundColor: '#666' }}
         backgroundStyle={{ backgroundColor: '#1E2028' }}
       >
-        <BottomSheetView style={styles.sheetContent}>
-          <Box>
-          {/* Header with today's date centered, back button on left */}
-          <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2">
-            <HStack alignItems="center" justifyContent="center" space="sm">
-              {/* Calendar icon on the left */}
-              {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
-              <Icon as={Feather as any} name="calendar" color="$white" size="md" />
-              <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
-                {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}
-              </Text>
-            </HStack>
-          </Box>
-
-          {/* Split name with total (stacked) on the left, Reorder on the right */}
-          <HStack alignItems="flex-end" justifyContent="space-between" px="$4" pb="$2">
-            <VStack>
-              <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
-                {activeSplit ? activeSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
-              </Text>
-              <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
-            </VStack>
-            <Button
-              variant="link"
-              onPress={() => setSplitSheet({ visible: true, panel: 'root' })}
-            >
-              {/* @ts-ignore */}
-              <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
-            </Button>
+        {/* Header with today's date centered, back button on left */}
+        <Box p="$5" position="relative" alignItems="center" justifyContent="center" pt="$2" flexShrink={0}>
+          <HStack alignItems="center" justifyContent="center" space="sm">
+            {/* Calendar icon on the left */}
+            {/* @ts-ignore gluestack Icon typing allows runtime vector icons */}
+            <Icon as={Feather as any} name="calendar" color="$white" size="md" />
+            <Text color="$white" fontSize="$lg" fontWeight="$bold" numberOfLines={1}>
+              {new Date(selectedDate || new Date().toISOString().split('T')[0]).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' })}
+            </Text>
           </HStack>
+        </Box>
 
-          {/* Exercises list */}
-          <ScrollView showsVerticalScrollIndicator={false}>
-          <VStack space="md" p="$3">
-            {currentExercises.length > 0 ? (
-              <VStack space="md">
-                {currentExercises.map((exercise, index) => (
-                  <Box key={exercise.id} backgroundColor="transparent" p="$2">
-                    <HStack alignItems="center" justifyContent="space-between">
-                      <HStack space="md" alignItems="center" flex={1}>
-                        {/* Avatar with first letter */}
-                        <Box width={48} height={48} backgroundColor="#2A2E38" borderRadius="$md" alignItems="center" justifyContent="center">
-                          <Text color="$white" fontWeight="$bold" fontSize="$lg">
-                            {exercise.name.charAt(0).toUpperCase()}
-                          </Text>
-                        </Box>
-                        <VStack flex={1}>
-                          <Text color="$white" fontSize="$md" numberOfLines={1}>{exercise.name}</Text>
-                          <Text color="$gray400" fontSize="$sm">{titleCase(exercise.bodyPart)}</Text>
-                        </VStack>
-                      </HStack>
-                      <Button
-                        variant="link"
-                        onPress={() => setActionSheet({ visible: true, index })}
-                      >
-                        {/* @ts-ignore */}
-                        <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
-                      </Button>
-                    </HStack>
-                  </Box>
-                ))}
-
-                {/* Add Exercise button */}
-                <Pressable
-                  width="$full"
-                  borderStyle="dashed"
-                  borderWidth="$1"
-                  borderColor="#6B8EF2"
-                  backgroundColor="transparent"
-                  borderRadius="$lg"
-                  py="$2"
-                  onPressIn={() => setIsAddPressed(true)}
-                  onPressOut={() => setIsAddPressed(false)}
-                  style={{ opacity: isAddPressed ? 0.5 : 1 }}
-                  onPress={handleAddExercise}
-                >
-                  <HStack space="sm" justifyContent="center" alignItems="center">
-                    {/* @ts-ignore */}
-                    <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
-                    <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
-                  </HStack>
-                </Pressable>
-              </VStack>
-            ) : (
-              <Box backgroundColor="transparent" borderRadius="$lg" p="$3" >
-                <VStack space="xl" alignItems="center">
-                  <Text color="$gray400" fontSize="$md">Add exercises to this session</Text>
-                  <Box width="$full">
-                    <Pressable
-                      width="$full"
-                      borderStyle="dashed"
-                      borderWidth="$1"
-                      borderColor="#6B8EF2"
-                      backgroundColor="transparent"
-                      borderRadius="$lg"
-                      py="$2"
-                      onPressIn={() => setIsAddPressed(true)}
-                      onPressOut={() => setIsAddPressed(false)}
-                      style={{ opacity: isAddPressed ? 0.7 : 1 }}
-                      onPress={handleAddExercise}
-                    >
-                      <HStack space="sm" justifyContent="center" alignItems="center">
-                        {/* @ts-ignore */}
-                        <Icon as={Feather as any} name="plus" color="#6B8EF2" size="sm" />
-                        <Text color="#6B8EF2" fontSize="$md">Add Exercise</Text>
-                      </HStack>
-                    </Pressable>
-                  </Box>
-                </VStack>
-              </Box>
-            )}
+        {/* Split name with total (stacked) on the left, Reorder on the right */}
+        <HStack alignItems="flex-end" justifyContent="space-between" px="$4" pb="$2" flexShrink={0}>
+          <VStack>
+            <Text color="$white" fontSize="$2xl" fontWeight="$bold" numberOfLines={1}>
+              {activeSplit ? activeSplit.name : `${getLongWeekday(selectedDate) || 'Today'} workout`}
+            </Text>
+            <Text color="$gray400" fontSize="$sm">Total of {currentExercises.length}</Text>
           </VStack>
-          </ScrollView>
+          <Button
+            variant="link"
+            onPress={() => setSplitSheet({ visible: true, panel: 'root' })}
+          >
+            {/* @ts-ignore */}
+            <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+          </Button>
+        </HStack>
 
-          {/* Bottom action buttons */}
-          <Box p="$4" >
+        {/* Exercises list */}
+        <BottomSheetFlatList
+          data={currentExercises}
+          renderItem={renderExerciseItem}
+          keyExtractor={(item) => item.id}
+          style={[styles.listScroll, listViewportInset ? { marginBottom: listViewportInset } : null]}
+          contentContainerStyle={listContentStyle}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={renderListEmpty}
+          ListFooterComponent={renderListFooter}
+          ItemSeparatorComponent={() => <Box height="$3" />}
+          contentInsetAdjustmentBehavior="never"
+        />
+
+        <Box style={[styles.bottomActionsWrapper, { bottom: bottomLift }]} pointerEvents="box-none">
+          <Box
+            p="$4"
+            style={styles.bottomActions}
+            onLayout={(event) => {
+              const nextHeight = event.nativeEvent.layout.height;
+              if (nextHeight !== footerHeight) setFooterHeight(nextHeight);
+            }}
+            pointerEvents="auto"
+          >
             <HStack space="sm">
               <Pressable
                 backgroundColor="$red500"
@@ -417,7 +426,6 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
             </HStack>
           </Box>
         </Box>
-        </BottomSheetView>
       </BottomSheet>
 
       {/* Split-level menu bottom sheet */}
@@ -592,6 +600,26 @@ const styles = StyleSheet.create({
   sheetContent: {
     flex: 1,
     width: '100%',
+    minHeight: 0,
+  },
+  listScroll: {
+    flex: 1,
+    minHeight: 0,
+  },
+  bottomActionsWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  bottomActions: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  listContent: {
+    padding: 12,
   },
   contentContainer: {
     flex: 1,
