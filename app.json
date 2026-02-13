@@ -18,7 +18,17 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.jbk.tigerfitness"
+      "bundleIdentifier": "com.jbk.tigerfitness",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "tiger",
+              "com.googleusercontent.apps.357487995576-au4q5qoakvdui97gneroh4h3jrssphfp"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

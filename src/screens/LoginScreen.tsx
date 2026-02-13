@@ -53,10 +53,13 @@ const LoginScreen = () => {
   );
 
   const redirectUri = React.useMemo(() => {
-    // In a Dev Client / standalone build, this resolves to a real app-scheme redirect:
-    //   tiger://oauth
-    // Expo Go often cannot reliably use auth.expo.io proxy anymore.
-    return AuthSession.makeRedirectUri({ scheme: 'tiger', path: 'oauth' });
+    return AuthSession.makeRedirectUri({
+      scheme:
+        Platform.OS === "ios"
+          ? "com.googleusercontent.apps.357487995576-au4q5qoakvdui97gneroh4h3jrssphfp"
+          : "tiger",
+      path: "oauth",
+    });
   }, []);
 
   console.log('[GoogleAuth] redirectUri', redirectUri);
