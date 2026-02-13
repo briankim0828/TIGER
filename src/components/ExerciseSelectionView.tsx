@@ -53,7 +53,7 @@ const BODY_PART_ICONS: Record<string, any> = {
 
 const ExerciseSelectionView = () => {
   const navigation = useNavigation<NavigationProp>();
-  const route = useRoute<RouteProp<WorkoutStackParamList, 'ExerciseSelectionModalScreen'>>();
+  const route = useRoute<RouteProp<Record<string, any>, string>>();
   // Narrow params
   const splitId = (route.params as any)?.splitId as string | undefined;
   const requestId = (route.params as any)?.requestId as string | undefined;
@@ -161,9 +161,17 @@ const ExerciseSelectionView = () => {
   };
 
   return (
-    <Box backgroundColor="#232530" height="90%" borderRadius="$2xl" shadowRadius="$9">
+    <Box flex={1} bg="rgba(0,0,0,0.6)" justifyContent="center" alignItems="center" px="$4">
+      <Box
+        width="98%"
+        height="70%"
+        backgroundColor="#232530"
+        borderRadius="$2xl"
+        overflow="hidden"
+        shadowRadius="$9"
+      >
       {/* Header */}
-      <Box backgroundColor="#1A1C24" p="$4" borderRadius="$2xl" borderBottomLeftRadius={0} borderBottomRightRadius={0}>
+      <Box backgroundColor="#1A1C24" p="$4">
         <HStack alignItems="center" space="md">
           {/* @ts-ignore Icon typing for vector icons */}
           <Icon as={MaterialIcons as any} name="fitness-center" color="#6B8EF2" size="sm" />
@@ -333,6 +341,7 @@ const ExerciseSelectionView = () => {
             </Box>
           </VStack>
         </HStack>
+      </Box>
       </Box>
     </Box>
   );

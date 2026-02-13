@@ -452,6 +452,11 @@ const NavigationWrapper = () => {
             <Stack.Screen
               name="ExerciseSelectionModalScreen"
               component={ExerciseSelectionView}
+              options={{
+                presentation: 'transparentModal',
+                animation: 'slide_from_bottom',
+                contentStyle: { backgroundColor: 'transparent' },
+              }}
             />
             <Stack.Screen name="DebugDatabase" component={DebugDatabaseScreen} />
             <Stack.Screen name="LiveWorkoutDebug" component={LiveWorkoutDebug} />

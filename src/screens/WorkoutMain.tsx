@@ -32,7 +32,15 @@ const WorkoutMain = () => {
           contentStyle: { backgroundColor: 'transparent' }
         }}
       />
-      <Stack.Screen name="ExerciseSelection" component={ExerciseSelectionView} />
+      <Stack.Screen
+        name="ExerciseSelection"
+        component={ExerciseSelectionView}
+        options={{
+          presentation: 'transparentModal',
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: 'transparent' },
+        }}
+      />
     </Stack.Navigator>
   );
 };
