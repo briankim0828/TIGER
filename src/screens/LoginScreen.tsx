@@ -363,7 +363,7 @@ const LoginScreen = () => {
         });
         return;
       }
-      await googlePromptAsync({ useProxy: false });
+      await googlePromptAsync();
     } catch (e) {
       toast.show({
         placement: 'top',
@@ -480,6 +480,22 @@ const LoginScreen = () => {
                 {/* @ts-ignore ButtonIcon typing for vector icons */}
                 <ButtonIcon as={AntDesign as any} name="google" mr="$2" size={28} />
                 <ButtonText color="#111111">Sign up with Google</ButtonText>
+              </Button>
+            )}
+
+            {!isSignUp && (
+              <Button
+                size="lg"
+                variant="outline"
+                action="secondary"
+                onPress={handleGoogleSignUp}
+                isDisabled={!googleRequest}
+                backgroundColor="$white"
+                borderColor="$transparent"
+              >
+                {/* @ts-ignore ButtonIcon typing for vector icons */}
+                <ButtonIcon as={AntDesign as any} name="google" mr="$2" size={28} />
+                <ButtonText color="#111111">Sign in with Google</ButtonText>
               </Button>
             )}
 
