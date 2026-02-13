@@ -52,14 +52,16 @@ const LoginScreen = () => {
     (!needsIosClientId || GOOGLE_IOS_CLIENT_ID) && (!needsAndroidClientId || GOOGLE_ANDROID_CLIENT_ID)
   );
 
+  const GOOGLE_IOS_SCHEME =
+    "com.googleusercontent.apps.357487995576-au4q5qoakvdui97gneroh4h3jrssphfp";
+
   const redirectUri = React.useMemo(() => {
-    return AuthSession.makeRedirectUri({
-      scheme:
-        Platform.OS === "ios"
-          ? "com.googleusercontent.apps.357487995576-au4q5qoakvdui97gneroh4h3jrssphfp"
-          : "tiger",
-      path: "oauth",
-    });
+    if (Platform.OS === "ios") {
+      // IMPORTANT: single-slash format for Google iOS redirect
+      return `${GOOGLE_IOS_SCHEME}:/oauth`;
+    }
+    // Android (and others) can keep your normal scheme
+    return AuthSession.makeRedirectUri({ scheme: "tiger", path: "oauth" });
   }, []);
 
   console.log('[GoogleAuth] redirectUri', redirectUri);
@@ -107,6 +109,7 @@ const LoginScreen = () => {
       });
 
       if (error) {
+        console.error('[GoogleAuth] signInWithIdToken error:', error);
         toast.show({
           placement: 'top',
           render: ({ id }) => (
@@ -360,7 +363,7 @@ const LoginScreen = () => {
         });
         return;
       }
-      await googlePromptAsync();
+      await googlePromptAsync({ useProxy: false });
     } catch (e) {
       toast.show({
         placement: 'top',
