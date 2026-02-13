@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import * as SQLite from 'expo-sqlite';
 import { SimpleDataAccess } from '../db/queries/simple';
-import { seedExerciseCatalog } from '../db/seed/exerciseCatalogSeed';
 import { startBackgroundFlusher } from '../db/sync/flush';
 import { startupSync } from '../db/sync/startup';
 import { supabase } from '../utils/supabaseClient';
@@ -43,6 +42,7 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
   const [stopFlusher, setStopFlusher] = useState<(() => void) | null>(null);
   const initStartedRef = useRef(false);
+  const lastSyncUserIdRef = useRef<string | null>(null);
 
   const bump = (tables: string[]) => {
     if (!tables || tables.length === 0) return;
@@ -68,9 +68,6 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   const dataAccess = new SimpleDataAccess(database);
   await dataAccess.initializeTables();
         
-  // Seed canonical exercise catalog (idempotent)
-  await seedExerciseCatalog(database, { log: true });
-        
         setIsInitialized(true);
   // Local-only live capability is available immediately; real Electric wiring can replace this later.
   setIsLiveReady(true);
@@ -86,6 +83,7 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
           const userId = user?.id;
           if (userId) {
             await startupSync(database, userId, { log: true });
+            lastSyncUserIdRef.current = userId;
             // If any local-first data was created before auth using placeholder 'local-user', reassign it to real user
             try {
               await database.withTransactionAsync(async () => {
@@ -121,6 +119,28 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
       try { stopFlusher?.(); } catch {}
     };
   }, []);
+
+  useEffect(() => {
+    if (!db || !isInitialized) return;
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const userId = session?.user?.id ?? null;
+      if (!userId) {
+        lastSyncUserIdRef.current = null;
+        return;
+      }
+      if (lastSyncUserIdRef.current === userId) return;
+      try {
+        await startupSync(db, userId, { log: true });
+        lastSyncUserIdRef.current = userId;
+      } catch (e) {
+        console.warn('[sync] startup pull failed', e);
+      }
+    });
+
+    return () => {
+      try { (authListener as any)?.subscription?.unsubscribe?.(); } catch {}
+    };
+  }, [db, isInitialized]);
 
   // Avoid rendering children until DB is ready to prevent "Database not initialized" errors from hooks.
   if (!isInitialized || !db) {
