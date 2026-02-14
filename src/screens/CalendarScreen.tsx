@@ -135,7 +135,12 @@ const CalendarScreen: React.FC = () => {
 
 	const getPostForDate = useCallback((dateString: string | null) => {
 		if (!dateString) return null;
-		return posts.find(p => (p.startedAt ?? '').slice(0, 10) === dateString) ?? null;
+		return posts.find(p => {
+			if (!p.startedAt) return false;
+			const d = new Date(p.startedAt);
+			const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+			return localDate === dateString;
+		}) ?? null;
 	}, [posts]);
 
 	const formattedDate = useMemo(() => {

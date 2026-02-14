@@ -54,16 +54,19 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     const initial = splitTitle || '';
     setSessionName(initial);
     if (onSessionNameChange) onSessionNameChange(initial);
-    // Initialize backdated defaults
-    if (sessionStartedAtMs) {
-      const base = new Date(sessionStartedAtMs);
-      setCustomStart(base);
-    } else {
-      setCustomStart(null);
-    }
+    // Reset customDurationMin when session changes
     setCustomDurationMin(60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Initialize customStart whenever sessionStartedAtMs becomes available
+  useEffect(() => {
+    if (sessionStartedAtMs) {
+      setCustomStart(new Date(sessionStartedAtMs));
+    } else {
+      setCustomStart(null);
+    }
+  }, [sessionStartedAtMs]);
 
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);

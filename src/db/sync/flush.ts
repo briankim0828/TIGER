@@ -6,6 +6,14 @@ type FlushOptions = {
   maxBatch?: number;
 };
 
+// Mutex to prevent concurrent flush executions - use global to survive hot reloads
+const globalAny = global as any;
+if (!globalAny.__outboxFlushLock) {
+  globalAny.__outboxFlushLock = { inProgress: false, startedAt: 0 };
+}
+const flushLock = globalAny.__outboxFlushLock;
+const FLUSH_TIMEOUT_MS = 30000; // Release stale lock after 30s
+
 async function nextPending(db: SQLite.SQLiteDatabase, maxBatch: number) {
   const rows = await db.getAllAsync(`SELECT * FROM outbox WHERE status = 'pending' ORDER BY created_at ASC LIMIT ?`, [maxBatch]);
   return rows as any[];
@@ -175,6 +183,26 @@ async function pushToServer(db: SQLite.SQLiteDatabase, item: any) {
 }
 
 export async function runFlushOnce(db: SQLite.SQLiteDatabase, opts: FlushOptions = {}) {
+  // Prevent concurrent flush executions using global lock (survives hot reloads)
+  const now = Date.now();
+  if (flushLock.inProgress) {
+    // Check if lock is stale (stuck for > 30s)
+    if (now - flushLock.startedAt < FLUSH_TIMEOUT_MS) {
+      console.debug('[outbox] flush already in progress, skipping');
+      return 0;
+    }
+    console.warn('[outbox] releasing stale flush lock');
+  }
+  flushLock.inProgress = true;
+  flushLock.startedAt = now;
+  try {
+    return await runFlushOnceImpl(db, opts);
+  } finally {
+    flushLock.inProgress = false;
+  }
+}
+
+async function runFlushOnceImpl(db: SQLite.SQLiteDatabase, opts: FlushOptions = {}) {
   // Skip processing if unauthenticated
   try {
     const { data } = await supabase.auth.getSession();

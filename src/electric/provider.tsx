@@ -40,9 +40,10 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLiveReady, setIsLiveReady] = useState(false);
   const [tableVersions, setTableVersions] = useState<Record<string, number>>({});
-  const [stopFlusher, setStopFlusher] = useState<(() => void) | null>(null);
+  const stopFlusherRef = useRef<(() => void) | null>(null);
   const initStartedRef = useRef(false);
   const lastSyncUserIdRef = useRef<string | null>(null);
+  const syncInProgressRef = useRef<Promise<void> | null>(null);
 
   const bump = (tables: string[]) => {
     if (!tables || tables.length === 0) return;
@@ -75,15 +76,20 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
 
         // Start background outbox flusher
   const stop = startBackgroundFlusher(database, { intervalMs: 3000 });
-        setStopFlusher(() => stop);
+        stopFlusherRef.current = stop;
 
         // After auth resolves, run startup snapshot pull
         try {
           const { data: { user } } = await supabase.auth.getUser();
           const userId = user?.id;
           if (userId) {
-            await startupSync(database, userId, { log: true });
+            // Mark userId before starting sync so the onAuthStateChange
+            // listener won't kick off a duplicate concurrent pull.
             lastSyncUserIdRef.current = userId;
+            const syncPromise = startupSync(database, userId, { log: true });
+            syncInProgressRef.current = syncPromise;
+            await syncPromise;
+            syncInProgressRef.current = null;
             // If any local-first data was created before auth using placeholder 'local-user', reassign it to real user
             try {
               await database.withTransactionAsync(async () => {
@@ -102,6 +108,33 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
             try {
               await database.runAsync(`UPDATE outbox SET status = 'pending' WHERE status IN ('failed','processing')`);
             } catch {}
+            // Clean up orphaned outbox INSERT entries (rows that no longer exist locally)
+            // This handles cases where user cancelled a workout but the INSERT entries remained
+            try {
+              await database.runAsync(`
+                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sessions'
+                AND row_id NOT IN (SELECT id FROM workout_sessions)
+              `);
+              await database.runAsync(`
+                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_exercises'
+                AND row_id NOT IN (SELECT id FROM workout_exercises)
+              `);
+              await database.runAsync(`
+                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sets'
+                AND row_id NOT IN (SELECT id FROM workout_sets)
+              `);
+              await database.runAsync(`
+                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'splits'
+                AND row_id NOT IN (SELECT id FROM splits)
+              `);
+              await database.runAsync(`
+                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'split_day_assignments'
+                AND row_id NOT IN (SELECT id FROM split_day_assignments)
+              `);
+              console.log('[sync] Cleaned up orphaned outbox entries');
+            } catch (e) {
+              console.warn('[sync] outbox cleanup failed', e);
+            }
           } else {
             console.log('[sync] Skipping startup pull: no authenticated user');
           }
@@ -116,7 +149,7 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
     initializeDatabase();
     return () => {
       // cleanup flusher on unmount
-      try { stopFlusher?.(); } catch {}
+      try { stopFlusherRef.current?.(); } catch {}
     };
   }, []);
 
@@ -129,10 +162,21 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
         return;
       }
       if (lastSyncUserIdRef.current === userId) return;
+      // Wait for any in-flight sync to finish before starting a new one
+      // to avoid concurrent transactions on the same SQLite connection.
+      if (syncInProgressRef.current) {
+        try { await syncInProgressRef.current; } catch {}
+      }
+      // Re-check after awaiting — the in-flight sync may have handled this user
+      if (lastSyncUserIdRef.current === userId) return;
+      lastSyncUserIdRef.current = userId;
       try {
-        await startupSync(db, userId, { log: true });
-        lastSyncUserIdRef.current = userId;
+        const syncPromise = startupSync(db, userId, { log: true });
+        syncInProgressRef.current = syncPromise;
+        await syncPromise;
+        syncInProgressRef.current = null;
       } catch (e) {
+        syncInProgressRef.current = null;
         console.warn('[sync] startup pull failed', e);
       }
     });

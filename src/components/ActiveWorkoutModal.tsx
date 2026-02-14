@@ -140,17 +140,35 @@ const AnimatedSetRow: React.FC<AnimatedSetRowProps> = ({
   );
 };
 
+// Self-contained timer component that ticks every second without
+// triggering re-renders in the parent ActiveWorkoutModal.
+const WorkoutTimer = React.memo(({ startedAtMs, formatTimer }: { startedAtMs: number; formatTimer: (s: number) => string }) => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const elapsed = Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000));
+  return (
+    <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
+      {formatTimer(elapsed)}
+    </Text>
+  );
+});
+
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
 
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
+  activeSessionId?: string | null;
   onClose: () => void;
   onSave?: () => Promise<void>; // Optional custom handler
 }
 
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isVisible,
+  activeSessionId: activeSessionIdProp,
   onClose,
   onSave,
 }) => {
@@ -204,7 +222,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // State
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
   const [isBackdated, setIsBackdated] = useState<boolean>(false);
-  const [tick, setTick] = useState(0); // periodic re-render for timer
+  const [tick, setTick] = useState(0); // kept for backward compat; no longer drives re-renders
   // Exercises are always expanded now (no expand/collapse state)
   const [isEndingWorkout, setIsEndingWorkout] = useState(false);
   const [addingSetFor, setAddingSetFor] = useState<string | null>(null);
@@ -250,22 +268,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Only allow fully open or fully closed (no partial snap point)
   const snapPoints = useMemo(() => ['100%'], []);
   
-  // Initialize with active session when opened
+  // Use the sessionId from the container prop when available (eliminates async race);
+  // fall back to querying the DB for backward compatibility.
   useEffect(() => {
+    if (activeSessionIdProp) {
+      setSessionId(activeSessionIdProp);
+    }
+  }, [activeSessionIdProp]);
+
+  // Fetch header info (split title, startedAt, backdated flag) whenever sessionId resolves
+  useEffect(() => {
+    if (!sessionId) return;
     let cancelled = false;
     (async () => {
-      if (!isVisible) return;
-      if (!authUserId) return;
-      const sid = await getActiveSessionId(authUserId);
-      if (!sid) return;
-      if (!cancelled) setSessionId(sid);
-      // Fetch header info (split title, startedAt)
       try {
-        const info = await getSessionInfo(sid);
+        const info = await getSessionInfo(sessionId);
+        if (cancelled) return;
         if (info?.startedAt) {
           const startedMs = Date.parse(info.startedAt);
           setSessionStartedAtMs(startedMs);
-          // Determine if this is a backdated session (started before today)
           try {
             const startedDate = new Date(startedMs);
             const today = new Date();
@@ -278,17 +299,31 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           const name = (await getSplitName(info.splitId)) || '';
           if (!cancelled) setSplitTitle(name);
         } else {
-          // No split assigned: use weekday-based title from startedAt (or today if missing)
           const baseDate = info?.startedAt ? new Date(info.startedAt) : new Date();
           const weekday = baseDate.toLocaleDateString('en-US', { weekday: 'long' });
           if (!cancelled) setSplitTitle(`${weekday} workout`);
         }
       } catch {}
     })();
+    return () => { cancelled = true; };
+  }, [sessionId, getSessionInfo, getSplitName]);
+
+  // Initialize with active session when opened (fallback if prop not provided)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isVisible) return;
+      // If already resolved via prop, skip the async lookup
+      if (activeSessionIdProp) return;
+      if (!authUserId) return;
+      const sid = await getActiveSessionId(authUserId);
+      if (!sid) return;
+      if (!cancelled) setSessionId(sid);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [isVisible, authUserId, getActiveSessionId, getSessionInfo, getSplitName]);
+  }, [isVisible, authUserId, activeSessionIdProp, getActiveSessionId]);
 
   // When we have session start and exercises, fetch previous sets for each exercise
   useEffect(() => {
@@ -367,11 +402,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     };
   }, [isVisible]);
 
-  // Timer tick: compute elapsed from sessionStartedAtMs
+  // Timer tick: no longer drives parent re-renders.
+  // The WorkoutTimer component below handles its own 1-second ticks.
+  // We keep a low-frequency tick for edge cases (e.g. elapsed snapshot at Finish press).
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
     if (isVisible && sessionStartedAtMs && !isBackdated) {
-      interval = setInterval(() => setTick((t) => t + 1), 1000);
+      interval = setInterval(() => setTick((t) => t + 1), 30000);
     }
     return () => {
       if (interval) clearInterval(interval);
@@ -856,7 +893,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     console.log('ActiveWorkoutModal - Confirming discard');
     setIsDiscardAlertOpen(false);
     if (sessionId) {
-      endWorkout(sessionId, { status: 'cancelled' })
+      // Use deleteWorkout to properly clean up the session, exercises, sets and their outbox entries
+      deleteWorkout(sessionId)
         .then(() => bottomSheetRef.current?.close())
         .finally(() => {
           toast.show({
@@ -871,7 +909,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           });
         });
     }
-  }, [endWorkout, sessionId, toast]);
+  }, [deleteWorkout, sessionId, toast]);
 
   // Function to open the discard confirmation dialog
   const openDiscardAlert = () => {
@@ -898,7 +936,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   };
 
   const [splitTitle, setSplitTitle] = useState<string>('');
-  const elapsedSec = sessionStartedAtMs ? Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000)) : 0;
   const formattedDate = useMemo(() => {
     if (!sessionStartedAtMs) return '';
     try {
@@ -938,10 +975,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
         {/* Centered Timer overlay (hidden for backdated sessions) */}
         <Box position="absolute" left={0} right={0} alignItems="center" pointerEvents="none">
-          {!isBackdated && (
-            <Text color="$primary400" fontWeight="$semibold" fontSize="$md">
-              {formatTimer(elapsedSec)}
-            </Text>
+          {!isBackdated && sessionStartedAtMs && (
+            <WorkoutTimer startedAtMs={sessionStartedAtMs} formatTimer={formatTimer} />
           )}
         </Box>
 

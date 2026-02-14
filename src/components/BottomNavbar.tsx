@@ -41,7 +41,7 @@ const BottomNavbar: React.FC<BottomNavbarProps> = ({ selectedTab, onTabChange })
         <Pressable onPress={() => onTabChange('progress')} accessibilityRole="button" accessibilityLabel="Progress Tab">
           <VStack alignItems="center" space="xs">
             <Feather 
-              name="calendar" 
+              name="bar-chart" 
               color={selectedTab === 'progress' ? activeHex : inactiveHex} 
               size={iconSize}
             />

@@ -197,6 +197,7 @@ const ActiveWorkoutModalContainer = () => {
     <>
       <ActiveWorkoutModal
         isVisible={isVisible}
+        activeSessionId={sessionId}
         onClose={handleModalClose}
         onSave={handleEndWorkoutAndClose}
       />

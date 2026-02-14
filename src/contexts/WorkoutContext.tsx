@@ -47,19 +47,15 @@ export function WorkoutProvider({ children }: { children: React.ReactNode }) {
 
   const api = useMemo<WorkoutContextType>(() => ({
     startWorkout: async (userId, splitId = null, opts) => {
-      console.debug('[WorkoutContext] startWorkout called', { userId, splitId, opts });
       const policy: StartPolicy = opts?.policy ?? 'resumeIfActive';
       const active = await workouts.getActiveWorkoutSession(userId);
       if (active && policy === 'resumeIfActive') {
-        console.debug('[WorkoutContext] resuming existing active session', { sessionId: active.id });
         return { sessionId: active.id, resumed: true };
       }
       if (active && policy === 'endExistingThenStart') {
-        console.debug('[WorkoutContext] ending existing session before starting new', { sessionId: active.id });
         await workouts.endWorkout(active.id, { status: 'completed' });
       }
-  const { sessionId } = await workouts.startWorkout({ userId, splitId, fromSplitExerciseIds: opts?.fromSplitExerciseIds, startedAtOverride: opts?.startedAtOverride } as any);
-      console.debug('[WorkoutContext] new session started', { sessionId });
+      const { sessionId } = await workouts.startWorkout({ userId, splitId, fromSplitExerciseIds: opts?.fromSplitExerciseIds, startedAtOverride: opts?.startedAtOverride } as any);
       return { sessionId, resumed: false };
     },
   endWorkout: (sessionId, opts) => workouts.endWorkout(sessionId, opts),

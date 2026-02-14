@@ -60,8 +60,12 @@ export class WorkoutHistoryDataAccess {
     const entries: WorkoutCalendarEntry[] = [];
     for (const r of rows) {
       if (!r.startedAt) continue;
-      // Normalize to date component (UTC slice)
-      const date = r.startedAt.slice(0, 10); // YYYY-MM-DD
+      // Convert to local date for calendar display
+      const startedDate = new Date(r.startedAt as string);
+      const y = startedDate.getFullYear();
+      const m = String(startedDate.getMonth() + 1).padStart(2, '0');
+      const d = String(startedDate.getDate()).padStart(2, '0');
+      const date = `${y}-${m}-${d}`; // YYYY-MM-DD in local time
       // If multiple sessions same day, mark completed if ANY completed
       const existing = entries.find(e => e.date === date);
       if (existing) {

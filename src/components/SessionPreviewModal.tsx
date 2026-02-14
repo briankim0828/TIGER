@@ -145,15 +145,13 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const handleStartWorkout = useCallback(async () => {
     // If there are no exercises, do not allow starting
     if (currentExercises.length === 0) return;
-    // Trigger close animation; onChange(-1) will call onClose when animation completes
     setIsStartPressed(false);
-    bottomSheetRef.current?.close();
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
       if (!userId) return;
-  const ids = currentExercises.map(e => e.id);
-  const splitIdOrNull = activeSplit?.id ?? null;
+      const ids = currentExercises.map(e => e.id);
+      const splitIdOrNull = activeSplit?.id ?? null;
       // If logging a workout for a past date, override startedAt to that local date at noon
       let startedAtOverride: string | undefined;
       if (selectedDate) {
@@ -167,11 +165,20 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
           }
         }
       }
-      // Start session asynchronously; live session will trigger ActiveWorkoutModal
-      await startWorkout(userId, splitIdOrNull, { fromSplitExerciseIds: ids, startedAtOverride });
+      // Create session first, THEN close the sheet so the async work completes
+      // before the component unmounts. Use endExistingThenStart to avoid resuming
+      // a stale session that may have different/no exercises.
+      await startWorkout(userId, splitIdOrNull, {
+        policy: 'endExistingThenStart',
+        fromSplitExerciseIds: ids,
+        startedAtOverride,
+      });
     } catch (e) {
       console.error('SessionPreviewModal - failed to start workout', e);
     }
+    // Close the sheet after startWorkout succeeds (or fails) so the live-query
+    // system has already received the bumpTables notification.
+    bottomSheetRef.current?.close();
   }, [activeSplit, currentExercises, startWorkout, selectedDate]);
 
   const handleAddExercise = useCallback(() => {
