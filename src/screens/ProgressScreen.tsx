@@ -9,9 +9,11 @@ import { Box, Text, Pressable, VStack } from "@gluestack-ui/themed";
 import WorkoutHeatmap from "../components/WorkoutHeatmap";
 import ProgressGraph from "../components/ProgressGraph";
 import GraphCustomizationModal from "../components/GraphCustomizationModal";
+import ActiveWorkoutBanner from "../components/ActiveWorkoutBanner";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
+import { useLiveActiveSession } from "../db/live/workouts";
 import { supabase } from "../utils/supabaseClient";
 import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -29,9 +31,21 @@ const ProgressScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const db = useDatabase();
   const history = useWorkoutHistory();
-  const { startWorkout, getActiveSessionId } = useWorkout();
+  const { startWorkout, getActiveSessionId, getSessionInfo, getSplitName } = useWorkout();
+  const { showSessionSummary, workoutDataVersion, activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
   const [authUserId, setAuthUserId] = React.useState<string | null>(null);
   const [userFirstName, setUserFirstName] = React.useState<string>('');
+  
+  // Banner info state
+  const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
+  const [bannerStartedAtMs, setBannerStartedAtMs] = useState<number | null>(null);
+  
+  // Live active session for banner
+  const { session: activeSession } = useLiveActiveSession(authUserId || '');
+  
+  // Derived: banner is visible when there's an active session AND modal is NOT visible
+  const bannerVisible = !!activeSession?.id && !activeWorkoutModalVisible;
+  
   React.useEffect(() => {
     (async () => {
       try {
@@ -49,6 +63,31 @@ const ProgressScreen: React.FC = () => {
       } catch {}
     })();
   }, []);
+
+  // Update banner info based on active session
+  useEffect(() => {
+    const sid = activeSession?.id;
+    if (!sid) {
+      setBannerStartedAtMs(null);
+      return;
+    }
+    (async () => {
+      try {
+        const info = await getSessionInfo(sid);
+        if (info?.splitId) {
+          const name = (await getSplitName(info.splitId)) || 'Active Workout';
+          setBannerSplitName(name);
+        } else {
+          setBannerSplitName('Active Workout');
+        }
+        if (info?.startedAt) setBannerStartedAtMs(Date.parse(info.startedAt));
+      } catch {}
+    })();
+  }, [activeSession?.id, getSessionInfo, getSplitName]);
+
+  const handleBannerPress = useCallback(() => {
+    setActiveWorkoutModalVisible(true);
+  }, [setActiveWorkoutModalVisible]);
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -69,7 +108,6 @@ const ProgressScreen: React.FC = () => {
   const [graphSessions, setGraphSessions] = useState<Array<{ startedAt: string | null; totalVolumeKg: number | null; splitId: string | null }>>([]);
   const [isGraphCustomizationOpen, setIsGraphCustomizationOpen] = useState(false);
   const [selectedGraphSplitId, setSelectedGraphSplitId] = useState<string | null>(null);
-  const { showSessionSummary, workoutDataVersion } = useOverlay();
   // Pressed state for main action button
   const [isBeginPressed, setIsBeginPressed] = useState(false);
 
@@ -321,6 +359,13 @@ const ProgressScreen: React.FC = () => {
           setSelectedGraphSplitId(splitId);
           setIsGraphCustomizationOpen(false);
         }}
+      />
+
+      <ActiveWorkoutBanner
+        visible={bannerVisible}
+        splitName={bannerSplitName}
+        startedAtMs={bannerStartedAtMs}
+        onPress={handleBannerPress}
       />
       
   {/* SessionPreviewModal is now rendered globally via GlobalOverlays */}

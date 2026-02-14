@@ -24,7 +24,6 @@ import CalendarScreen from "./src/screens/CalendarScreen";
 import WorkoutPostDetailScreen from "./src/screens/WorkoutPostDetailScreen";
 import BottomNavbar from "./src/components/BottomNavbar";
 import ActiveWorkoutModal from "./src/components/ActiveWorkoutModal";
-import ActiveWorkoutBanner from "./src/components/ActiveWorkoutBanner";
 import SessionPreviewModal from "./src/components/SessionPreviewModal";
 import WorkoutSummaryModal from "./src/components/WorkoutSummaryModal";
 import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
@@ -84,14 +83,10 @@ try {
 // Active Workout Modal Container
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
-  const { endWorkout, getSessionInfo, getSplitName, getActiveSessionId } = useWorkout();
-  const [isVisible, setIsVisible] = useState(false);
+  const { endWorkout } = useWorkout();
+  const { activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
-  const [bannerVisible, setBannerVisible] = useState(false);
-  const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
-  const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
-  const [isSuppressed, setIsSuppressed] = useState(false);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   useEffect(() => {
     (async () => {
@@ -116,102 +111,31 @@ const ActiveWorkoutModalContainer = () => {
     const prevSid = prevSessionIdRef.current;
     const hasActive = !!sid;
     if (hasActive && sid !== prevSid) {
-      // New session started -> open modal immediately and reset suppression
-      setIsSuppressed(false);
-      setBannerVisible(false);
-      setIsVisible(true);
+      // New session started -> open modal immediately
+      setActiveWorkoutModalVisible(true);
     }
     prevSessionIdRef.current = sid;
-  }, [session?.id]);
-
-  // Update banner title and timer from live session
-  useEffect(() => {
-    const sid = session?.id;
-    if (!sid) {
-      setBannerVisible(false);
-      setIsVisible(false);
-      setSessionStartedAtMs(null);
-      return;
-    }
-    (async () => {
-      try {
-        const info = await getSessionInfo(sid);
-        if (info?.splitId) {
-          const name = (await getSplitName(info.splitId)) || 'Active Workout';
-          setBannerSplitName(name);
-        } else {
-          setBannerSplitName('Active Workout');
-        }
-        if (info?.startedAt) setSessionStartedAtMs(Date.parse(info.startedAt));
-      } catch {}
-    })();
-  }, [session?.id, getSessionInfo, getSplitName]);
+  }, [session?.id, setActiveWorkoutModalVisible]);
 
   const handleEndWorkoutAndClose = async () => {
     if (!sessionId) return;
     setIsClosingFromSave(true);
     await endWorkout(sessionId, { status: 'completed' });
     setTimeout(() => setIsClosingFromSave(false), 500);
-  // Hide banner and suppression after ending
-  setIsSuppressed(false);
-  setBannerVisible(false);
-  setIsVisible(false);
-  setSessionStartedAtMs(null);
+    setActiveWorkoutModalVisible(false);
   };
 
   const handleModalClose = () => {
-    // Called when the ActiveWorkoutModal bottom sheet closes.
-    // We only want to show the banner if a workout session is *still active*.
-    // This avoids the banner lingering after Finish/Cancel/Discard, where the
-    // modal closes but the "live active session" hook may not have re-rendered yet.
-    setIsVisible(false);
-    setIsSuppressed(true);
-    setBannerVisible(false);
-
-    // Re-check from the DB (source of truth) on the next tick.
-    setTimeout(async () => {
-      try {
-        if (!authUserId) {
-          setIsSuppressed(false);
-          setBannerVisible(false);
-          return;
-        }
-        const activeId = await getActiveSessionId(authUserId);
-        if (activeId) {
-          setSessionId(activeId);
-          setBannerVisible(true);
-        } else {
-          setIsSuppressed(false);
-          setBannerVisible(false);
-          setSessionId(null);
-        }
-      } catch {
-        // If we can't determine, default to hiding the banner.
-        setIsSuppressed(false);
-        setBannerVisible(false);
-      }
-    }, 0);
+    setActiveWorkoutModalVisible(false);
   };
 
   return (
-    <>
-      <ActiveWorkoutModal
-        isVisible={isVisible}
-        activeSessionId={sessionId}
-        onClose={handleModalClose}
-        onSave={handleEndWorkoutAndClose}
-      />
-      <ActiveWorkoutBanner
-        visible={bannerVisible}
-        splitName={bannerSplitName}
-  startedAtMs={sessionStartedAtMs}
-        onPress={() => {
-          setIsSuppressed(false);
-          setBannerVisible(false);
-          setIsVisible(true);
-        }}
-      />
-    </>
+    <ActiveWorkoutModal
+      isVisible={activeWorkoutModalVisible}
+      activeSessionId={sessionId}
+      onClose={handleModalClose}
+      onSave={handleEndWorkoutAndClose}
+    />
   );
 };
 

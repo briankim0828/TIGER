@@ -27,6 +27,9 @@ interface OverlayContextValue {
   showWorkoutSummary: (payload: WorkoutSummaryPayload) => void;
   hideWorkoutSummary: () => void;
   workoutSummary: WorkoutSummaryPayload | null;
+  // Active workout modal controls
+  activeWorkoutModalVisible: boolean;
+  setActiveWorkoutModalVisible: (visible: boolean) => void;
   // Global signal: bump to indicate workout history changed (e.g., finished workout)
   workoutDataVersion: number;
   bumpWorkoutDataVersion: () => void;
@@ -41,6 +44,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummaryPayload | null>(null);
   const [workoutDataVersion, setWorkoutDataVersion] = useState<number>(0);
   const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
+  const [activeWorkoutModalVisible, setActiveWorkoutModalVisible] = useState<boolean>(false);
 
   const showSessionSummary = useCallback((payload: SessionSummaryPayload) => {
     setSessionSummary(payload);
@@ -63,7 +67,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   return (
-    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled }}>
+    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled, activeWorkoutModalVisible, setActiveWorkoutModalVisible }}>
       {children}
     </OverlayContext.Provider>
   );
