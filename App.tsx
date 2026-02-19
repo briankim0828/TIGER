@@ -65,6 +65,8 @@ LogBox.ignoreLogs([
   // Silence noisy Reanimated ref shareable warning
   "Tried to modify key `current` of an object which has been already passed to a worklet",
   "[Reanimated] Tried to modify key `current` of an object which has been already passed to a worklet",
+  // @gluestack-ui/toast uses RN core SafeAreaView internally — suppress until upstream fixes
+  "SafeAreaView has been deprecated",
 ]);
 
 // Reanimated logger configuration to silence repetitive render warnings
