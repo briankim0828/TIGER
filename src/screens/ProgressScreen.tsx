@@ -19,6 +19,8 @@ import { useWorkout } from "../contexts/WorkoutContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from "react-native";
 import { ScrollView } from 'react-native-gesture-handler';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import ShimmerPlaceholder from '../components/ShimmerPlaceholder';
 import { useOverlay } from "../contexts/OverlayContext";
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
 import ProgressScreenSkeleton from '../components/ProgressScreenSkeleton';
@@ -277,13 +279,22 @@ const ProgressScreen: React.FC = () => {
           <VStack space="lg" p="$2">
             <Box h={25} />
             
-            <Box p="$1">   
-            <Text color="$textLight50" fontSize={30} fontWeight="$bold">
-              {greeting}
-            </Text>
-            <Text color="$white" opacity={0.7} fontSize={15} fontWeight="$normal">
-              Ready for another workout? 
-            </Text>
+            <Box p="$1">
+              {!userFirstName ? (
+                <>
+                  <ShimmerPlaceholder width={220} height={30} borderRadius={6} />
+                  <ShimmerPlaceholder width={180} height={15} borderRadius={4} style={{ marginTop: 6 }} />
+                </>
+              ) : (
+                <Animated.View entering={FadeIn.duration(350)}>
+                  <Text color="$textLight50" fontSize={30} fontWeight="$bold">
+                    {greeting}
+                  </Text>
+                  <Text color="$white" opacity={0.7} fontSize={15} fontWeight="$normal">
+                    Ready for another workout?
+                  </Text>
+                </Animated.View>
+              )}
             </Box>
 
             {/* Workout Heatmap navigates to Calendar */}
