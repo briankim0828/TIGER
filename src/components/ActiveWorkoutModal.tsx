@@ -380,6 +380,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
+      setLocalInputValues({});
+      dirtyInputKeysRef.current.clear();
       // no expansion state to reset
       // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
@@ -397,6 +399,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
+      setLocalInputValues({});
+      dirtyInputKeysRef.current.clear();
       // no expansion state to reset
       // currentExercises derived from live snapshot; nothing to reset
     };
@@ -484,31 +488,59 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Create state for TextInput temporary values
   const [localInputValues, setLocalInputValues] = useState<{[key: string]: {weightKg: string, reps: string}}>({});
+  const dirtyInputKeysRef = useRef<Set<string>>(new Set());
 
-  // Initialize localInputValues when exercises change
+  const defaultInputValuesBySetKey = useMemo(() => {
+    const defaults: { [key: string]: { weightKg: string; reps: string } } = {};
+
+    currentExercises.forEach((exercise) => {
+      if (!exercise.sets) return;
+      exercise.sets.forEach((set, setIndex) => {
+        const key = `${exercise.id}-${set.id || setIndex}`;
+        defaults[key] = {
+          // Store display-unit values in the input; convert on save.
+          weightKg: set.weightKg > 0 ? formatWeightFromKg(set.weightKg, unit, 1) : '',
+          reps: set.reps > 0 ? String(set.reps) : '',
+        };
+      });
+    });
+
+    return defaults;
+  }, [currentExercises, unit]);
+
+  // Keep local input values in sync with current rows while preserving in-progress edits.
   useEffect(() => {
-    if (currentExercises.length > 0) {
-      const newValues: { [key: string]: { weightKg: string; reps: string } } = {};
-      
-      currentExercises.forEach((exercise, exerciseIndex) => {
-        if (exercise.sets) {
-          exercise.sets.forEach((set, setIndex) => {
-            const key = `${exercise.id}-${set.id || setIndex}`;
-            newValues[key] = {
-              // Store display-unit values in the input; convert on save.
-              weightKg: set.weightKg > 0 ? formatWeightFromKg(set.weightKg, unit, 1) : '',
-              reps: set.reps > 0 ? String(set.reps) : ''
-            };
-          });
+    setLocalInputValues((prev) => {
+      const activeKeys = new Set<string>(Object.keys(defaultInputValuesBySetKey));
+      Object.entries(optimisticSets).forEach(([exerciseId, list]) => {
+        list.forEach((item) => activeKeys.add(`${exerciseId}-${item.id}`));
+      });
+
+      let changed = false;
+      const next: { [key: string]: { weightKg: string; reps: string } } = {};
+
+      activeKeys.forEach((key) => {
+        const prevValue = prev[key];
+        const fallback = defaultInputValuesBySetKey[key] ?? { weightKg: '', reps: '' };
+        const keepLocal = !!prevValue && dirtyInputKeysRef.current.has(key);
+        const resolved = keepLocal ? prevValue : fallback;
+        next[key] = resolved;
+        if (!prevValue || resolved !== prevValue) {
+          changed = true;
         }
       });
-      
-      setLocalInputValues(newValues);
-    }
-  }, [currentExercises, unit]);
+
+      if (Object.keys(prev).length !== Object.keys(next).length) {
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [defaultInputValuesBySetKey, optimisticSets]);
 
   // Handle weight input change locally (no update to context)
   const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weightKg' | 'reps', value: string) => {
+    dirtyInputKeysRef.current.add(setKey);
     setLocalInputValues((prev) => ({
       ...prev,
       [setKey]: {
@@ -546,12 +578,14 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       const originalKg = set.weightKg || 0;
       const nextDisplay = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? (unit === 'lb' ? 0 : originalKg) : numericValue);
       const nextKg = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? originalKg : toStorageKg(nextDisplay, unit));
+      dirtyInputKeysRef.current.delete(setKey);
       if (!nearlyEqual(nextKg, originalKg, 1e-3)) {
         updateSet(set.id, { weightKg: nextKg } as any).catch(console.error);
       }
     } else {
       const original = set.reps || 0;
       const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
+      dirtyInputKeysRef.current.delete(setKey);
       if (next !== original) {
         updateSet(set.id, { reps: next } as any).catch(console.error);
       }
@@ -706,6 +740,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           copy[`${exerciseId}-${newSet.id}`] = prevVal;
           return copy;
         });
+        if (dirtyInputKeysRef.current.has(tempKey)) {
+          dirtyInputKeysRef.current.delete(tempKey);
+          dirtyInputKeysRef.current.add(`${exerciseId}-${newSet.id}`);
+        }
       }
     })()
       .catch(console.error)
@@ -733,6 +771,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           delete copy[`${exerciseId}-${setId}`];
           return copy;
         });
+        dirtyInputKeysRef.current.delete(`${exerciseId}-${setId}`);
         return;
       }
 
@@ -763,6 +802,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             delete copy[key];
             return copy;
           });
+          dirtyInputKeysRef.current.delete(key);
 
           toast.show({
             placement: 'top',
