@@ -21,6 +21,7 @@ import { StyleSheet } from "react-native";
 import { ScrollView } from 'react-native-gesture-handler';
 import { useOverlay } from "../contexts/OverlayContext";
 import type { ProgramSplit, WorkoutCalendarEntry } from '../types/ui';
+import ProgressScreenSkeleton from '../components/ProgressScreenSkeleton';
 // Local WeekDay type (decoupled from legacy types/index.ts slated for removal)
 type WeekDay = 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun';
 
@@ -266,11 +267,7 @@ const ProgressScreen: React.FC = () => {
   }, [getActiveSessionId, authUserId]);
 
   if (loading) {
-    return (
-      <Box flex={1} justifyContent="center" alignItems="center" bg="$backgroundDark900">
-        <Text color="$textLight50">Loading Progress...</Text>
-      </Box>
-    );
+    return <ProgressScreenSkeleton />;
   }
 
   return (

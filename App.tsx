@@ -28,6 +28,7 @@ import SessionPreviewModal from "./src/components/SessionPreviewModal";
 import WorkoutSummaryModal from "./src/components/WorkoutSummaryModal";
 import { OverlayProvider, useOverlay } from "./src/contexts/OverlayContext";
 import { UnitProvider } from "./src/contexts/UnitContext";
+import ProgressScreenSkeleton from "./src/components/ProgressScreenSkeleton";
 import LoginScreen from "./src/screens/LoginScreen";
 import { supabase } from "./src/utils/supabaseClient";
 import {
@@ -496,18 +497,5 @@ const GlobalOverlays = () => {
   );
 };
 
-// Simple centered loading splash shown during initial auth resolution
-const LoadingSplash = () => {
-  return (
-    <Box flex={1} bg="#1E2028" alignItems="center" justifyContent="center">
-      <VStack space="md" alignItems="center">
-        <Text color="$textLight50" fontSize="$6xl" fontWeight="$bold">
-          TIGER
-        </Text>
-        <Text color="$textLight400" fontSize="$lg">
-          Loading user…
-        </Text>
-      </VStack>
-    </Box>
-  );
-};
+// Shimmer skeleton shown during initial auth resolution
+const LoadingSplash = () => <ProgressScreenSkeleton />;
