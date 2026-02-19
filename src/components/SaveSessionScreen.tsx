@@ -42,6 +42,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const { unit } = useUnit();
   const [note, setNote] = useState<string>('');
   const [sessionName, setSessionName] = useState<string>(splitTitle || '');
+  const [isSessionNameDirty, setIsSessionNameDirty] = useState<boolean>(false);
   // Backdated editables
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showDurationPicker, setShowDurationPicker] = useState(false);
@@ -53,11 +54,21 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     setNote('');
     const initial = splitTitle || '';
     setSessionName(initial);
+    setIsSessionNameDirty(false);
     if (onSessionNameChange) onSessionNameChange(initial);
     // Reset customDurationMin when session changes
     setCustomDurationMin(60);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // Keep local name in sync with upstream title updates (which may arrive async)
+  // unless the user already started typing a custom name on this screen.
+  useEffect(() => {
+    if (isSessionNameDirty) return;
+    const next = splitTitle || '';
+    setSessionName(next);
+    if (onSessionNameChange) onSessionNameChange(next);
+  }, [splitTitle, isSessionNameDirty, onSessionNameChange]);
 
   // Initialize customStart whenever sessionStartedAtMs becomes available
   useEffect(() => {
@@ -257,7 +268,11 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
           {/* Split/Workout name (editable) - no box/inset, keep original layout */}
           <TextInput
             value={sessionName}
-            onChangeText={(t) => { setSessionName(t); if (onSessionNameChange) onSessionNameChange(t); }}
+            onChangeText={(t) => {
+              setSessionName(t);
+              setIsSessionNameDirty(true);
+              if (onSessionNameChange) onSessionNameChange(t);
+            }}
             placeholder={splitTitle || 'Workout'}
             placeholderTextColor="#9CA3AF"
             multiline
