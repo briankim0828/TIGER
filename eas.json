@@ -8,10 +8,7 @@
       "distribution": "internal"
     },
     "production": {
-      "distribution": "store",
-      "env": {
-        "EXPO_ENVIRONMENT": "production"
-      }
+      "distribution": "store"
     }
   },
   "submit": {
