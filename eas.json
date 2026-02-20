@@ -8,7 +8,8 @@
       "distribution": "internal"
     },
     "production": {
-      "distribution": "store"
+      "distribution": "store",
+      "environment": "production"
     }
   },
   "submit": {
