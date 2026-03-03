@@ -258,7 +258,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const actionMenuSnapPoints = useMemo(() => ['28%'], []);
   const [actionExerciseId, setActionExerciseId] = useState<string | null>(null);
   const previousSetsSheetRef = useRef<BottomSheet>(null);
-  const previousSetsSnapPoints = useMemo(() => ['62%'], []);
+  const previousSetsSnapPoints = useMemo(() => ['1%'], []);
   const [previousSetsExerciseId, setPreviousSetsExerciseId] = useState<string | null>(null);
   const [previousSetGroups, setPreviousSetGroups] = useState<Array<{
     sessionId: string;
@@ -1924,6 +1924,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         ref={previousSetsSheetRef}
         index={-1}
         snapPoints={previousSetsSnapPoints}
+        enableDynamicSizing
+        maxDynamicContentSize={Math.round(windowDims.height * 0.8)}
         enablePanDownToClose
         onClose={() => {
           setPreviousSetsExerciseId(null);
@@ -1971,7 +1973,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                         borderRadius="$md"
                         px="$3"
                         py="$3"
-                        borderWidth={1}
+                        borderWidth={0}
                         borderColor={isApplying ? '$primary500' : '$backgroundLight700'}
                         style={{ opacity: applyingPreviousGroupId && !isApplying ? 0.7 : 1 }}
                       >

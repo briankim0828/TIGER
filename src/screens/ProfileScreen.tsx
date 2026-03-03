@@ -209,10 +209,21 @@ const ProfileScreen: React.FC = () => {
   // Refresh posts whenever Profile gains focus
   useFocusEffect(
     useCallback(() => {
+      let active = true;
+      (async () => {
+        if (isGuest) return;
+        try {
+          const currentUser = await getCurrentUser();
+          if (active) setUser(currentUser);
+        } catch {}
+      })();
+
       refreshPosts();
       fetchUserStats();
-      return () => {};
-    }, [refreshPosts, fetchUserStats, workoutDataVersion])
+      return () => {
+        active = false;
+      };
+    }, [refreshPosts, fetchUserStats, workoutDataVersion, isGuest])
   );
 
   // Also refresh after user is available

@@ -18,6 +18,8 @@ import {
   Toast,
   ToastTitle,
   ToastDescription,
+  Input,
+  InputField,
 } from '@gluestack-ui/themed';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -25,7 +27,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useUnit } from '../contexts/UnitContext';
 import { useWorkoutHistory } from '../db/queries';
-import { signOutUser, deleteMyAccount } from '../supabase/supabaseProfile';
+import { signOutUser, deleteMyAccount, updateAuthUserDisplayName } from '../supabase/supabaseProfile';
 import { useAppAuth } from '../contexts/AppAuthContext';
 
 const SettingsScreen: React.FC = () => {
@@ -33,13 +35,22 @@ const SettingsScreen: React.FC = () => {
   const toast = useToast();
   const { liveDebugEnabled, setLiveDebugEnabled } = useOverlay();
   const { unit, setUnit } = useUnit();
-  const { isGuest, exitGuestMode, effectiveUserId } = useAppAuth();
+  const { isGuest, exitGuestMode, effectiveUserId, continueAsGuest, guestDisplayName, user } = useAppAuth();
   const history = useWorkoutHistory();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const cancelRef = React.useRef(null);
   const [isDeleteAccountOpen, setIsDeleteAccountOpen] = React.useState(false);
   const deleteAccountCancelRef = React.useRef(null);
   const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
+  const [isEditNameOpen, setIsEditNameOpen] = React.useState(false);
+  const [pendingDisplayName, setPendingDisplayName] = React.useState('');
+  const [isSavingDisplayName, setIsSavingDisplayName] = React.useState(false);
+
+  const currentDisplayName = React.useMemo(() => {
+    if (isGuest) return (guestDisplayName || 'Guest').trim() || 'Guest';
+    const meta: any = (user as any)?.user_metadata ?? {};
+    return (meta?.display_name || meta?.name || user?.email || 'User').toString();
+  }, [isGuest, guestDisplayName, user]);
 
   const handleLogout = async () => {
     try {
@@ -146,6 +157,65 @@ const SettingsScreen: React.FC = () => {
     }
   };
 
+  const handleOpenEditDisplayName = () => {
+    setPendingDisplayName(currentDisplayName);
+    setIsEditNameOpen(true);
+  };
+
+  const handleSaveDisplayName = async () => {
+    const normalized = pendingDisplayName.trim();
+    if (!normalized) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Invalid Name</ToastTitle>
+              <ToastDescription>Please enter a display name.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+      return;
+    }
+
+    try {
+      setIsSavingDisplayName(true);
+      if (isGuest) {
+        await continueAsGuest(normalized);
+      } else {
+        const { error } = await updateAuthUserDisplayName(normalized);
+        if (error) throw error;
+      }
+
+      setIsEditNameOpen(false);
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Display Name Updated</ToastTitle>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } catch {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Update Failed</ToastTitle>
+              <ToastDescription>Could not update display name.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsSavingDisplayName(false);
+    }
+  };
+
   return (
     <SafeAreaView
       edges={['left', 'right', 'bottom']}
@@ -204,6 +274,24 @@ const SettingsScreen: React.FC = () => {
                   <Text color="$textLight50" fontWeight={unit === 'lb' ? '$bold' : '$normal'}>lbs</Text>
                 </Pressable>
               </HStack>
+            </HStack>
+          </Box>
+
+          <Box bg="#12141A" borderRadius="$lg" p="$3" borderWidth={1} borderColor="#2A2E38">
+            <HStack alignItems="center" justifyContent="space-between" space="sm">
+              <VStack flex={1}>
+                <Text color="$textLight50" fontSize="$md" fontWeight="$semibold">Display Name</Text>
+                <Text color="$textLight300" fontSize="$sm" numberOfLines={1}>{currentDisplayName}</Text>
+              </VStack>
+              <Button
+                variant="outline"
+                action="secondary"
+                size="sm"
+                onPress={handleOpenEditDisplayName}
+                borderColor="#2A2E38"
+              >
+                <ButtonText>Change</ButtonText>
+              </Button>
             </HStack>
           </Box>
 
@@ -329,6 +417,67 @@ const SettingsScreen: React.FC = () => {
               </Button>
               <Button bg="$red600" action="negative" isDisabled={isDeletingAccount} onPress={handleDeleteAccount}>
                 <ButtonText>{isDeletingAccount ? 'Deleting…' : 'Delete'}</ButtonText>
+              </Button>
+            </HStack>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit display name dialog */}
+      <AlertDialog
+        isOpen={isEditNameOpen}
+        onClose={() => {
+          if (!isSavingDisplayName) setIsEditNameOpen(false);
+        }}
+      >
+        <AlertDialogBackdrop style={{ backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
+        <AlertDialogContent bg="#1E2028" borderColor="#2A2E38" borderWidth={1}>
+          <AlertDialogHeader>
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$lg">Change Display Name</Text>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <VStack space="sm">
+              <Text size="sm" color="$textLight300">Enter a new display name.</Text>
+              <Input
+                size="md"
+                variant="outline"
+                borderColor="#3A3F4B"
+                bg="#12141A"
+                borderRadius="$md"
+                $focus={{ borderColor: '#3B82F6' }}
+              >
+                <InputField
+                  value={pendingDisplayName}
+                  onChangeText={setPendingDisplayName}
+                  placeholder="Display name"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                  maxLength={40}
+                  color="$textLight50"
+                />
+              </Input>
+            </VStack>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <HStack space="sm" width="100%" justifyContent="flex-end">
+              <Button
+                variant="outline"
+                action="secondary"
+                isDisabled={isSavingDisplayName}
+                onPress={() => setIsEditNameOpen(false)}
+                borderColor="#3A3F4B"
+                bg="transparent"
+                $pressed={{ bg: '#252938' }}
+              >
+                <ButtonText color="$textLight50">Cancel</ButtonText>
+              </Button>
+              <Button
+                bg="#3B82F6"
+                isDisabled={isSavingDisplayName}
+                onPress={handleSaveDisplayName}
+                $pressed={{ bg: '#2563EB' }}
+              >
+                <ButtonText color="$textLight50">{isSavingDisplayName ? 'Saving…' : 'Save'}</ButtonText>
               </Button>
             </HStack>
           </AlertDialogFooter>

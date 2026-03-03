@@ -64,6 +64,21 @@ export const updateAuthUserAvatarPath = async (avatarPath: string): Promise<{ er
 };
 
 /**
+ * Persists the current user's display name on the auth user object.
+ */
+export const updateAuthUserDisplayName = async (displayName: string): Promise<{ error: any | null }> => {
+  try {
+    const normalized = (displayName ?? '').trim();
+    const { error } = await supabase.auth.updateUser({ data: { display_name: normalized } });
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    console.error('Supabase: Error updating auth user display name metadata:', error);
+    return { error };
+  }
+};
+
+/**
  * Gets the public URL for an avatar from Supabase Storage.
  * Adds a timestamp for cache busting.
  */
