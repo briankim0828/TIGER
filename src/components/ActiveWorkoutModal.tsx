@@ -1442,6 +1442,51 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     );
   };
 
+  const getExerciseVolumeDiff = useCallback((exercise: RenderExercise) => {
+    const sessionExerciseId = exerciseIdToSessionExerciseId[exercise.id];
+    const previousSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
+    if (previousSets.length === 0) return null;
+
+    const toDisplayWeight = (stored: number | null | undefined) => {
+      if (stored == null) return 0;
+      const parsed = Number(formatWeightFromKg(Number(stored), unit, 1));
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+
+    const currentVolume = (exercise.sets || []).reduce((sum, set, setIndex) => {
+      const setKey = `${exercise.id}-${set.id || setIndex}`;
+      const local = localInputValues[setKey] || { weightKg: '', reps: '' };
+
+      const localWeight = (local.weightKg ?? '').toString().trim();
+      const localReps = (local.reps ?? '').toString().trim();
+
+      const weight = localWeight !== '' ? Number(localWeight) : toDisplayWeight(set.weightKg);
+      const reps = localReps !== '' ? Number(localReps) : Number(set.reps ?? 0);
+
+      if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) return sum;
+      return sum + (weight * reps);
+    }, 0);
+
+    const previousVolume = previousSets.reduce((sum, set) => {
+      const weight = toDisplayWeight(set.weightKg);
+      const reps = Number(set.reps ?? 0);
+      if (!Number.isFinite(weight) || !Number.isFinite(reps) || weight <= 0 || reps <= 0) return sum;
+      return sum + (weight * reps);
+    }, 0);
+
+    const roundedDiff = Math.round((currentVolume - previousVolume) * 10) / 10;
+    const isPositive = roundedDiff >= 0;
+    const absText = Math.abs(roundedDiff).toLocaleString(undefined, {
+      maximumFractionDigits: 1,
+      minimumFractionDigits: 0,
+    });
+
+    return {
+      text: `${isPositive ? '+' : '-'}${absText}`,
+      isPositive,
+    };
+  }, [exerciseIdToSessionExerciseId, prevSetsByExercise, unit, localInputValues]);
+
   return (
     <GestureHandlerRootView style={styles.rootContainer} pointerEvents="box-none">
       <BottomSheet
@@ -1497,7 +1542,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   >
                     {/* Exercise list with sets */}
                     <VStack space="sm" width="100%">
-                      {currentExercises.map((exercise) => (
+                      {currentExercises.map((exercise) => {
+                        const volumeDiff = getExerciseVolumeDiff(exercise);
+                        return (
                         <Box key={exercise.id}>
                           <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
                             <HStack space="sm" alignItems="center">
@@ -1524,9 +1571,21 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                                 <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">
                                   Set
                                 </Text>
-                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
-                                  Previous
-                                </Text>
+                                <HStack flex={1} alignItems="center" justifyContent="center" space="xs">
+                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                    Prev
+                                  </Text>
+                                  {!!volumeDiff && (
+                                    <Text
+                                      fontSize="$xs"
+                                      fontWeight="$semibold"
+                                      color={volumeDiff.isPositive ? '#22c55e' : '#ef4444'}
+                                      textAlign="center"
+                                    >
+                                      {volumeDiff.text}
+                                    </Text>
+                                  )}
+                                </HStack>
                                 <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
                                   <Text color="$textLight50" textAlign="center" fontSize="$sm">
                                     {weightLabel}
@@ -1581,7 +1640,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             </VStack>
                           </Box>
                         </Box>
-                      ))}
+                      )})}
                     </VStack>
 
                     <Box

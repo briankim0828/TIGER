@@ -218,13 +218,27 @@ const SettingsScreen: React.FC = () => {
             </Button>
           )}
 
-          <Button
+          {/* <Button
             variant="outline"
             action="secondary"
             size="lg"
             onPress={() => (navigation as any).navigate('DebugDatabase')}
           >
             <ButtonText>Open Debug Database</ButtonText>
+          </Button> */}
+
+          
+
+          <Button
+            variant="outline"
+            action="negative"
+            size="lg"
+            mt={2}
+            onPress={() => setIsAlertOpen(true)}
+            borderColor="$red600"
+            $pressed={{ bg: 'rgba(220, 53, 69, 0.1)' }}
+          >
+            <ButtonText color="$red600">Clear All Workout Data</ButtonText>
           </Button>
 
           <Button
@@ -237,18 +251,6 @@ const SettingsScreen: React.FC = () => {
             $pressed={{ bg: '$red700' }}
           >
             <ButtonText>Logout</ButtonText>
-          </Button>
-
-          <Button
-            variant="outline"
-            action="negative"
-            size="lg"
-            mt={2}
-            onPress={() => setIsAlertOpen(true)}
-            borderColor="$red600"
-            $pressed={{ bg: 'rgba(220, 53, 69, 0.1)' }}
-          >
-            <ButtonText color="$red600">Clear All Workout Data</ButtonText>
           </Button>
 
           <Button
