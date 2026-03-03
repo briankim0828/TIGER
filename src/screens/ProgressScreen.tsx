@@ -14,8 +14,8 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 // DataContext removed in CP5; use direct DB queries
 import { useDatabase, useWorkoutHistory } from "../db/queries";
 import { useLiveActiveSession } from "../db/live/workouts";
-import { supabase } from "../utils/supabaseClient";
 import { useWorkout } from "../contexts/WorkoutContext";
+import { useAppAuth } from "../contexts/AppAuthContext";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from "react-native";
 import { ScrollView } from 'react-native-gesture-handler';
@@ -36,8 +36,9 @@ const ProgressScreen: React.FC = () => {
   const history = useWorkoutHistory();
   const { startWorkout, getActiveSessionId, getSessionInfo, getSplitName } = useWorkout();
   const { showSessionSummary, workoutDataVersion, activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
-  const [authUserId, setAuthUserId] = React.useState<string | null>(null);
+  const { effectiveUserId, user, isGuest, guestDisplayName } = useAppAuth();
   const [userFirstName, setUserFirstName] = React.useState<string>('');
+  const authUserId = effectiveUserId;
   
   // Banner info state
   const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
@@ -50,22 +51,20 @@ const ProgressScreen: React.FC = () => {
   const bannerVisible = !!activeSession?.id && !activeWorkoutModalVisible;
   
   React.useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        setAuthUserId(user?.id ?? null);
-
-        const meta: any = (user as any)?.user_metadata ?? {};
-        const display =
-          (meta?.display_name ?? meta?.full_name ?? meta?.name ?? '')
-            .toString()
-            .trim() ||
-          (user?.email ? user.email.split('@')[0] : '');
-        const first = display.toString().trim().split(/\s+/)[0] ?? '';
-        setUserFirstName(first);
-      } catch {}
-    })();
-  }, []);
+    if (isGuest) {
+      const firstGuest = (guestDisplayName || 'Guest').trim().split(/\s+/)[0] ?? 'Guest';
+      setUserFirstName(firstGuest);
+      return;
+    }
+    const meta: any = (user as any)?.user_metadata ?? {};
+    const display =
+      (meta?.display_name ?? meta?.full_name ?? meta?.name ?? '')
+        .toString()
+        .trim() ||
+      (user?.email ? user.email.split('@')[0] : '');
+    const first = display.toString().trim().split(/\s+/)[0] ?? '';
+    setUserFirstName(first);
+  }, [isGuest, user, guestDisplayName]);
 
   // Update banner info based on active session
   useEffect(() => {

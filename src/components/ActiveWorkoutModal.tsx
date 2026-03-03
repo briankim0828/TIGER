@@ -9,11 +9,11 @@ import { Entypo, Ionicons, Feather } from '@expo/vector-icons';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback } from '../navigation/selectionRegistry';
 import { useLiveSessionSnapshot } from '../db/live/workouts';
-import { supabase } from '../utils/supabaseClient';
 import { useUnit } from '../contexts/UnitContext';
 import { formatWeightFromKg, nearlyEqual, toStorageKg, unitLabel } from '../utils/units';
 import SaveSessionScreen from './SaveSessionScreen';
 import { useWorkoutHistory } from '../db/queries';
+import { useAppAuth } from '../contexts/AppAuthContext';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -178,17 +178,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // navigation handled via global ref
   const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, reorderSessionExercises, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        setAuthUserId(user?.id ?? null);
-      } catch {}
-    })();
-  }, []);
+  const { effectiveUserId } = useAppAuth();
+  const authUserId = effectiveUserId;
   
   const [sessionId, setSessionId] = useState<string | null>(null);
   const history = useWorkoutHistory();

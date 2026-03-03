@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Box,
   VStack,
@@ -12,6 +12,12 @@ import {
   Center,
   Heading,
   Text,
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
 } from "@gluestack-ui/themed";
 import { supabase } from "../utils/supabaseClient";
 import { Platform, StyleSheet, TextInput } from "react-native";
@@ -31,7 +37,11 @@ import {
 
 WebBrowser.maybeCompleteAuthSession();
 
-const LoginScreen = () => {
+type LoginScreenProps = {
+  onContinueAsGuest?: (displayName: string) => Promise<void>;
+};
+
+const LoginScreen = ({ onContinueAsGuest }: LoginScreenProps) => {
   const toast = useToast();
   const navigation = useNavigation();
 
@@ -43,6 +53,10 @@ const LoginScreen = () => {
   const [authView, setAuthView] = useState<"auth" | "confirm-email">("auth");
   const [pendingConfirmEmail, setPendingConfirmEmail] = useState("");
   const [isResendingConfirmEmail, setIsResendingConfirmEmail] = useState(false);
+  const [isGuestPromptOpen, setIsGuestPromptOpen] = useState(false);
+  const [guestDisplayName, setGuestDisplayName] = useState("");
+  const [isGuestContinuing, setIsGuestContinuing] = useState(false);
+  const guestPromptCancelRef = useRef(null);
 
   const executionEnvironment = (Constants as any).executionEnvironment as string | undefined;
   const isExpoGo = executionEnvironment === 'storeClient';
@@ -379,6 +393,44 @@ const LoginScreen = () => {
     }
   };
 
+  const handleConfirmGuestMode = async () => {
+    const normalized = guestDisplayName.trim();
+    if (!normalized) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="warning" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Display Name Required</ToastTitle>
+              <ToastDescription>Please choose a display name for guest mode.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+      return;
+    }
+
+    setIsGuestContinuing(true);
+    try {
+      await onContinueAsGuest?.(normalized);
+      setIsGuestPromptOpen(false);
+    } catch (e) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="solid">
+            <VStack space="xs">
+              <ToastTitle>Guest Mode Unavailable</ToastTitle>
+              <ToastDescription>{e instanceof Error ? e.message : 'An unknown error occurred'}</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsGuestContinuing(false);
+    }
+  };
+
   return (
     <Box flex={1} bg="#1E2028" pt={20} testID="login-screen-box">
       <Center flex={1} px="$4">
@@ -424,7 +476,7 @@ const LoginScreen = () => {
         ) : (
           <VStack space="md" w="100%">
             <Heading color="$textLight50" size="2xl" mb="$8" textAlign="center">
-              {isSignUp ? "Create Account" : "Welcome Back"}
+              {isSignUp ? "Create Account" : "Sign in to TIGER"}
             </Heading>
 
             <TextInput
@@ -503,6 +555,17 @@ const LoginScreen = () => {
               size="lg"
               variant="link"
               onPress={() => {
+                setGuestDisplayName("");
+                setIsGuestPromptOpen(true);
+              }}
+            >
+              <ButtonText color="$primary500">Continue as Guest</ButtonText>
+            </Button>
+
+            <Button
+              size="lg"
+              variant="link"
+              onPress={() => {
                 setIsSignUp(!isSignUp);
                 setAuthView("auth");
                 setPendingConfirmEmail("");
@@ -518,6 +581,68 @@ const LoginScreen = () => {
           </VStack>
         )}
       </Center>
+
+      <AlertDialog
+        isOpen={isGuestPromptOpen}
+        leastDestructiveRef={guestPromptCancelRef}
+        onClose={() => {
+          if (isGuestContinuing) return;
+          setIsGuestPromptOpen(false);
+        }}
+      >
+        <AlertDialogBackdrop />
+        <AlertDialogContent bg="#1E2028" borderColor="#2A2E38" borderWidth={1}>
+          <AlertDialogHeader>
+            <Heading size="md" color="$textLight50">Continue as Guest</Heading>
+          </AlertDialogHeader>
+          <AlertDialogBody>
+            <VStack space="sm">
+              <Text color="$textLight300">Choose a display name for guest mode.</Text>
+              <TextInput
+                placeholder="Display Name"
+                value={guestDisplayName}
+                onChangeText={setGuestDisplayName}
+                style={styles.guestPromptInput}
+                placeholderTextColor="gray"
+                autoCapitalize="words"
+                returnKeyType="done"
+                onSubmitEditing={handleConfirmGuestMode}
+              />
+            </VStack>
+          </AlertDialogBody>
+          <AlertDialogFooter>
+            <Box width="$full">
+              <VStack space="sm" width="$full">
+                <Button
+                  size="lg"
+                  action="primary"
+                  onPress={handleConfirmGuestMode}
+                  isDisabled={isGuestContinuing}
+                  bg="$primary500"
+                  $pressed={{ bg: "$primary600" }}
+                  width="$full"
+                >
+                  <ButtonText color="$textLight50">{isGuestContinuing ? 'Continuing...' : 'Continue'}</ButtonText>
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  action="secondary"
+                  onPress={() => setIsGuestPromptOpen(false)}
+                  ref={guestPromptCancelRef}
+                  isDisabled={isGuestContinuing}
+                  borderColor="#2A2E38"
+                  bg="transparent"
+                  width="$full"
+                >
+                  <ButtonText color="$textLight100">Cancel</ButtonText>
+                </Button>
+                
+              </VStack>
+            </Box>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Box>
   );
 };
@@ -534,5 +659,14 @@ const styles = StyleSheet.create({
     padding: 15,
     backgroundColor: "#2A2E38",
     marginBottom: 10,
+  },
+  guestPromptInput: {
+    color: "white",
+    fontSize: parseFontSize("md"),
+    borderWidth: 1,
+    borderColor: "#2A2E38",
+    borderRadius: 7,
+    padding: 12,
+    backgroundColor: "#12141A",
   },
 });

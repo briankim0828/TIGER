@@ -42,6 +42,7 @@ import {
 import { useOverlay } from '../contexts/OverlayContext';
 import { useUnit } from '../contexts/UnitContext';
 import { formatVolumeFromKg, unitLabel } from '../utils/units';
+import { useAppAuth } from '../contexts/AppAuthContext';
 
 type WorkoutTab = {
   id: number;
@@ -66,6 +67,7 @@ const ProfileScreen: React.FC = () => {
   const toast = useToast(); // gluestack-ui toast hook
   const { liveDebugEnabled, setLiveDebugEnabled, workoutDataVersion } = useOverlay();
   const { unit } = useUnit();
+  const { isGuest, exitGuestMode, guestDisplayName, effectiveUserId } = useAppAuth();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -78,16 +80,7 @@ const ProfileScreen: React.FC = () => {
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const cancelRef = React.useRef(null);
   const history = useWorkoutHistory();
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [posts, setPosts] = useState<WorkoutPost[]>([]);
-  useEffect(() => {
-    (async () => {
-      try {
-        const current = await getCurrentUser();
-        setAuthUserId(current?.id ?? null);
-      } catch {}
-    })();
-  }, []);
 
   const workoutTabs: WorkoutTab[] = [
     { id: 1, title: 'Workouts', icon: 'fitness-center' },
@@ -126,6 +119,7 @@ const ProfileScreen: React.FC = () => {
   }, []);
 
   const accountDisplayName = useMemo(() => {
+    if (isGuest) return (guestDisplayName || 'Guest').trim() || 'Guest';
     const meta: any = (user as any)?.user_metadata ?? {};
     const fromMeta = (
       meta?.display_name ??
@@ -140,7 +134,7 @@ const ProfileScreen: React.FC = () => {
     if (fromMeta) return fromMeta;
     if (user?.email) return user.email.split('@')[0];
     return 'User';
-  }, [user]);
+  }, [user, isGuest, guestDisplayName]);
 
   const avatarPathFromAuth = useMemo(() => {
     const meta: any = (user as any)?.user_metadata ?? {};
@@ -179,23 +173,31 @@ const ProfileScreen: React.FC = () => {
 
   const fetchUserStats = useCallback(async () => {
     try {
-  const s = await history.getWorkoutStats(user?.id ?? authUserId ?? '');
+      const uid = effectiveUserId ?? user?.id ?? '';
+      if (!uid) {
+        setStats({ totalWorkouts: 0, hoursTrained: 0 });
+        return;
+      }
+      const s = await history.getWorkoutStats(uid);
       setStats(s);
     } catch (error) {
       console.error('Error fetching stats (local DB):', error);
     }
-  }, [history, user?.id, authUserId]);
+  }, [history, effectiveUserId, user?.id]);
 
   const refreshPosts = useCallback(async () => {
     try {
-      const uid = user?.id ?? authUserId ?? '';
-      if (!uid) return;
+      const uid = effectiveUserId ?? user?.id ?? '';
+      if (!uid) {
+        setPosts([]);
+        return;
+      }
       const list = await history.getWorkoutPosts(uid, 25);
       setPosts(list);
     } catch (e) {
       console.warn('Failed to load workout posts', e);
     }
-  }, [history, user?.id, authUserId]);
+  }, [history, effectiveUserId, user?.id]);
 
   useEffect(() => {
     if (user) {
@@ -226,6 +228,10 @@ const ProfileScreen: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      if (isGuest) {
+        await exitGuestMode();
+        return;
+      }
       const { error } = await signOutUser();
       if (error) throw error;
       // Auth state change listener in App.tsx will handle navigation

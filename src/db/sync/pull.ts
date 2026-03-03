@@ -8,6 +8,10 @@ export type PullOptions = {
   log?: boolean;
 };
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 async function upsertRows(db: SQLite.SQLiteDatabase, table: string, rows: any[]) {
   if (!rows.length) return;
   await db.withTransactionAsync(async () => {
@@ -66,7 +70,11 @@ async function queryWithRetry(table: string, userId: string, attempts = 3, baseD
     try {
       let q = supabase.from(table).select('*');
       if (table === 'exercise_catalog') {
-        q = q.or('is_public.eq.true,owner_user_id.eq.' + userId);
+        if (isUuid(userId)) {
+          q = q.or('is_public.eq.true,owner_user_id.eq.' + userId);
+        } else {
+          q = q.eq('is_public', true);
+        }
       } else if (table === 'splits' || table === 'split_day_assignments' || table === 'workout_sessions') {
         q = q.eq('user_id', userId);
       } else {

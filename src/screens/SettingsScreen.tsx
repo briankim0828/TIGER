@@ -25,13 +25,15 @@ import { useNavigation } from '@react-navigation/native';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useUnit } from '../contexts/UnitContext';
 import { useWorkoutHistory } from '../db/queries';
-import { signOutUser, getCurrentUser, deleteMyAccount } from '../supabase/supabaseProfile';
+import { signOutUser, deleteMyAccount } from '../supabase/supabaseProfile';
+import { useAppAuth } from '../contexts/AppAuthContext';
 
 const SettingsScreen: React.FC = () => {
   const navigation = useNavigation();
   const toast = useToast();
   const { liveDebugEnabled, setLiveDebugEnabled } = useOverlay();
   const { unit, setUnit } = useUnit();
+  const { isGuest, exitGuestMode, effectiveUserId } = useAppAuth();
   const history = useWorkoutHistory();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const cancelRef = React.useRef(null);
@@ -41,6 +43,10 @@ const SettingsScreen: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      if (isGuest) {
+        await exitGuestMode();
+        return;
+      }
       const { error } = await signOutUser();
       if (error) throw error;
       // Auth state change in App will navigate to login
@@ -61,11 +67,12 @@ const SettingsScreen: React.FC = () => {
 
   const handleClearAllData = async () => {
     try {
-      const current = await getCurrentUser();
-      const userId = current?.id;
+      const userId = effectiveUserId;
       if (!userId) throw new Error('Not authenticated');
 
-      if ((history as any).deleteAllWorkoutsSyncAware) {
+      if (isGuest) {
+        await history.deleteAllWorkouts(userId);
+      } else if ((history as any).deleteAllWorkoutsSyncAware) {
         await (history as any).deleteAllWorkoutsSyncAware(userId);
       } else {
         await history.deleteAllWorkouts(userId);

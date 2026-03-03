@@ -3,7 +3,10 @@ import * as SQLite from 'expo-sqlite';
 import { SimpleDataAccess } from '../db/queries/simple';
 import { startBackgroundFlusher } from '../db/sync/flush';
 import { startupSync } from '../db/sync/startup';
+import { pullSnapshotForTable } from '../db/sync/pull';
 import { supabase } from '../utils/supabaseClient';
+import type { AppAuthMode } from '../auth/mode';
+import { LOCAL_GUEST_USER_ID } from '../auth/mode';
 
 interface ElectricContextType {
   db: SQLite.SQLiteDatabase | null;
@@ -33,9 +36,10 @@ export function useElectric() {
 
 interface ElectricProviderProps {
   children: React.ReactNode;
+  mode?: AppAuthMode;
 }
 
-export function ElectricProviderComponent({ children }: ElectricProviderProps) {
+export function ElectricProviderComponent({ children, mode = 'authenticated' }: ElectricProviderProps) {
   const [db, setDb] = useState<SQLite.SQLiteDatabase | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLiveReady, setIsLiveReady] = useState(false);
@@ -59,10 +63,11 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
     initStartedRef.current = true;
     const initializeDatabase = async () => {
       try {
-        console.log('Initializing database...');
+        console.log('Initializing database...', { mode });
         
         // Open SQLite database
-        const database = await SQLite.openDatabaseAsync('pr_app.db');
+        const dbName = mode === 'guest' ? 'pr_app_guest.db' : 'pr_app_auth.db';
+        const database = await SQLite.openDatabaseAsync(dbName);
         setDb(database);
         
         // Initialize tables using SimpleDataAccess
@@ -74,72 +79,72 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
   setIsLiveReady(true);
         console.log('Database initialized successfully');
 
-        // Start background outbox flusher
-  const stop = startBackgroundFlusher(database, { intervalMs: 3000 });
-        stopFlusherRef.current = stop;
+        if (mode !== 'guest') {
+          // Start background outbox flusher
+          const stop = startBackgroundFlusher(database, { intervalMs: 3000 });
+          stopFlusherRef.current = stop;
+        }
 
-        // After auth resolves, run startup snapshot pull
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          const userId = user?.id;
-          if (userId) {
-            // Mark userId before starting sync so the onAuthStateChange
-            // listener won't kick off a duplicate concurrent pull.
-            lastSyncUserIdRef.current = userId;
-            const syncPromise = startupSync(database, userId, { log: true });
-            syncInProgressRef.current = syncPromise;
-            await syncPromise;
-            syncInProgressRef.current = null;
-            // If any local-first data was created before auth using placeholder 'local-user', reassign it to real user
-            try {
-              await database.withTransactionAsync(async () => {
-                await database.runAsync(`UPDATE splits SET user_id = ? WHERE user_id = 'local-user'`, [userId]);
-                await database.runAsync(`UPDATE split_day_assignments SET user_id = ? WHERE user_id = 'local-user'`, [userId]);
-                await database.runAsync(`UPDATE workout_sessions SET user_id = ? WHERE user_id = 'local-user'`, [userId]);
-                // Fix outbox payloads containing the placeholder user_id
-                await database.runAsync(
-                  `UPDATE outbox SET payload = REPLACE(payload, '"user_id":"local-user"', '"user_id":"${userId}"') WHERE payload LIKE '%"user_id":"local-user"%'`
-                );
-              });
-            } catch (e) {
-              console.warn('[sync] local-user reassignment failed', e);
-            }
-            // Reset any failed/processing outbox entries to pending now that we're authenticated, then trigger flush
-            try {
-              await database.runAsync(`UPDATE outbox SET status = 'pending' WHERE status IN ('failed','processing')`);
-            } catch {}
-            // Clean up orphaned outbox INSERT entries (rows that no longer exist locally)
-            // This handles cases where user cancelled a workout but the INSERT entries remained
-            try {
-              await database.runAsync(`
-                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sessions'
-                AND row_id NOT IN (SELECT id FROM workout_sessions)
-              `);
-              await database.runAsync(`
-                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_exercises'
-                AND row_id NOT IN (SELECT id FROM workout_exercises)
-              `);
-              await database.runAsync(`
-                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sets'
-                AND row_id NOT IN (SELECT id FROM workout_sets)
-              `);
-              await database.runAsync(`
-                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'splits'
-                AND row_id NOT IN (SELECT id FROM splits)
-              `);
-              await database.runAsync(`
-                DELETE FROM outbox WHERE op = 'insert' AND table_name = 'split_day_assignments'
-                AND row_id NOT IN (SELECT id FROM split_day_assignments)
-              `);
-              console.log('[sync] Cleaned up orphaned outbox entries');
-            } catch (e) {
-              console.warn('[sync] outbox cleanup failed', e);
-            }
-          } else {
-            console.log('[sync] Skipping startup pull: no authenticated user');
+        // After auth resolves, run startup snapshot pull.
+        // In guest mode, only pull shared exercise catalog (source of truth).
+        if (mode === 'guest') {
+          try {
+            await pullSnapshotForTable(database, 'exercise_catalog', LOCAL_GUEST_USER_ID, true);
+            bump(['exercise_catalog']);
+          } catch (e) {
+            console.warn('[sync] guest exercise_catalog pull failed', e);
           }
-        } catch (e) {
-          console.warn('[sync] startup pull failed', e);
+        }
+
+        if (mode !== 'guest') {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id;
+            if (userId) {
+              // Mark userId before starting sync so the onAuthStateChange
+              // listener won't kick off a duplicate concurrent pull.
+              lastSyncUserIdRef.current = userId;
+              const syncPromise = startupSync(database, userId, { log: true });
+              syncInProgressRef.current = syncPromise;
+              await syncPromise;
+              syncInProgressRef.current = null;
+              // Reset any failed/processing outbox entries to pending now that we're authenticated, then trigger flush
+              try {
+                await database.runAsync(`UPDATE outbox SET status = 'pending' WHERE status IN ('failed','processing')`);
+              } catch {}
+              // Clean up orphaned outbox INSERT entries (rows that no longer exist locally)
+              // This handles cases where user cancelled a workout but the INSERT entries remained
+              try {
+                await database.runAsync(`
+                  DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sessions'
+                  AND row_id NOT IN (SELECT id FROM workout_sessions)
+                `);
+                await database.runAsync(`
+                  DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_exercises'
+                  AND row_id NOT IN (SELECT id FROM workout_exercises)
+                `);
+                await database.runAsync(`
+                  DELETE FROM outbox WHERE op = 'insert' AND table_name = 'workout_sets'
+                  AND row_id NOT IN (SELECT id FROM workout_sets)
+                `);
+                await database.runAsync(`
+                  DELETE FROM outbox WHERE op = 'insert' AND table_name = 'splits'
+                  AND row_id NOT IN (SELECT id FROM splits)
+                `);
+                await database.runAsync(`
+                  DELETE FROM outbox WHERE op = 'insert' AND table_name = 'split_day_assignments'
+                  AND row_id NOT IN (SELECT id FROM split_day_assignments)
+                `);
+                console.log('[sync] Cleaned up orphaned outbox entries');
+              } catch (e) {
+                console.warn('[sync] outbox cleanup failed', e);
+              }
+            } else {
+              console.log('[sync] Skipping startup pull: no authenticated user');
+            }
+          } catch (e) {
+            console.warn('[sync] startup pull failed', e);
+          }
         }
       } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -151,10 +156,10 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
       // cleanup flusher on unmount
       try { stopFlusherRef.current?.(); } catch {}
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
-    if (!db || !isInitialized) return;
+    if (!db || !isInitialized || mode === 'guest') return;
     const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const userId = session?.user?.id ?? null;
       if (!userId) {
@@ -184,7 +189,7 @@ export function ElectricProviderComponent({ children }: ElectricProviderProps) {
     return () => {
       try { (authListener as any)?.subscription?.unsubscribe?.(); } catch {}
     };
-  }, [db, isInitialized]);
+  }, [db, isInitialized, mode]);
 
   // Avoid rendering children until DB is ready to prevent "Database not initialized" errors from hooks.
   if (!isInitialized || !db) {

@@ -10,7 +10,7 @@ import { useDatabase } from '../db/queries';
 import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback, ExerciseLite } from '../navigation/selectionRegistry';
 import { useWorkout } from '../contexts/WorkoutContext';
-import { supabase } from '../utils/supabaseClient';
+import { useAppAuth } from '../contexts/AppAuthContext';
 
 type ExerciseRow = { id: string; name: string; bodyPart: string | null };
 
@@ -40,6 +40,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const { height } = useWindowDimensions();
   const db = useDatabase();
   const { startWorkout } = useWorkout();
+  const { effectiveUserId } = useAppAuth();
   // Previously logged props when component mounted or props changed; removed to reduce noise
   useEffect(() => {
     // no-op
@@ -147,8 +148,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
     if (currentExercises.length === 0) return;
     setIsStartPressed(false);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id;
+      const userId = effectiveUserId;
       if (!userId) return;
       const ids = currentExercises.map(e => e.id);
       const splitIdOrNull = activeSplit?.id ?? null;
@@ -179,7 +179,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
     // Close the sheet after startWorkout succeeds (or fails) so the live-query
     // system has already received the bumpTables notification.
     bottomSheetRef.current?.close();
-  }, [activeSplit, currentExercises, startWorkout, selectedDate]);
+  }, [activeSplit, currentExercises, startWorkout, selectedDate, effectiveUserId]);
 
   const handleAddExercise = useCallback(() => {
     // Use selection registry to add to current session preview
@@ -458,8 +458,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
                   // Load splits then switch to list panel
                   setLoadingSplits(true);
                   try {
-                    const { data: { user } } = await supabase.auth.getUser();
-                    const userId = user?.id;
+                    const userId = effectiveUserId;
                     if (userId) {
                       const rows = await (db as any).getUserSplitsWithExerciseCounts?.(userId) ?? await db.getUserSplits(userId);
                       setUserSplits(rows as any);

@@ -24,8 +24,8 @@ import MySplits from "../components/MySplits";
 import MyExercises from "../components/MyExercises";
 import MyProgram from "../components/MyProgram";
 import { useDatabase } from "../db/queries";
-import { supabase } from "../utils/supabaseClient";
 import Animated, { Layout } from "react-native-reanimated";
+import { useAppAuth } from "../contexts/AppAuthContext";
 
 // We now use ProgramSplit for Program/Splits UIs
 
@@ -36,7 +36,7 @@ const WorkoutScreen = () => {
   const navigation = useNavigation<NavigationProp>();
   const scrollViewRef = useRef<any>(null);
   const db = useDatabase();
-  const [AUTH_USER_ID, setAUTH_USER_ID] = useState<string | null>(null);
+  const { effectiveUserId } = useAppAuth();
 
   const [editMode, setEditMode] = useState<EditMode>("none");
   const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
@@ -60,8 +60,8 @@ const WorkoutScreen = () => {
     try {
       // Fetch splits + day assignments
         const [rows, dayAssigns] = await Promise.all([
-  db.getUserSplitsWithExerciseCounts(AUTH_USER_ID ?? 'local-user'),
-  db.getDayAssignments(AUTH_USER_ID ?? 'local-user')
+  db.getUserSplitsWithExerciseCounts(effectiveUserId ?? 'local-user'),
+  db.getDayAssignments(effectiveUserId ?? 'local-user')
       ]);
       const assignBySplit = new Map<string, WeekDay[]>();
       const NUM_TO_LABEL: Record<number, WeekDay> = { 0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun' } as const;
@@ -138,15 +138,9 @@ const WorkoutScreen = () => {
     } catch (e) {
       console.error('WorkoutScreen: Failed to fetch splits from DB', e);
     }
-  }, [db, AUTH_USER_ID, mapRowToProgramSplit, editMode]);
+  }, [db, effectiveUserId, mapRowToProgramSplit, editMode]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        setAUTH_USER_ID(user?.id ?? null);
-      } catch {}
-    })();
     if (isFirstMount) {
       fetchSplits();
       setIsFirstMount(false);
@@ -252,19 +246,19 @@ const WorkoutScreen = () => {
     // Default name should be "Split {current # of splits + 1}"
     const list = (editMode === 'splits' ? (editedSplitsRef.current ?? splits) : splits) || [];
     const nextName = `Split ${list.length + 1}`;
-    if (!AUTH_USER_ID) {
+    if (!effectiveUserId) {
       console.warn('Cannot create split: user not authenticated');
       return;
     }
     try { Vibration.vibrate(1); } catch {}
-    db.createSplit({ userId: AUTH_USER_ID, name: nextName, color: "#cfcfcf" })
+    db.createSplit({ userId: effectiveUserId, name: nextName, color: "#cfcfcf" })
       .then(async (created) => {
         setEditingSplitId(created.id);
         await fetchSplits();
         // editedSplits is synced by fetchSplits when in 'splits' mode
       })
       .catch(err => console.error('Failed to create split', err));
-  }, [db, AUTH_USER_ID, splits, fetchSplits, editMode]);
+  }, [db, effectiveUserId, splits, fetchSplits, editMode]);
 
   const handleDeleteSplit = useCallback((id: string) => {
     db.deleteSplit(id)
@@ -278,9 +272,9 @@ const WorkoutScreen = () => {
   // Persist reordered split IDs to DB using 1-based order positions
   const handlePersistSplitOrder = useCallback(async (orderedIds: string[]) => {
     try {
-      if (AUTH_USER_ID) {
+      if (effectiveUserId) {
         // Use two-phase reorder to avoid remote UNIQUE(user_id, order_pos) collisions
-        await db.reorderSplits(AUTH_USER_ID, orderedIds);
+        await db.reorderSplits(effectiveUserId, orderedIds);
       } else {
         // Fallback: local only (should rarely happen)
         let pos = 1;
@@ -293,7 +287,7 @@ const WorkoutScreen = () => {
     } catch (e) {
       console.error('Failed to persist split order', e);
     }
-  }, [db, fetchSplits, AUTH_USER_ID]);
+  }, [db, fetchSplits, effectiveUserId]);
 
   const handleDaySelect = useCallback((day: WeekDay) => {
     if (editMode !== 'program') {
@@ -314,7 +308,7 @@ const WorkoutScreen = () => {
 
   const handleSplitSelect = useCallback(async (splitToAssign: ProgramSplit) => {
     if (!selectedDay || editMode !== 'program') return;
-    if (!AUTH_USER_ID) {
+    if (!effectiveUserId) {
       console.warn('Cannot set day assignment: user not authenticated');
       return;
     }
@@ -323,12 +317,12 @@ const WorkoutScreen = () => {
       // Map WeekDay label to integer 0=Mon..6=Sun for storage
       const LABEL_TO_NUM: Record<WeekDay, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 } as const;
       const weekdayNum = LABEL_TO_NUM[selectedDay];
-      await db.setDayAssignment(AUTH_USER_ID, String(weekdayNum), currentlyAssigned ? null : splitToAssign.id);
+      await db.setDayAssignment(effectiveUserId, String(weekdayNum), currentlyAssigned ? null : splitToAssign.id);
       await fetchSplits();
     } catch (e) {
       console.error('Failed to set day assignment', e);
     }
-  }, [selectedDay, editMode, db, AUTH_USER_ID, fetchSplits]);
+  }, [selectedDay, editMode, db, effectiveUserId, fetchSplits]);
 
   const handleSplitPress = useCallback((split: ProgramSplit) => {
     if (selectedDay && editMode === 'program') {

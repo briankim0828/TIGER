@@ -1,6 +1,6 @@
 // App.tsx
 import "react-native-gesture-handler";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { navigationRef } from "./src/navigation/rootNavigation";
 import {
@@ -55,7 +55,16 @@ import {
 } from "@react-navigation/material-top-tabs";
 import type { WorkoutPost } from "./src/db/queries/workoutHistory.drizzle";
 import { useElectric } from "./src/electric";
-import { pullAllSnapshots } from "./src/db/sync/pull";
+import { pullAllSnapshots, pullSnapshotForTable } from "./src/db/sync/pull";
+import { AppAuthProvider, useAppAuth } from "./src/contexts/AppAuthContext";
+import {
+  getStoredAuthMode,
+  getStoredGuestDisplayName,
+  LOCAL_GUEST_USER_ID,
+  setStoredAuthMode,
+  setStoredGuestDisplayName,
+  type AppAuthMode,
+} from "./src/auth/mode";
 
 // Ignore specific warning about text strings
 LogBox.ignoreLogs([
@@ -88,25 +97,13 @@ try {
 const ActiveWorkoutModalContainer = () => {
   const { endWorkout } = useWorkout();
   const { activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
+  const { effectiveUserId } = useAppAuth();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
-  const [authUserId, setAuthUserId] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        setAuthUserId(user?.id ?? null);
-      } catch {}
-    })();
-    const { data: listener } = supabase.auth.onAuthStateChange((_evt, session) => {
-      setAuthUserId(session?.user?.id ?? null);
-    });
-    return () => { (listener as any)?.subscription?.unsubscribe?.(); };
-  }, []);
   const prevSessionIdRef = React.useRef<string | null>(null);
 
   // Live active session (no polling)
-  const { session } = useLiveActiveSession(authUserId || '');
+  const { session } = useLiveActiveSession(effectiveUserId || '');
 
   useEffect(() => {
     const sid = session?.id ?? null;
@@ -204,6 +201,7 @@ interface GlobalHeaderProps {
 const GlobalHeader = ({ title }: GlobalHeaderProps) => {
   const { db, live } = useElectric();
   const toast = useToast();
+  const { isGuest, effectiveUserId } = useAppAuth();
   return (
     <Box bg="#1E2028" px="$3" width="$full" alignItems="center">
       <HStack alignItems="center" style={{ height: 25 }}>
@@ -215,12 +213,29 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
             $pressed={{ opacity: 0.6 }}
             onPress={async () => {
               try {
-                const { data: { user } } = await supabase.auth.getUser();
-                const uid = user?.id;
+                if (isGuest) {
+                  if (db) {
+                    await pullSnapshotForTable(db, 'exercise_catalog', LOCAL_GUEST_USER_ID, true);
+                    live.bump(['exercise_catalog']);
+                    toast.show({
+                      placement: 'top',
+                      render: ({ id }) => (
+                        <Toast nativeID={id} action="success" variant="accent">
+                          <VStack space="xs">
+                            <ToastTitle>Catalog Updated</ToastTitle>
+                            <ToastDescription>Latest exercise catalog pulled from server</ToastDescription>
+                          </VStack>
+                        </Toast>
+                      ),
+                    });
+                  }
+                  return;
+                }
+                const uid = effectiveUserId;
                 if (db && uid) {
                   await pullAllSnapshots(db, { userId: uid, log: true });
                   // Bump tables we know can change to refresh UI; conservative list
-                  live.bump(['splits', 'split_day_assignments', 'split_exercises', 'workout_sessions', 'workout_exercises', 'workout_sets']);
+                  live.bump(['splits', 'split_day_assignments', 'split_exercises', 'workout_sessions', 'workout_exercises', 'workout_sets', 'exercise_catalog']);
                   toast.show({
                     placement: 'top',
                     render: ({ id }) => (
@@ -284,7 +299,7 @@ const GlobalHeader = ({ title }: GlobalHeaderProps) => {
 // -----------------------------
 // Auth (Login) wrapper
 // -----------------------------
-const AuthNavigationWrapper = () => {
+const AuthNavigationWrapper = ({ onContinueAsGuest }: { onContinueAsGuest: (displayName: string) => Promise<void> }) => {
   return (
     <Box flex={1} bg="#1E2028">
       <GlobalHeader title="TIGER" />
@@ -296,7 +311,9 @@ const AuthNavigationWrapper = () => {
             contentStyle: { backgroundColor: "#232530" },
           }}
         >
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Login">
+            {() => <LoginScreen onContinueAsGuest={onContinueAsGuest} />}
+          </Stack.Screen>
         </Stack.Navigator>
       </Box>
     </Box>
@@ -400,8 +417,41 @@ const NavigationWrapper = () => {
 // -----------------------------
 export default function App() {
   const [user, setUser] = useState<any>(null);
+  const [authMode, setAuthMode] = useState<AppAuthMode>('authenticated');
+  const [authModeResolved, setAuthModeResolved] = useState(false);
+  const [guestDisplayName, setGuestDisplayName] = useState('Guest');
   // Track initial auth resolution to avoid flashing Login when a user exists
   const [authChecking, setAuthChecking] = useState(true);
+
+  const continueAsGuest = useCallback(async (displayName: string) => {
+    const normalized = displayName.trim() || 'Guest';
+    setAuthMode('guest');
+    setGuestDisplayName(normalized);
+    await setStoredAuthMode('guest');
+    await setStoredGuestDisplayName(normalized);
+  }, []);
+
+  const exitGuestMode = useCallback(async () => {
+    setAuthMode('authenticated');
+    await setStoredAuthMode('authenticated');
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const [storedMode, storedGuestName] = await Promise.all([
+        getStoredAuthMode(),
+        getStoredGuestDisplayName(),
+      ]);
+      if (!mounted) return;
+      setAuthMode(storedMode);
+      setGuestDisplayName(storedGuestName || 'Guest');
+      setAuthModeResolved(true);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -411,6 +461,10 @@ export default function App() {
         if (!mounted) return;
         // Defer to next tick to avoid scheduling updates during insertion effects
         setTimeout(() => { if (mounted) setUser(user); }, 0);
+        if (user) {
+          setAuthMode('authenticated');
+          void setStoredAuthMode('authenticated');
+        }
       } catch {}
       finally {
         if (mounted) setAuthChecking(false);
@@ -421,6 +475,10 @@ export default function App() {
     const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
       if (!mounted) return;
       setTimeout(() => { if (mounted) setUser(session?.user ?? null); }, 0);
+      if (session?.user) {
+        setAuthMode('authenticated');
+        void setStoredAuthMode('authenticated');
+      }
     });
 
     return () => {
@@ -430,11 +488,23 @@ export default function App() {
     };
   }, []);
 
+  const effectiveUserId = user?.id ?? (authMode === 'guest' ? LOCAL_GUEST_USER_ID : null);
+  const appAuthValue = useMemo(() => ({
+    mode: authMode,
+    isGuest: authMode === 'guest',
+    user,
+    effectiveUserId,
+    guestDisplayName,
+    continueAsGuest,
+    exitGuestMode,
+  }), [authMode, user, effectiveUserId, guestDisplayName, continueAsGuest, exitGuestMode]);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider initialMetrics={initialWindowMetrics}>
         <GluestackUIProvider config={config}>
-      <ElectricProvider>
+      <AppAuthProvider value={appAuthValue}>
+      <ElectricProvider key={authMode} mode={authMode}>
         <WorkoutProvider>
                 <OverlayProvider>
                 <UnitProvider>
@@ -446,12 +516,12 @@ export default function App() {
                   <StatusBar barStyle="light-content" backgroundColor="#1E2028" />
                   <NavigationContainer ref={navigationRef}>
                     <DismissKeyboardWrapper>
-                      {authChecking ? (
+                      {authChecking || !authModeResolved ? (
                         <LoadingSplash />
-                      ) : user ? (
+                      ) : user || authMode === 'guest' ? (
                         <NavigationWrapper />
                       ) : (
-                        <AuthNavigationWrapper />
+                        <AuthNavigationWrapper onContinueAsGuest={continueAsGuest} />
                       )}
                     </DismissKeyboardWrapper>
                   </NavigationContainer>
@@ -464,6 +534,7 @@ export default function App() {
                 </OverlayProvider>
               </WorkoutProvider>
           </ElectricProvider>
+          </AppAuthProvider>
         </GluestackUIProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
