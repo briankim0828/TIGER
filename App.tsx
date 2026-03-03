@@ -439,9 +439,16 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
     (async () => {
+      const timeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+        ]);
+      };
+
       const [storedMode, storedGuestName] = await Promise.all([
-        getStoredAuthMode(),
-        getStoredGuestDisplayName(),
+        timeout(getStoredAuthMode(), 2500, 'authenticated' as const),
+        timeout(getStoredGuestDisplayName(), 2500, ''),
       ]);
       if (!mounted) return;
       setAuthMode(storedMode);
@@ -455,16 +462,44 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
+    const timeout = <T,>(promise: Promise<T>, ms: number, fallback: T): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+      ]);
+    };
+
     const fetchUser = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        // Bootstrap from local persisted session first (fast, no network dependency).
+        const sessionResult = await timeout(
+          supabase.auth.getSession(),
+          5000,
+          { data: { session: null as any }, error: null as any }
+        );
+        const sessionUser = sessionResult?.data?.session?.user ?? null;
         if (!mounted) return;
-        // Defer to next tick to avoid scheduling updates during insertion effects
-        setTimeout(() => { if (mounted) setUser(user); }, 0);
-        if (user) {
+        setTimeout(() => { if (mounted) setUser(sessionUser); }, 0);
+        if (sessionUser) {
           setAuthMode('authenticated');
           void setStoredAuthMode('authenticated');
         }
+
+        // Best-effort validation/refresh in background; do not gate initial render on this.
+        void (async () => {
+          try {
+            const userResult = await timeout(
+              supabase.auth.getUser(),
+              5000,
+              { data: { user: null as any }, error: null as any }
+            );
+            const verifiedUser = userResult?.data?.user ?? null;
+            if (!mounted || !verifiedUser) return;
+            setUser((prev: any) => (prev?.id === verifiedUser.id ? prev : verifiedUser));
+            setAuthMode('authenticated');
+            void setStoredAuthMode('authenticated');
+          } catch {}
+        })();
       } catch {}
       finally {
         if (mounted) setAuthChecking(false);
@@ -472,9 +507,15 @@ export default function App() {
     };
     const t = setTimeout(fetchUser, 0);
 
+    // Global watchdog: never let startup shimmer block forever.
+    const watchdog = setTimeout(() => {
+      if (mounted) setAuthChecking(false);
+    }, 8000);
+
     const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
       if (!mounted) return;
       setTimeout(() => { if (mounted) setUser(session?.user ?? null); }, 0);
+      if (mounted) setAuthChecking(false);
       if (session?.user) {
         setAuthMode('authenticated');
         void setStoredAuthMode('authenticated');
@@ -484,6 +525,7 @@ export default function App() {
     return () => {
       mounted = false;
       clearTimeout(t);
+      clearTimeout(watchdog);
       (authListener as any)?.subscription?.unsubscribe?.();
     };
   }, []);
