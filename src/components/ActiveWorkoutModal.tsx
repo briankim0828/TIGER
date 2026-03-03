@@ -14,6 +14,7 @@ import { formatWeightFromKg, nearlyEqual, toStorageKg, unitLabel } from '../util
 import SaveSessionScreen from './SaveSessionScreen';
 import { useWorkoutHistory } from '../db/queries';
 import { useAppAuth } from '../contexts/AppAuthContext';
+import { useOverlay } from '../contexts/OverlayContext';
 
 // Using global navigation helper since this modal is rendered outside NavigationContainer
 
@@ -195,6 +196,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const { getActiveSessionId, addSet, updateSet, deleteSet, endWorkout, addExerciseToSession, removeExerciseFromSession, reorderSessionExercises, getSplitName, deleteWorkout, getSessionInfo } = useWorkout();
   const toast = useToast();
   const { effectiveUserId } = useAppAuth();
+  const { setActiveSessionBannerTitle } = useOverlay();
   const authUserId = effectiveUserId;
   
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -439,8 +441,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
-      setLocalInputValues({});
-      dirtyInputKeysRef.current.clear();
+      // Preserve local input values when collapsing/reopening in the same session.
       // no expansion state to reset
       // currentExercises derived from live snapshot; nothing to reset
       // Reset any other state as needed
@@ -459,8 +460,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
-      setLocalInputValues({});
-      dirtyInputKeysRef.current.clear();
+      // Preserve local input values when collapsing/reopening in the same session.
       // no expansion state to reset
       // currentExercises derived from live snapshot; nothing to reset
     };
@@ -1270,6 +1270,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   }, [previousSetsExerciseId, exerciseIdToSessionExerciseId, currentExercises, updateSet, deleteSet, addSet, toast]);
 
   const [splitTitle, setSplitTitle] = useState<string>('');
+
+  const handleSessionNameChange = useCallback((name: string) => {
+    setSplitTitle(name);
+    if (sessionId) {
+      setActiveSessionBannerTitle(sessionId, name);
+    }
+  }, [sessionId, setActiveSessionBannerTitle]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const title = (splitTitle ?? '').trim();
+    if (!title) return;
+    setActiveSessionBannerTitle(sessionId, title);
+  }, [sessionId, splitTitle, setActiveSessionBannerTitle]);
   const formattedDate = useMemo(() => {
     if (!sessionStartedAtMs) return '';
     try {
@@ -1810,7 +1824,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   onCloseSheet={() => bottomSheetRef.current?.close()}
                   onSaveOverride={onSave}
                   elapsedSecAtFinish={elapsedSecAtFinish}
-                  onSessionNameChange={(name) => setSplitTitle(name)}
+                  onSessionNameChange={handleSessionNameChange}
                 />
               )}
             </View>

@@ -30,6 +30,8 @@ interface OverlayContextValue {
   // Active workout modal controls
   activeWorkoutModalVisible: boolean;
   setActiveWorkoutModalVisible: (visible: boolean) => void;
+  activeSessionBannerTitle: { sessionId: string | null; title: string | null };
+  setActiveSessionBannerTitle: (sessionId: string | null, title: string | null) => void;
   // Global signal: bump to indicate workout history changed (e.g., finished workout)
   workoutDataVersion: number;
   bumpWorkoutDataVersion: () => void;
@@ -45,6 +47,10 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [workoutDataVersion, setWorkoutDataVersion] = useState<number>(0);
   const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
   const [activeWorkoutModalVisible, setActiveWorkoutModalVisible] = useState<boolean>(false);
+  const [activeSessionBannerTitle, setActiveSessionBannerTitleState] = useState<{ sessionId: string | null; title: string | null }>({
+    sessionId: null,
+    title: null,
+  });
 
   const showSessionSummary = useCallback((payload: SessionSummaryPayload) => {
     setSessionSummary(payload);
@@ -66,8 +72,16 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setWorkoutDataVersion((v) => v + 1);
   }, []);
 
+  const setActiveSessionBannerTitle = useCallback((sessionId: string | null, title: string | null) => {
+    setActiveSessionBannerTitleState((prev) => {
+      const normalizedTitle = typeof title === 'string' ? title : null;
+      if (prev.sessionId === sessionId && prev.title === normalizedTitle) return prev;
+      return { sessionId, title: normalizedTitle };
+    });
+  }, []);
+
   return (
-    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled, activeWorkoutModalVisible, setActiveWorkoutModalVisible }}>
+    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled, activeWorkoutModalVisible, setActiveWorkoutModalVisible, activeSessionBannerTitle, setActiveSessionBannerTitle }}>
       {children}
     </OverlayContext.Provider>
   );

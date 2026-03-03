@@ -225,9 +225,26 @@ export class WorkoutsDataAccess {
       const sessionId = newUuid();
       const nowIso = new Date().toISOString();
       const startedIso = startedAtOverride ?? nowIso;
+      let initialSessionName: string | null = null;
+      if (splitId) {
+        const splitRows = await this.db
+          .select({ name: splitsTable.name })
+          .from(splitsTable)
+          .where(eq(splitsTable.id, splitId))
+          .limit(1);
+        const raw = splitRows[0]?.name;
+        if (typeof raw === 'string' && raw.trim().length > 0) {
+          initialSessionName = raw.trim();
+        }
+      }
+      if (!initialSessionName) {
+        const baseDate = new Date(startedIso);
+        const weekday = baseDate.toLocaleDateString('en-US', { weekday: 'long' });
+        initialSessionName = `${weekday} workout`;
+      }
       await this.db
         .insert(workoutSessions)
-        .values({ id: sessionId, userId, splitId, state: 'active', startedAt: startedIso })
+        .values({ id: sessionId, userId, splitId, state: 'active', startedAt: startedIso, sessionName: initialSessionName })
         .run();
       await enqueueOutbox(this.sqlite, {
         table: 'workout_sessions',
@@ -239,6 +256,7 @@ export class WorkoutsDataAccess {
           split_id: splitId,
           state: 'active',
           started_at: startedIso,
+          session_name: initialSessionName,
           created_at: nowIso,
           updated_at: nowIso,
         },

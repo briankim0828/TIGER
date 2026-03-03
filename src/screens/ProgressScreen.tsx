@@ -34,14 +34,14 @@ const ProgressScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const db = useDatabase();
   const history = useWorkoutHistory();
-  const { startWorkout, getActiveSessionId, getSessionInfo, getSplitName } = useWorkout();
-  const { showSessionSummary, workoutDataVersion, activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
+  const { startWorkout, getActiveSessionId, getSplitName } = useWorkout();
+  const { showSessionSummary, workoutDataVersion, activeWorkoutModalVisible, setActiveWorkoutModalVisible, activeSessionBannerTitle, setActiveSessionBannerTitle } = useOverlay();
   const { effectiveUserId, user, isGuest, guestDisplayName } = useAppAuth();
   const [userFirstName, setUserFirstName] = React.useState<string>('');
   const authUserId = effectiveUserId;
   
   // Banner info state
-  const [bannerSplitName, setBannerSplitName] = useState('Active Workout');
+  const [bannerSessionName, setBannerSessionName] = useState('Workout');
   const [bannerStartedAtMs, setBannerStartedAtMs] = useState<number | null>(null);
   
   // Live active session for banner
@@ -68,24 +68,54 @@ const ProgressScreen: React.FC = () => {
 
   // Update banner info based on active session
   useEffect(() => {
-    const sid = activeSession?.id;
+    const live: any = activeSession as any;
+    const sid = (live?.id ?? null) as string | null;
     if (!sid) {
-      setBannerStartedAtMs(null);
+      if (activeSessionBannerTitle.sessionId !== null || activeSessionBannerTitle.title !== null) {
+        setActiveSessionBannerTitle(null, null);
+      }
+      setBannerSessionName((prev) => (prev === 'Workout' ? prev : 'Workout'));
+      setBannerStartedAtMs((prev) => (prev === null ? prev : null));
       return;
     }
+
+    if (activeSessionBannerTitle.sessionId && activeSessionBannerTitle.sessionId !== sid) {
+      setActiveSessionBannerTitle(null, null);
+    }
+
+    const overrideName =
+      activeSessionBannerTitle.sessionId === sid
+        ? (activeSessionBannerTitle.title ?? '').toString().trim()
+        : '';
     (async () => {
       try {
-        const info = await getSessionInfo(sid);
-        if (info?.splitId) {
-          const name = (await getSplitName(info.splitId)) || 'Active Workout';
-          setBannerSplitName(name);
+        const directSessionName = (live?.sessionName ?? live?.session_name ?? '').toString().trim();
+        if (overrideName) {
+          setBannerSessionName((prev) => (prev === overrideName ? prev : overrideName));
+        } else if (directSessionName) {
+          setBannerSessionName((prev) => (prev === directSessionName ? prev : directSessionName));
+        } else if (live?.splitId || live?.split_id) {
+          const splitId = (live?.splitId ?? live?.split_id) as string;
+          const splitName = (await getSplitName(splitId)) || 'Workout';
+          setBannerSessionName((prev) => (prev === splitName ? prev : splitName));
+        } else if (live?.startedAt || live?.started_at) {
+          const startedAt = (live?.startedAt ?? live?.started_at) as string;
+          const weekday = new Date(startedAt).toLocaleDateString('en-US', { weekday: 'long' });
+          const fallbackName = `${weekday} workout`;
+          setBannerSessionName((prev) => (prev === fallbackName ? prev : fallbackName));
         } else {
-          setBannerSplitName('Active Workout');
+          setBannerSessionName((prev) => (prev === 'Workout' ? prev : 'Workout'));
         }
-        if (info?.startedAt) setBannerStartedAtMs(Date.parse(info.startedAt));
+        const startedAt = (live?.startedAt ?? live?.started_at) as string | undefined;
+        if (startedAt) {
+          const nextMs = Date.parse(startedAt);
+          setBannerStartedAtMs((prev) => (prev === nextMs ? prev : nextMs));
+        } else {
+          setBannerStartedAtMs((prev) => (prev === null ? prev : null));
+        }
       } catch {}
     })();
-  }, [activeSession?.id, getSessionInfo, getSplitName]);
+  }, [activeSession?.id, (activeSession as any)?.sessionName, (activeSession as any)?.session_name, (activeSession as any)?.splitId, (activeSession as any)?.split_id, (activeSession as any)?.startedAt, (activeSession as any)?.started_at, activeSessionBannerTitle.sessionId, activeSessionBannerTitle.title, getSplitName, setActiveSessionBannerTitle]);
 
   const handleBannerPress = useCallback(() => {
     setActiveWorkoutModalVisible(true);
@@ -370,7 +400,7 @@ const ProgressScreen: React.FC = () => {
 
       <ActiveWorkoutBanner
         visible={bannerVisible}
-        splitName={bannerSplitName}
+        sessionName={bannerSessionName}
         startedAtMs={bannerStartedAtMs}
         onPress={handleBannerPress}
       />

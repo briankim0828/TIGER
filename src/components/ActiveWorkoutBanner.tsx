@@ -1,16 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { HStack, Text, VStack, Pressable } from '@gluestack-ui/themed';
+import { Box, HStack, Text, Pressable } from '@gluestack-ui/themed';
 
 interface Props {
   visible: boolean;
-  splitName: string;
+  sessionName: string;
   startedAtMs?: number | null;
   onPress: () => void; // reopen full modal
 }
 
-const ActiveWorkoutBanner: React.FC<Props> = ({ visible, splitName, startedAtMs, onPress }) => {
+const ActiveWorkoutBanner: React.FC<Props> = ({ visible, sessionName, startedAtMs, onPress }) => {
   const bottomSheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => [80], []); // fixed height mini sheet
 
@@ -51,17 +51,23 @@ const ActiveWorkoutBanner: React.FC<Props> = ({ visible, splitName, startedAtMs,
       backgroundStyle={{ backgroundColor: '#2A2E38' }}
     >
       <BottomSheetView style={styles.view}>
-        <Pressable onPress={onPress} px="$4" py="$2" width="100%">
-          <HStack alignItems="center" justifyContent="space-between">
-            <VStack alignItems="flex-start">
-              <Text color="$textLight50" fontWeight="$bold" fontSize="$md" numberOfLines={1}>
-                {splitName || 'Active Workout'}
-              </Text>
+        <Pressable onPress={onPress} px="$4" py="$4" width="100%">
+          <HStack alignItems="center" justifyContent="space-between" position="relative">
+            <Box width={72} alignItems="flex-start" justifyContent="center">
               <Text color="$primary400" fontWeight="$semibold" fontSize="$sm">
                 {formatTimer(elapsed)}
               </Text>
-            </VStack>
-            <Text color="$textLight400" fontSize="$xs">Tap to resume</Text>
+            </Box>
+
+            <Box position="absolute" left={0} right={0} alignItems="center" pointerEvents="none">
+              <Text color="$textLight50" fontWeight="$bold" fontSize="$md" numberOfLines={1} textAlign="center" maxWidth="65%">
+                {sessionName || 'Workout'}
+              </Text>
+            </Box>
+
+            <Box width={72} alignItems="flex-end" justifyContent="center">
+              <Text color="$textLight400" fontSize="$xs">Resume</Text>
+            </Box>
           </HStack>
         </Pressable>
       </BottomSheetView>
