@@ -252,6 +252,18 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const actionMenuRef = useRef<BottomSheet>(null);
   const actionMenuSnapPoints = useMemo(() => ['28%'], []);
   const [actionExerciseId, setActionExerciseId] = useState<string | null>(null);
+  const previousSetsSheetRef = useRef<BottomSheet>(null);
+  const previousSetsSnapPoints = useMemo(() => ['62%'], []);
+  const [previousSetsExerciseId, setPreviousSetsExerciseId] = useState<string | null>(null);
+  const [previousSetGroups, setPreviousSetGroups] = useState<Array<{
+    sessionId: string;
+    sessionName: string | null;
+    startedAt: string | null;
+    finishedAt: string | null;
+    sets: Array<{ weightKg: number | null; reps: number | null }>;
+  }>>([]);
+  const [isLoadingPreviousSetGroups, setIsLoadingPreviousSetGroups] = useState(false);
+  const [applyingPreviousGroupId, setApplyingPreviousGroupId] = useState<string | null>(null);
   
   // Animation state for sets
   const [newlyAddedSets, setNewlyAddedSets] = useState<Set<string>>(new Set());
@@ -483,6 +495,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const slideX = useRef(new Animated.Value(0)).current;
   const windowDims = Dimensions.get('window');
   const screenW = windowDims.width;
+  const setValueColumnWidth = Math.max(58, Math.min(84, Math.round(screenW * 0.19)));
 
   const animateToIndex = useCallback((idx: number) => {
     setPageIndex(idx);
@@ -1036,6 +1049,151 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true, disableIds });
   };
 
+  const formatHistoryDate = useCallback((iso: string | null | undefined) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const previousSetsExerciseName = useMemo(() => {
+    if (!previousSetsExerciseId) return 'Exercise';
+    return currentExercises.find((ex) => ex.id === previousSetsExerciseId)?.name ?? 'Exercise';
+  }, [currentExercises, previousSetsExerciseId]);
+
+  const handleOpenPreviousSetsPicker = useCallback(async (exerciseId: string) => {
+    if (!authUserId) return;
+
+    setPreviousSetsExerciseId(exerciseId);
+    setPreviousSetGroups([]);
+    setIsLoadingPreviousSetGroups(true);
+    setApplyingPreviousGroupId(null);
+
+    actionMenuRef.current?.close();
+    requestAnimationFrame(() => {
+      previousSetsSheetRef.current?.expand();
+    });
+
+    try {
+      const beforeMs = Number.isFinite(sessionStartedAtMs as number)
+        ? (sessionStartedAtMs as number)
+        : Date.now();
+      const beforeISO = new Date(beforeMs).toISOString();
+      const groups = await history.getExerciseSetHistoryGroups(authUserId, exerciseId, beforeISO, 30);
+      setPreviousSetGroups(groups);
+    } catch (e) {
+      console.error('ActiveWorkoutModal: failed to load previous set groups', e);
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Failed to load previous sets</ToastTitle>
+              <ToastDescription>Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsLoadingPreviousSetGroups(false);
+    }
+  }, [authUserId, sessionStartedAtMs, history, toast]);
+
+  const handleApplyPreviousSetGroup = useCallback(async (group: {
+    sessionId: string;
+    sets: Array<{ weightKg: number | null; reps: number | null }>;
+  }) => {
+    const exerciseId = previousSetsExerciseId;
+    if (!exerciseId) return;
+
+    const sessionExerciseId = exerciseIdToSessionExerciseId[exerciseId];
+    const exercise = currentExercises.find((ex) => ex.id === exerciseId);
+    if (!sessionExerciseId || !exercise) return;
+
+    const existingSets = exercise.sets || [];
+    const targetSets = group.sets.map((s) => ({
+      weightKg: s.weightKg ?? 0,
+      reps: s.reps ?? 0,
+    }));
+
+    setApplyingPreviousGroupId(group.sessionId);
+    try {
+      const overlap = Math.min(existingSets.length, targetSets.length);
+
+      for (let i = 0; i < overlap; i += 1) {
+        const existing = existingSets[i];
+        const target = targetSets[i];
+        await updateSet(existing.id, {
+          weightKg: target.weightKg,
+          reps: target.reps,
+          isCompleted: false,
+        } as any);
+      }
+
+      for (let i = existingSets.length - 1; i >= targetSets.length; i -= 1) {
+        await deleteSet(existingSets[i].id);
+      }
+
+      for (let i = overlap; i < targetSets.length; i += 1) {
+        const target = targetSets[i];
+        await addSet(sessionExerciseId, {
+          weightKg: target.weightKg,
+          reps: target.reps,
+          isCompleted: false,
+        } as any);
+      }
+
+      setLocalInputValues((prev) => {
+        const next = { ...prev };
+        for (const key of Object.keys(next)) {
+          if (key.startsWith(`${exerciseId}-`)) {
+            delete next[key];
+          }
+        }
+        return next;
+      });
+      for (const key of Array.from(dirtyInputKeysRef.current)) {
+        if (key.startsWith(`${exerciseId}-`)) {
+          dirtyInputKeysRef.current.delete(key);
+        }
+      }
+
+      previousSetsSheetRef.current?.close();
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="success" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Previous sets loaded</ToastTitle>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } catch (e) {
+      console.error('ActiveWorkoutModal: failed to apply previous set group', e);
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Failed to load selected sets</ToastTitle>
+              <ToastDescription>Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setApplyingPreviousGroupId(null);
+    }
+  }, [previousSetsExerciseId, exerciseIdToSessionExerciseId, currentExercises, updateSet, deleteSet, addSet, toast]);
+
   const [splitTitle, setSplitTitle] = useState<string>('');
   const formattedDate = useMemo(() => {
     if (!sessionStartedAtMs) return '';
@@ -1169,6 +1327,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           alignItems="center"
           space="xs"
           my="$0"
+          px="$1"
           width="100%"
           style={{
             backgroundColor: isCompleted ? 'rgba(34, 197, 94, 0.5)' : '#2A2E38',
@@ -1185,7 +1344,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
           </Text>
         {/* Weight */}
         {isCompleted ? (
-          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
+          <Input width={setValueColumnWidth} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
             <InputField
               value={(localValue.weightKg ?? '').toString().trim() || (set.weightKg ? formatWeightFromKg(set.weightKg, unit, 1) : '')}
               editable={false}
@@ -1194,7 +1353,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             />
           </Input>
         ) : (
-          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
+          <Input width={setValueColumnWidth} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
               // @ts-ignore - render RN input via bottom sheet aware text input
               as={BottomSheetTextInput as any}
@@ -1215,7 +1374,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         )}
         {/* Reps */}
         {isCompleted ? (
-          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
+          <Input width={setValueColumnWidth} size="sm" variant="outline" borderColor="transparent" style={{ backgroundColor: 'transparent' }} pointerEvents="none">
             <InputField
               value={(localValue.reps ?? '').toString().trim() || (set.reps ? String(set.reps) : '')}
               editable={false}
@@ -1224,7 +1383,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             />
           </Input>
         ) : (
-          <Input flex={1} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
+          <Input width={setValueColumnWidth} size="sm" variant="outline" borderColor="transparent" style={{backgroundColor: "#1E222C"}}>
             <InputField
               // @ts-ignore - render RN input via bottom sheet aware text input
               as={BottomSheetTextInput as any}
@@ -1361,19 +1520,23 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                             {/* Always-expanded sets section */}
                             <VStack mt="$2" space="xs" width="100%">
                               {/* Column headers */}
-                              <HStack alignItems="center" justifyContent="space-between" mb="$0" width="100%">
+                              <HStack alignItems="center" space="xs" mb="$0" width="100%" px="$1">
                                 <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">
                                   Set
                                 </Text>
                                 <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
                                   Previous
                                 </Text>
-                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
-                                  {weightLabel}
-                                </Text>
-                                <Text color="$textLight50" flex={1} textAlign="center" fontSize="$sm">
-                                  Reps
-                                </Text>
+                                <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
+                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                    {weightLabel}
+                                  </Text>
+                                </Box>
+                                <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
+                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                    Reps
+                                  </Text>
+                                </Box>
                                 <View style={{ width: 28, alignItems: 'center' }}>
                                   <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                                 </View>
@@ -1528,25 +1691,20 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         <BottomSheetView style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
           <VStack space="md">
             <Pressable
-              onPress={async () => {
-                try {
-                  const exId = actionExerciseId;
-                  if (!exId || !sessionId) return;
-                  const wexId = exerciseIdToSessionExerciseId[exId];
-                  if (!wexId) return;
-                  actionMenuRef.current?.close();
-                  await removeExerciseFromSession(wexId);
-                } catch (e) {
-                  console.error('ActiveWorkoutModal: delete exercise failed', e);
-                }
+              onPress={() => {
+                const exId = actionExerciseId;
+                if (!exId) return;
+                handleOpenPreviousSetsPicker(exId).catch((e) => {
+                  console.error('ActiveWorkoutModal: previous sets open failed', e);
+                });
               }}
               accessibilityRole="button"
             >
               <HStack alignItems="center" justifyContent="space-between" py="$3">
                 <HStack space="md" alignItems="center">
                   {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                  <Icon as={Feather as any} name="trash-2" color="$red500" />
-                  <Text color="$red500" fontSize="$md">Delete</Text>
+                  <Icon as={Feather as any} name="clock" color="$white" />
+                  <Text color="$white" fontSize="$md">Previous Sets</Text>
                 </HStack>
               </HStack>
             </Pressable>
@@ -1593,7 +1751,115 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                 </HStack>
               </HStack>
             </Pressable>
+            <Pressable
+              onPress={async () => {
+                try {
+                  const exId = actionExerciseId;
+                  if (!exId || !sessionId) return;
+                  const wexId = exerciseIdToSessionExerciseId[exId];
+                  if (!wexId) return;
+                  actionMenuRef.current?.close();
+                  await removeExerciseFromSession(wexId);
+                } catch (e) {
+                  console.error('ActiveWorkoutModal: delete exercise failed', e);
+                }
+              }}
+              accessibilityRole="button"
+            >
+              <HStack alignItems="center" justifyContent="space-between" py="$3">
+                <HStack space="md" alignItems="center">
+                  {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                  <Icon as={Feather as any} name="trash-2" color="$red500" />
+                  <Text color="$red500" fontSize="$md">Delete</Text>
+                </HStack>
+              </HStack>
+            </Pressable>
           </VStack>
+        </BottomSheetView>
+      </BottomSheet>
+
+      <BottomSheet
+        ref={previousSetsSheetRef}
+        index={-1}
+        snapPoints={previousSetsSnapPoints}
+        enablePanDownToClose
+        onClose={() => {
+          setPreviousSetsExerciseId(null);
+          setPreviousSetGroups([]);
+          setIsLoadingPreviousSetGroups(false);
+          setApplyingPreviousGroupId(null);
+        }}
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} appearsOnIndex={0} disappearsOnIndex={-1} opacity={0.5} pressBehavior="close" />
+        )}
+        handleIndicatorStyle={{ backgroundColor: '#666' }}
+        backgroundStyle={{ backgroundColor: '#1E2028' }}
+      >
+        <BottomSheetView style={{ paddingHorizontal: 16, paddingTop: 12, flex: 1 }}>
+          <VStack space="xs" mb="$3">
+            <Text color="$white" fontSize="$lg" fontWeight="$bold">Previous Sets</Text>
+            <Text color="$textLight300" fontSize="$sm" numberOfLines={1}>{previousSetsExerciseName}</Text>
+          </VStack>
+          <Divider bg="$backgroundLight700" />
+
+          {isLoadingPreviousSetGroups ? (
+            <Box py="$5" alignItems="center">
+              <Text color="$textLight300">Loading previous sets...</Text>
+            </Box>
+          ) : previousSetGroups.length === 0 ? (
+            <Box py="$6" alignItems="center">
+              <Text color="$textLight300" textAlign="center">No previous sets found for this exercise.</Text>
+            </Box>
+          ) : (
+            <ScrollView style={{ marginTop: 12 }} contentContainerStyle={{ paddingBottom: 24 }}>
+              <VStack space="sm">
+                {previousSetGroups.map((group) => {
+                  const dateLabel = formatHistoryDate(group.startedAt ?? group.finishedAt);
+                  const groupTitle = group.sessionName?.trim() || 'Workout';
+                  const isApplying = applyingPreviousGroupId === group.sessionId;
+                  return (
+                    <Pressable
+                      key={group.sessionId}
+                      onPress={() => handleApplyPreviousSetGroup(group)}
+                      disabled={!!applyingPreviousGroupId}
+                      accessibilityRole="button"
+                    >
+                      <Box
+                        bg="#12141A"
+                        borderRadius="$md"
+                        px="$3"
+                        py="$3"
+                        borderWidth={1}
+                        borderColor={isApplying ? '$primary500' : '$backgroundLight700'}
+                        style={{ opacity: applyingPreviousGroupId && !isApplying ? 0.7 : 1 }}
+                      >
+                        <HStack alignItems="center" justifyContent="space-between" mb="$2">
+                          <Text color="$white" fontWeight="$bold" flex={1} numberOfLines={1}>{groupTitle}</Text>
+                          <Text color="$textLight400" fontSize="$xs">{isApplying ? 'Applying...' : dateLabel}</Text>
+                        </HStack>
+                        <VStack space="2xs">
+                          {group.sets.length === 0 ? (
+                            <Text color="$textLight400" fontSize="$sm">No sets recorded</Text>
+                          ) : (
+                            group.sets.map((set, idx) => {
+                              const w = set.weightKg != null ? `${formatWeightFromKg(set.weightKg, unit, 1)} ${weightLabel}` : '-';
+                              const r = set.reps != null ? String(set.reps) : '-';
+                              return (
+                                <HStack key={`${group.sessionId}-${idx}`} justifyContent="space-between" alignItems="center">
+                                  <Text color="$textLight300" fontSize="$sm">Set {idx + 1}</Text>
+                                  <Text color="$textLight100" fontSize="$sm">{w} × {r}</Text>
+                                </HStack>
+                              );
+                            })
+                          )}
+                        </VStack>
+                      </Box>
+                    </Pressable>
+                  );
+                })}
+              </VStack>
+            </ScrollView>
+          )}
         </BottomSheetView>
       </BottomSheet>
     </GestureHandlerRootView>

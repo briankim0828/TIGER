@@ -36,6 +36,14 @@ export type WorkoutPost = {
   exercises: WorkoutPostExercise[];
 };
 
+export type ExerciseSetHistoryGroup = {
+  sessionId: string;
+  sessionName: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  sets: Array<{ weightKg: number | null; reps: number | null }>;
+};
+
 /**
  * History/Stats data access kept separate from the interactive session mutations
  * to make removal of legacy DataContext straightforward.
@@ -144,6 +152,78 @@ export class WorkoutHistoryDataAccess {
       .orderBy(asc(workoutSets.setOrder));
 
     return sets.map((s: any) => ({ weightKg: (s.weightKg ?? null) as number | null, reps: (s.reps ?? null) as number | null }));
+  }
+
+  /**
+   * For a given exercise, return prior completed sessions (newest first), each with that session's sets.
+   */
+  async getExerciseSetHistoryGroups(
+    userId: string,
+    exerciseId: string,
+    beforeISO: string,
+    limit = 20
+  ): Promise<ExerciseSetHistoryGroup[]> {
+    const sessions = await this.db
+      .select({
+        id: workoutSessions.id,
+        sessionName: workoutSessions.sessionName,
+        startedAt: workoutSessions.startedAt,
+        finishedAt: workoutSessions.finishedAt,
+      })
+      .from(workoutSessions)
+      .innerJoin(
+        workoutExercises,
+        and(eq(workoutExercises.sessionId, workoutSessions.id), eq(workoutExercises.exerciseId, exerciseId))
+      )
+      .where(
+        and(
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.state, 'completed'),
+          (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`
+        )
+      )
+      .groupBy(
+        workoutSessions.id,
+        workoutSessions.sessionName,
+        workoutSessions.startedAt,
+        workoutSessions.finishedAt
+      )
+      .orderBy(desc(workoutSessions.startedAt))
+      .limit(limit);
+
+    if (sessions.length === 0) return [];
+
+    const groups: ExerciseSetHistoryGroup[] = [];
+    for (const sess of sessions) {
+      const exRows = await this.db
+        .select({ id: workoutExercises.id })
+        .from(workoutExercises)
+        .where(and(eq(workoutExercises.sessionId, sess.id as string), eq(workoutExercises.exerciseId, exerciseId)))
+        .orderBy(asc(workoutExercises.orderPos))
+        .limit(1);
+
+      if (exRows.length === 0) continue;
+
+      const sessionExerciseId = exRows[0].id as string;
+      const sets = await this.db
+        .select({ weightKg: workoutSets.weightKg, reps: workoutSets.reps, setOrder: workoutSets.setOrder })
+        .from(workoutSets)
+        .where(eq(workoutSets.workoutExerciseId, sessionExerciseId))
+        .orderBy(asc(workoutSets.setOrder));
+
+      groups.push({
+        sessionId: sess.id as string,
+        sessionName: (sess.sessionName ?? null) as string | null,
+        startedAt: (sess.startedAt ?? null) as string | null,
+        finishedAt: (sess.finishedAt ?? null) as string | null,
+        sets: sets.map((s: any) => ({
+          weightKg: (s.weightKg ?? null) as number | null,
+          reps: (s.reps ?? null) as number | null,
+        })),
+      });
+    }
+
+    return groups;
   }
 
   /**

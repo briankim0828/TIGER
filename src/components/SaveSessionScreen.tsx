@@ -37,7 +37,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   onSessionNameChange,
 }) => {
   const toast = useToast();
-  const { endWorkout, deleteWorkout, setSessionNote } = useWorkout();
+  const { endWorkout, deleteWorkout, setSessionNote, updateSet, deleteSet } = useWorkout();
   const { showWorkoutSummary } = useOverlay();
   const { unit } = useUnit();
   const [note, setNote] = useState<string>('');
@@ -48,6 +48,8 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [customStart, setCustomStart] = useState<Date | null>(null);
   const [customDurationMin, setCustomDurationMin] = useState<number>(60);
+  const [showIncompleteConfirm, setShowIncompleteConfirm] = useState(false);
+  const [isResolvingIncompleteSets, setIsResolvingIncompleteSets] = useState(false);
 
   // Reset when switching to a different session and sync name upward once
   useEffect(() => {
@@ -92,6 +94,45 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     return { setCount, volumeKg };
   }, [currentExercises]);
 
+  const incompleteSets = useMemo(() => {
+    return currentExercises
+      .flatMap((exercise) =>
+        (exercise.sets || []).map((set) => ({
+          exerciseId: exercise.id,
+          set,
+        }))
+      )
+      .filter((row) => !row.set.isCompleted);
+  }, [currentExercises]);
+
+  const canMarkIncompleteAsComplete = useMemo(() => {
+    if (incompleteSets.length === 0) return true;
+    return incompleteSets.every(({ set }) => {
+      const weight = Number(set.weightKg ?? 0);
+      const reps = Number(set.reps ?? 0);
+      return Number.isFinite(weight) && Number.isFinite(reps) && weight > 0 && reps > 0;
+    });
+  }, [incompleteSets]);
+
+  const buildProjectedExercises = useCallback((mode: 'normal' | 'deleteIncomplete') => {
+    if (mode === 'normal') return currentExercises;
+    return currentExercises.map((exercise) => ({
+      ...exercise,
+      sets: (exercise.sets || []).filter((set) => set.isCompleted),
+    }));
+  }, [currentExercises]);
+
+  const computeMetricsFromExercises = useCallback((exercises: RenderExercise[]) => {
+    const sets = exercises.flatMap((e) => e.sets || []);
+    const setCount = sets.length;
+    const volumeKg = sets.reduce((sum, s) => {
+      const kg = lbToKg(Number(s.weightKg || 0));
+      const reps = Number(s.reps || 0);
+      return sum + (kg * reps);
+    }, 0);
+    return { setCount, volumeKg };
+  }, []);
+
   const durationText = useMemo(() => {
     if (!sessionStartedAtMs) return '—';
     if (isBackdated) return `${customDurationMin}min`;
@@ -125,10 +166,12 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
     return `${display.toLocaleString(undefined, { maximumFractionDigits: 1, minimumFractionDigits: 1 })} ${unitLabel(unit)}`;
   }, [metrics.volumeKg, unit]);
 
-  const handleSave = useCallback(async () => {
+  const finalizeSave = useCallback(async (mode: 'normal' | 'deleteIncomplete') => {
     try {
-      const setCount = metrics.setCount;
-      const totalVolumeKg = Math.round((metrics.volumeKg ?? 0));
+      const projectedExercises = buildProjectedExercises(mode);
+      const projectedMetrics = computeMetricsFromExercises(projectedExercises);
+      const setCount = projectedMetrics.setCount;
+      const totalVolumeKg = Math.round((projectedMetrics.volumeKg ?? 0));
       // Compute overrides and duration consistently for both save paths
       let durationMin: number | undefined = undefined;
       let startedAtOverride: string | undefined;
@@ -174,7 +217,7 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
       }
       // Show workout summary overlay before closing
       try {
-        const summaryExercises = currentExercises.map(e => ({ name: e.name, setCount: e.sets?.length ?? 0 }));
+        const summaryExercises = projectedExercises.map(e => ({ name: e.name, setCount: e.sets?.length ?? 0 }));
         showWorkoutSummary({
           sessionName: nameToSave || splitTitle || 'Workout',
           note: note?.trim() || null,
@@ -210,7 +253,66 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
         ),
       });
     }
-  }, [metrics.setCount, metrics.volumeKg, sessionStartedAtMs, isBackdated, customStart, customDurationMin, elapsedSecAtFinish, sessionName, onSaveOverride, note, setSessionNote, endWorkout, sessionId, onCloseSheet, toast, showWorkoutSummary, currentExercises, splitTitle]);
+  }, [buildProjectedExercises, computeMetricsFromExercises, sessionStartedAtMs, isBackdated, customStart, customDurationMin, elapsedSecAtFinish, sessionName, onSaveOverride, note, setSessionNote, endWorkout, sessionId, onCloseSheet, toast, showWorkoutSummary, splitTitle]);
+
+  const handleSave = useCallback(async () => {
+    if (incompleteSets.length > 0) {
+      setShowIncompleteConfirm(true);
+      return;
+    }
+    await finalizeSave('normal');
+  }, [incompleteSets.length, finalizeSave]);
+
+  const handleDeleteIncompleteAndSave = useCallback(async () => {
+    setIsResolvingIncompleteSets(true);
+    try {
+      for (const row of incompleteSets) {
+        await deleteSet(row.set.id);
+      }
+      setShowIncompleteConfirm(false);
+      await finalizeSave('deleteIncomplete');
+    } catch (e) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Unable to delete incomplete sets</ToastTitle>
+              <ToastDescription>Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsResolvingIncompleteSets(false);
+    }
+  }, [incompleteSets, deleteSet, finalizeSave, toast]);
+
+  const handleMarkCompleteAndSave = useCallback(async () => {
+    if (!canMarkIncompleteAsComplete) return;
+    setIsResolvingIncompleteSets(true);
+    try {
+      for (const row of incompleteSets) {
+        await updateSet(row.set.id, { isCompleted: true } as any);
+      }
+      setShowIncompleteConfirm(false);
+      await finalizeSave('normal');
+    } catch (e) {
+      toast.show({
+        placement: 'top',
+        render: ({ id }) => (
+          <Toast nativeID={id} action="error" variant="accent">
+            <VStack space="xs">
+              <ToastTitle>Unable to complete remaining sets</ToastTitle>
+              <ToastDescription>Please try again.</ToastDescription>
+            </VStack>
+          </Toast>
+        ),
+      });
+    } finally {
+      setIsResolvingIncompleteSets(false);
+    }
+  }, [canMarkIncompleteAsComplete, incompleteSets, updateSet, finalizeSave, toast]);
 
   const handleDiscard = useCallback(async () => {
     try {
@@ -420,6 +522,65 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
                 <Text color="#3B82F6" fontWeight="$bold">Done</Text>
               </Pressable>
             </HStack>
+          </Box>
+        </Box>
+      </Modal>
+
+      <Modal
+        transparent
+        visible={showIncompleteConfirm}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isResolvingIncompleteSets) setShowIncompleteConfirm(false);
+        }}
+      >
+        <Box flex={1} bg="rgba(0,0,0,0.6)" justifyContent="center" alignItems="center" px="$5">
+          <Box bg="#171b25" borderRadius="$xl" p="$4" width="$full" >
+            <VStack space="sm">
+              <Text color="$textLight50" fontWeight="$bold" fontSize="$md">Incomplete Sets Found</Text>
+              <Text color="$textLight300" fontSize="$sm">
+                {incompleteSets.length} set{incompleteSets.length === 1 ? '' : 's'} are not completed. Choose how to save this workout.
+              </Text>
+            </VStack>
+
+            <VStack space="sm" mt="$4">
+              <Pressable
+                onPress={handleDeleteIncompleteAndSave}
+                disabled={isResolvingIncompleteSets}
+                bg="#ef4444"
+                borderRadius="$md"
+                py="$2"
+                alignItems="center"
+                style={{ opacity: isResolvingIncompleteSets ? 0.7 : 1 }}
+              >
+                <Text color="$textLight50" fontWeight="$bold">Delete incomplete sets</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={handleMarkCompleteAndSave}
+                disabled={isResolvingIncompleteSets || !canMarkIncompleteAsComplete}
+                bg={canMarkIncompleteAsComplete ? '#22c55e' : '#22c55ebd'}
+                borderRadius="$md"
+                py="$2"
+                alignItems="center"
+                style={{ opacity: isResolvingIncompleteSets ? 0.7 : canMarkIncompleteAsComplete ? 1 : 0.7 }}
+              >
+                <Text color="$textLight50" fontWeight="$bold">
+                  {canMarkIncompleteAsComplete ? 'Mark sets as complete' : 'Set values missing'}
+                </Text>
+              </Pressable>
+            </VStack>
+
+            <Pressable
+              onPress={() => setShowIncompleteConfirm(false)}
+              disabled={isResolvingIncompleteSets}
+              alignItems="center"
+              mt="$4"
+              py="$1"
+              style={{ opacity: isResolvingIncompleteSets ? 0.6 : 1 }}
+            >
+              <Text color="#3B82F6" fontWeight="$semibold">Cancel</Text>
+            </Pressable>
           </Box>
         </Box>
       </Modal>
