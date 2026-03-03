@@ -5,7 +5,7 @@
 // If you need to add a new table to replication, FIRST add it to SYNC_TABLES in sync/manifest.ts,
 // then add its definition here, regenerate migrations, and apply.
 
-import { pgTable, uuid, text, boolean, integer, timestamp, date, pgEnum, index, unique, pgSchema } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, boolean, integer, numeric, timestamp, date, pgEnum, index, unique, pgSchema } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 /* =========================
@@ -132,7 +132,8 @@ export const workoutSets = pgTable('workout_sets', {
   workoutExerciseId: uuid('workout_exercise_id').notNull().references(() => workoutExercises.id, { onDelete: 'cascade' }),
   setOrder: integer('set_order').notNull(),
   isWarmup: boolean('is_warmup').notNull().default(false),
-  weightKg: integer('weight_kg'),
+  // Keep property name for compatibility; storage column is now pounds.
+  weightKg: numeric('weight_lb', { precision: 8, scale: 1 }),
   reps: integer('reps'),
   durationSec: integer('duration_sec'),
   distanceM: integer('distance_m'),

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useOverlay } from '../contexts/OverlayContext';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { useUnit } from '../contexts/UnitContext';
-import { unitLabel } from '../utils/units';
+import { lbToKg, unitLabel } from '../utils/units';
 
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
@@ -82,9 +82,10 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
   const metrics = useMemo(() => {
     const sets = currentExercises.flatMap((e) => e.sets || []);
     const setCount = sets.length;
-    // Storage convention: weights are stored in kilograms.
+    // Storage convention: weights are stored in pounds.
+    // Keep session volume metric in kilograms for backward compatibility.
     const volumeKg = sets.reduce((sum, s) => {
-      const kg = Number(s.weightKg || 0);
+      const kg = lbToKg(Number(s.weightKg || 0));
       const reps = Number(s.reps || 0);
       return sum + (kg * reps);
     }, 0);

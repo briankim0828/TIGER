@@ -197,7 +197,8 @@ export const workoutSets = pgTable("workout_sets", {
   workoutExerciseId: uuid("workout_exercise_id").notNull().references(() => workoutExercises.id, { onDelete: "cascade" }),
   setOrder: integer("set_order").notNull(),
   isWarmup: boolean("is_warmup").notNull().default(false),
-  weightKg: numeric("weight_kg", { precision: 7, scale: 2 }),
+  // Keep property name for app compatibility; storage column is now pounds.
+  weightKg: numeric("weight_lb", { precision: 8, scale: 1 }),
   reps: integer("reps"),
   durationSec: integer("duration_sec"),
   distanceM: numeric("distance_m", { precision: 9, scale: 2 }),

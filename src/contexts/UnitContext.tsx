@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { UnitSystem } from '../utils/units';
-import { useElectric } from '../electric';
 
 type UnitContextValue = {
   unit: UnitSystem;
@@ -12,12 +11,8 @@ type UnitContextValue = {
 const UnitContext = createContext<UnitContextValue | undefined>(undefined);
 
 const STORAGE_KEY = 'tiger:unit';
-const MIGRATION_KEY = 'tiger:migrate_set_weights_to_kg_v1';
-const NORMALIZE_INT_KEY = 'tiger:normalize_set_weights_to_int_v1';
-const LEGACY_LB_PER_KG = 2.20462;
 
 export const UnitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { db, isInitialized } = useElectric();
   const [unit, setUnitState] = useState<UnitSystem>('kg');
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -38,57 +33,6 @@ export const UnitProvider: React.FC<{ children: React.ReactNode }> = ({ children
       cancelled = true;
     };
   }, []);
-
-  // One-time migration: older builds treated workout_sets.weight_kg as lbs in the UI.
-  // Convert stored weights to kg so storage matches field semantics going forward.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!isLoaded) return;
-        if (!isInitialized || !db) return;
-        const done = await AsyncStorage.getItem(MIGRATION_KEY);
-        if (cancelled || done === '1') return;
-        await db.runAsync(
-          `UPDATE workout_sets
-           SET weight_kg = CAST(ROUND(weight_kg / ?) AS INTEGER)
-           WHERE weight_kg IS NOT NULL AND weight_kg > 0`,
-          [LEGACY_LB_PER_KG]
-        );
-        await AsyncStorage.setItem(MIGRATION_KEY, '1');
-      } catch {
-        // If migration fails, do not block app usage.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [db, isInitialized, isLoaded]);
-
-  // One-time normalization: ensure stored weights are integers (older versions/migrations may have left floats).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (!isLoaded) return;
-        if (!isInitialized || !db) return;
-        const done = await AsyncStorage.getItem(NORMALIZE_INT_KEY);
-        if (cancelled || done === '1') return;
-        await db.runAsync(
-          `UPDATE workout_sets
-           SET weight_kg = CAST(ROUND(weight_kg) AS INTEGER)
-           WHERE weight_kg IS NOT NULL`,
-          []
-        );
-        await AsyncStorage.setItem(NORMALIZE_INT_KEY, '1');
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [db, isInitialized, isLoaded]);
 
   const setUnit = useCallback((next: UnitSystem) => {
     setUnitState(next);

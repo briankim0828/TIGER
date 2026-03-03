@@ -115,7 +115,7 @@ export class WorkoutsDataAccess {
           workout_exercise_id: sessionExerciseId,
           set_order: base + i,
           is_warmup: 0,
-          weight_kg: values[i]?.weightKg ?? null,
+          weight_lb: values[i]?.weightKg ?? null,
           reps: values[i]?.reps ?? null,
           duration_sec: null,
           distance_m: null,
@@ -314,7 +314,7 @@ export class WorkoutsDataAccess {
           const id = newUuid();
           // Atomic compute of next set_index using INSERT ... SELECT with aggregate
           await this.sqlite.runAsync(
-            `INSERT INTO workout_sets (id, workout_exercise_id, set_order, is_warmup, weight_kg, reps, duration_sec, distance_m, rest_sec, is_completed)
+            `INSERT INTO workout_sets (id, workout_exercise_id, set_order, is_warmup, weight_lb, reps, duration_sec, distance_m, rest_sec, is_completed)
              SELECT ?, ?, COALESCE(MAX(set_order) + 1, 0), ?, ?, ?, ?, ?, ?, 0
              FROM workout_sets WHERE workout_exercise_id = ?;`,
             id,
@@ -338,7 +338,7 @@ export class WorkoutsDataAccess {
               workout_exercise_id: row.workoutExerciseId,
               set_order: row.setOrder,
               is_warmup: row.isWarmup ?? 0,
-              weight_kg: row.weightKg ?? null,
+              weight_lb: row.weightKg ?? null,
               reps: row.reps ?? null,
               duration_sec: row.durationSec ?? null,
               distance_m: row.distanceM ?? null,
@@ -364,7 +364,7 @@ export class WorkoutsDataAccess {
   async updateSet(setId: string, patch: Partial<Pick<WorkoutSetRow, 'weightKg' | 'reps' | 'durationSec' | 'distanceM' | 'restSec' | 'isWarmup' | 'isCompleted'>>): Promise<boolean> {
     await this.db.update(workoutSets).set(patch).where(eq(workoutSets.id, setId)).run();
     const payload: any = { id: setId };
-    if (patch.weightKg !== undefined) payload.weight_kg = patch.weightKg;
+    if (patch.weightKg !== undefined) payload.weight_lb = patch.weightKg;
     if (patch.reps !== undefined) payload.reps = patch.reps;
     if (patch.durationSec !== undefined) payload.duration_sec = patch.durationSec;
     if (patch.distanceM !== undefined) payload.distance_m = patch.distanceM;

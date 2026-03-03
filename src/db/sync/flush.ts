@@ -107,10 +107,10 @@ async function pushToServer(db: SQLite.SQLiteDatabase, item: any) {
   const op = item.op as string;
   const rowId = item.row_id as string;
   const payload = item.payload ? JSON.parse(item.payload) : undefined;
-  // Normalize numeric payloads (defensive): keep weights as integers across sync.
-  if (table === 'workout_sets' && payload && typeof payload === 'object' && (payload as any).weight_kg !== undefined && (payload as any).weight_kg !== null) {
-    const v = Number((payload as any).weight_kg);
-    if (Number.isFinite(v)) (payload as any).weight_kg = Math.round(v);
+  // Normalize numeric payloads (defensive): keep set weights at 1 decimal place.
+  if (table === 'workout_sets' && payload && typeof payload === 'object' && (payload as any).weight_lb !== undefined && (payload as any).weight_lb !== null) {
+    const v = Number((payload as any).weight_lb);
+    if (Number.isFinite(v)) (payload as any).weight_lb = Math.round(v * 10) / 10;
   }
   // Schema sanitation for specific tables
   if (table === 'split_day_assignments' && payload && typeof payload === 'object') {

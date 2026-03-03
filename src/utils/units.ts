@@ -2,9 +2,10 @@ export type UnitSystem = 'kg' | 'lb';
 
 const KG_TO_LB = 2.2046226218;
 
-function roundWeight(value: number): number {
+function roundWeight(value: number, decimals = 1): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.round(value);
+  const p = Math.pow(10, decimals);
+  return Math.round(value * p) / p;
 }
 
 export function unitLabel(unit: UnitSystem): string {
@@ -19,14 +20,18 @@ export function lbToKg(lb: number): number {
   return lb / KG_TO_LB;
 }
 
-export function toDisplayWeight(valueKg: number, unit: UnitSystem): number {
-  const display = unit === 'lb' ? kgToLb(valueKg) : valueKg;
-  return roundWeight(display);
+// Legacy name retained for compatibility with existing call sites.
+// Storage is now pounds by default.
+export function toDisplayWeight(valueLb: number, unit: UnitSystem): number {
+  const display = unit === 'lb' ? valueLb : lbToKg(valueLb);
+  return roundWeight(display, 1);
 }
 
+// Legacy name retained for compatibility with existing call sites.
+// Returns storage value in pounds.
 export function toStorageKg(displayValue: number, unit: UnitSystem): number {
-  const kg = unit === 'lb' ? lbToKg(displayValue) : displayValue;
-  return roundWeight(kg);
+  const lb = unit === 'lb' ? displayValue : kgToLb(displayValue);
+  return roundWeight(lb, 1);
 }
 
 export function formatNumber(value: number, decimals = 1): string {
@@ -38,11 +43,10 @@ export function formatNumber(value: number, decimals = 1): string {
   return s;
 }
 
-export function formatWeightFromKg(kg: number | null | undefined, unit: UnitSystem, decimals = 1): string {
-  if (kg === null || kg === undefined) return '';
-  // We always show weights as integers across the app.
-  const displayInt = toDisplayWeight(kg, unit);
-  return formatNumber(displayInt, 0);
+export function formatWeightFromKg(lb: number | null | undefined, unit: UnitSystem, decimals = 1): string {
+  if (lb === null || lb === undefined) return '';
+  const display = toDisplayWeight(lb, unit);
+  return formatNumber(display, decimals);
 }
 
 export function formatVolumeFromKg(totalVolumeKg: number | null | undefined, unit: UnitSystem, decimals = 0): string {

@@ -141,7 +141,8 @@ export const workoutSets = sqliteTable(
     workoutExerciseId: text('workout_exercise_id').notNull().references(() => workoutExercises.id, { onDelete: 'cascade' }),
     setOrder: integer('set_order').notNull(),
     isWarmup: integer('is_warmup').notNull().default(0),
-    weightKg: integer('weight_kg'),
+    // Keep property name for app compatibility; storage column is now pounds.
+    weightKg: real('weight_lb'),
     reps: integer('reps'),
     durationSec: integer('duration_sec'),
     distanceM: integer('distance_m'),

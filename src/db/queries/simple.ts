@@ -245,7 +245,7 @@ export class SimpleDataAccess {
           workout_exercise_id TEXT NOT NULL,
           set_order INTEGER NOT NULL,
           is_warmup INTEGER NOT NULL DEFAULT 0,
-          weight_kg INTEGER,
+          weight_lb REAL,
           reps INTEGER,
           duration_sec INTEGER,
           distance_m INTEGER,
@@ -257,6 +257,62 @@ export class SimpleDataAccess {
         CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
         CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id);
       `);
+
+      // Migration: workout_sets.weight_kg (legacy int kg) -> weight_lb (real, 1 decimal)
+      try {
+        const wsCols = await this.db.getAllAsync(`PRAGMA table_info(workout_sets)`);
+        const hasWeightKg = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'weight_kg');
+        const hasWeightLb = Array.isArray(wsCols) && (wsCols as any[]).some((c) => c.name === 'weight_lb');
+        if (hasWeightKg && !hasWeightLb) {
+          await this.db.withTransactionAsync(async () => {
+            await this.db.execAsync(`PRAGMA foreign_keys=OFF;`);
+            await this.db.execAsync(`ALTER TABLE workout_sets RENAME TO workout_sets_old;`);
+            await this.db.execAsync(`
+              CREATE TABLE IF NOT EXISTS workout_sets (
+                id TEXT PRIMARY KEY,
+                workout_exercise_id TEXT NOT NULL,
+                set_order INTEGER NOT NULL,
+                is_warmup INTEGER NOT NULL DEFAULT 0,
+                weight_lb REAL,
+                reps INTEGER,
+                duration_sec INTEGER,
+                distance_m INTEGER,
+                rest_sec INTEGER,
+                is_completed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id) ON DELETE CASCADE
+              );
+            `);
+            await this.db.execAsync(`
+              INSERT INTO workout_sets (id, workout_exercise_id, set_order, is_warmup, weight_lb, reps, duration_sec, distance_m, rest_sec, is_completed, created_at)
+              SELECT id, workout_exercise_id, set_order, is_warmup,
+                     CASE WHEN weight_kg IS NULL THEN NULL ELSE ROUND(CAST(weight_kg AS REAL) * 2.2046226218, 1) END,
+                     reps, duration_sec, distance_m, rest_sec, is_completed, created_at
+              FROM workout_sets_old;
+            `);
+            await this.db.execAsync(`DROP TABLE workout_sets_old;`);
+            await this.db.execAsync(`PRAGMA foreign_keys=ON;`);
+          });
+
+          // Best-effort outbox payload migration: weight_kg -> weight_lb (converted)
+          try {
+            await this.db.execAsync(`
+              UPDATE outbox
+              SET payload = json_remove(
+                json_set(
+                  payload,
+                  '$.weight_lb',
+                  ROUND(CAST(json_extract(payload, '$.weight_kg') AS REAL) * 2.2046226218, 1)
+                ),
+                '$.weight_kg'
+              )
+              WHERE table_name = 'workout_sets'
+                AND payload IS NOT NULL
+                AND json_extract(payload, '$.weight_kg') IS NOT NULL;
+            `);
+          } catch {}
+        }
+      } catch {}
 
       // Create split_day_assignments table for program days — cascade when split is removed
       await this.db.execAsync(`
@@ -393,24 +449,6 @@ export class SimpleDataAccess {
             FOREIGN KEY (from_split_exercise_id) REFERENCES split_exercises (id) ON DELETE SET NULL
           );`;
 
-        const createWorkoutSets = `
-          CREATE TABLE IF NOT EXISTS workout_sets (
-            id TEXT PRIMARY KEY,
-            workout_exercise_id TEXT NOT NULL,
-            set_order INTEGER NOT NULL,
-            is_warmup INTEGER NOT NULL DEFAULT 0,
-            weight_kg INTEGER,
-            reps INTEGER,
-            duration_sec INTEGER,
-            distance_m INTEGER,
-            rest_sec INTEGER,
-            is_completed INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (workout_exercise_id) REFERENCES workout_exercises (id) ON DELETE CASCADE
-          );
-          CREATE UNIQUE INDEX IF NOT EXISTS workout_sets_order_uq ON workout_sets (workout_exercise_id, set_order);
-          CREATE INDEX IF NOT EXISTS idx_workout_sets_ex ON workout_sets (workout_exercise_id);`;
-
         // Apply fixes per rules
         await ensureTable(
           'split_exercises',
@@ -440,12 +478,7 @@ export class SimpleDataAccess {
           'id, session_id, exercise_id, order_pos, rest_sec_default, from_split_exercise_id, note, created_at'
         );
 
-        await ensureTable(
-          'workout_sets',
-          [ { from: 'workout_exercise_id', table: 'workout_exercises', onDelete: 'CASCADE' } ],
-          createWorkoutSets,
-          'id, workout_exercise_id, set_order, is_warmup, weight_kg, reps, duration_sec, distance_m, rest_sec, is_completed, created_at'
-        );
+        // workout_sets structure is migrated separately above to preserve legacy weight conversion logic.
       } catch (e) {
         console.warn('FK enforcement check skipped or failed:', e);
       }

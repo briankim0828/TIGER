@@ -531,12 +531,25 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Handle weight input change locally (no update to context)
   const handleInputChange = useCallback((exerciseId: string, setKey: string, field: 'weightKg' | 'reps', value: string) => {
+    let nextValue = value;
+    if (field === 'weightKg') {
+      nextValue = value
+        .replace(/,/g, '.')
+        .replace(/[^0-9.]/g, '')
+        .replace(/(\..*)\./g, '$1');
+      if (nextValue.includes('.')) {
+        const [whole, frac] = nextValue.split('.');
+        nextValue = `${whole}.${(frac ?? '').slice(0, 1)}`;
+      }
+    } else {
+      nextValue = value.replace(/[^0-9]/g, '');
+    }
     dirtyInputKeysRef.current.add(setKey);
     setLocalInputValues((prev) => ({
       ...prev,
       [setKey]: {
         ...prev[setKey],
-        [field]: value,
+        [field]: nextValue,
       },
     }));
   }, []);
@@ -575,7 +588,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
     } else {
       const original = set.reps || 0;
-      const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : numericValue);
+      const next = currentValue.trim() === '' ? 0 : (isNaN(numericValue) ? original : parseInt(String(numericValue), 10));
       dirtyInputKeysRef.current.delete(setKey);
       if (next !== original) {
         updateSet(set.id, { reps: next } as any).catch(console.error);
@@ -608,7 +621,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     if (nextIsCompleted) {
       // Completing: persist current values and set isCompleted=true
       const w = parseFloat(local.weightKg);
-      const r = parseFloat(local.reps);
+      const r = parseInt(local.reps, 10);
       if (isNaN(w) || isNaN(r)) {
         toast.show({
           placement: 'top',
@@ -1124,7 +1137,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               onFocus={(e: any) => {
                 try { e?.target?.setSelection && e.target.setSelection(0, (localValue.weightKg ?? '').toString().length); } catch {}
               }}
-              keyboardType="numeric"
+              keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
               color="$textLight50"
               placeholderTextColor="$textLight600"
               textAlign="center"
