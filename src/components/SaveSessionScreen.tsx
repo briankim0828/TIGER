@@ -248,14 +248,14 @@ const SaveSessionScreen: React.FC<SaveSessionScreenProps> = ({
       <Box bg="#2A2E38" px="$3" py="$3" width="100%" borderBottomWidth={0} borderColor="#3A3F4B">
         <HStack alignItems="center" justifyContent="space-between">
           <Pressable onPress={onBack} aria-label="Back">
-            <HStack alignItems="center" space="xs">
+            <HStack alignItems="center" space="xxs">
               <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
               <Text color="$textLight50">Back</Text>
             </HStack>
           </Pressable>
           <Text color="$textLight50" fontWeight="$bold" fontSize="$md">Save Workout</Text>
-          <Pressable onPress={handleSave} bg="#22c55e" px="$3" py="$1" borderRadius="$md">
-            <Text color="$textLight50" fontWeight="$bold">Save</Text>
+          <Pressable onPress={handleSave} bg="#22c55e" px="$3" py="$2" borderRadius="$md">
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$sm">Save</Text>
           </Pressable>
         </HStack>
       </Box>

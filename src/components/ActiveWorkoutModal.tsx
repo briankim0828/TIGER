@@ -156,6 +156,22 @@ const WorkoutTimer = React.memo(({ startedAtMs, formatTimer }: { startedAtMs: nu
   );
 });
 
+const SetCompletionTimer = React.memo(({ startedAtMs, formatTimer }: { startedAtMs: number | null; formatTimer: (s: number) => string }) => {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const elapsed = startedAtMs ? Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)) : 0;
+
+  return (
+    <Text color="#22c55e" fontWeight="$semibold" fontSize="$xs">
+      {formatTimer(elapsed)}
+    </Text>
+  );
+});
+
 type RenderSet = { id: string; weightKg: number; reps: number; isCompleted: boolean };
 type RenderExercise = { id: string; name: string; sets: RenderSet[] };
 
@@ -212,6 +228,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   
   // State
   const [sessionStartedAtMs, setSessionStartedAtMs] = useState<number | null>(null);
+  const [lastCompletedSetAtMs, setLastCompletedSetAtMs] = useState<number | null>(null);
   const [isBackdated, setIsBackdated] = useState<boolean>(false);
   const [tick, setTick] = useState(0); // kept for backward compat; no longer drives re-renders
   // Exercises are always expanded now (no expand/collapse state)
@@ -226,8 +243,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [isCancelWorkoutPressed, setIsCancelWorkoutPressed] = useState(false);
   // Snapshot of elapsed seconds at Finish press
   const [elapsedSecAtFinish, setElapsedSecAtFinish] = useState<number | null>(null);
-  // Cache of previous session sets per exercise: exerciseId -> array of { weightKg, reps }
+  // Cache of previous session sets per sessionExerciseId (resolved from exerciseId)
   const [prevSetsByExercise, setPrevSetsByExercise] = useState<Record<string, Array<{ weightKg: number | null; reps: number | null }>>>({});
+  const prevLoadSeqRef = useRef(0);
   // Track which exerciseIds we've already pre-populated to avoid duplicate inserts
   const prepopulatedExIdsRef = useRef<Set<string>>(new Set());
   // Action menu for per-exercise operations
@@ -316,30 +334,62 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     };
   }, [isVisible, authUserId, activeSessionIdProp, getActiveSessionId]);
 
-  // When we have session start and exercises, fetch previous sets for each exercise
+  // Reset previous cache when the active session changes.
   useEffect(() => {
+    setPrevSetsByExercise({});
+  }, [sessionId]);
+
+  // When we have exercises, fetch previous sets consistently.
+  useEffect(() => {
+    const loadSeq = ++prevLoadSeqRef.current;
+    let cancelled = false;
     (async () => {
-      if (!authUserId || !sessionStartedAtMs) return;
-      if (!snapshot || !snapshot.exercises) return;
-      const beforeISO = new Date(sessionStartedAtMs).toISOString();
-      const results: Record<string, Array<{ weightKg: number | null; reps: number | null }>> = {};
+      if (!authUserId) return;
+      if (!snapshot || !snapshot.exercises || snapshot.exercises.length === 0) {
+        if (!cancelled && loadSeq === prevLoadSeqRef.current) setPrevSetsByExercise({});
+        return;
+      }
+
+      const beforeMs = Number.isFinite(sessionStartedAtMs as number)
+        ? (sessionStartedAtMs as number)
+        : Date.now();
+      const beforeISO = new Date(beforeMs).toISOString();
+
+      const byExerciseId: Record<string, Array<{ weightKg: number | null; reps: number | null }>> = {};
+      const uniqueExerciseIds = Array.from(
+        new Set(snapshot.exercises.map((join) => String(join.exercise.id)))
+      );
+
       try {
         await Promise.all(
-          snapshot.exercises.map(async (join) => {
-            const exId = join.exercise.id as string;
+          uniqueExerciseIds.map(async (exId) => {
             try {
               const sets = await history.getPreviousExerciseSets(authUserId, exId, beforeISO);
-              results[exId] = sets;
+              byExerciseId[exId] = sets;
             } catch {
-              results[exId] = [];
+              byExerciseId[exId] = [];
             }
           })
         );
-        setPrevSetsByExercise(results);
+
+        const bySessionExerciseId: Record<string, Array<{ weightKg: number | null; reps: number | null }>> = {};
+        for (const join of snapshot.exercises) {
+          const exId = String(join.exercise.id);
+          bySessionExerciseId[String(join.sessionExerciseId)] = byExerciseId[exId] ?? [];
+        }
+
+        if (!cancelled && loadSeq === prevLoadSeqRef.current) {
+          setPrevSetsByExercise(bySessionExerciseId);
+        }
       } catch {
-        // ignore
+        if (!cancelled && loadSeq === prevLoadSeqRef.current) {
+          setPrevSetsByExercise({});
+        }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [authUserId, sessionStartedAtMs, snapshot?.exercises, history]);
 
   
@@ -368,6 +418,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
+      setLastCompletedSetAtMs(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
@@ -387,6 +438,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
+      setLastCompletedSetAtMs(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
@@ -396,6 +448,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       // currentExercises derived from live snapshot; nothing to reset
     };
   }, [isVisible]);
+
+  useEffect(() => {
+    setLastCompletedSetAtMs(null);
+  }, [sessionId]);
 
   // Timer tick: no longer drives parent re-renders.
   // The WorkoutTimer component below handles its own 1-second ticks.
@@ -637,6 +693,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         return;
       }
       const wKg = toStorageKg(w, unit);
+      setLastCompletedSetAtMs(Date.now());
 
       try { Vibration.vibrate(1); } catch {}
       setOptimisticCompletedBySetId((prev) => ({ ...prev, [s.id]: true }));
@@ -994,49 +1051,60 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const renderHeader = () => (
     <Box bg="#2A2E38" px="$4" py="$3" width="100%">
       <HStack alignItems="center" justifyContent="space-between" width="100%" position="relative">
-        {/* Left: Split name + date */}
-        <VStack alignItems="flex-start" flexShrink={1} maxWidth="37%">
-          <Text
-            color="$textLight50"
-            fontWeight="$bold"
-            fontSize="$lg"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-          >
-            {splitTitle || 'Active Workout'}
-          </Text>
-          <HStack space="xs" alignItems="center">
-            {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-            <Icon as={Feather as any} name="calendar" color="$textLight400" size="sm" />
-            {!!formattedDate && (
-              <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>
-                {formattedDate}
-              </Text>
-            )}
-          </HStack>
-        </VStack>
-
-        {/* Centered Timer overlay (hidden for backdated sessions) */}
-        <Box position="absolute" left={0} right={0} alignItems="center" pointerEvents="none">
-          {!isBackdated && sessionStartedAtMs && (
-            <WorkoutTimer startedAtMs={sessionStartedAtMs} formatTimer={formatTimer} />
+        {/* Left: Timer (hidden for backdated sessions) */}
+        <Box width={110} alignItems="flex-start">
+          {!isBackdated && sessionStartedAtMs ? (
+            <VStack space="2xs" alignItems="flex-start" width={110}>
+              <WorkoutTimer startedAtMs={sessionStartedAtMs} formatTimer={formatTimer} />
+              <SetCompletionTimer startedAtMs={lastCompletedSetAtMs} formatTimer={formatTimer} />
+            </VStack>
+          ) : (
+            <Box />
           )}
         </Box>
 
+        {/* Centered split name + date */}
+        <Box position="absolute" left={0} right={0} alignItems="center" pointerEvents="none">
+          <VStack alignItems="center" flexShrink={1} maxWidth="60%">
+            <Text
+              color="$textLight50"
+              fontWeight="$bold"
+              fontSize="$md"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              textAlign="center"
+            >
+              {splitTitle || 'Active Workout'}
+            </Text>
+            <HStack space="xs" alignItems="center" justifyContent="center">
+              {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+              <Icon as={Feather as any} name="calendar" color="$textLight400" size="sm" />
+              {!!formattedDate && (
+                <Text color="$textLight400" fontSize="$sm" numberOfLines={1}>
+                  {formattedDate}
+                </Text>
+              )}
+            </HStack>
+          </VStack>
+        </Box>
+
         {/* Right: Finish button navigates to Save screen */}
-        <Pressable
-          onPressIn={() => setIsFinishPressed(true)}
-          onPressOut={() => setIsFinishPressed(false)}
-          onPress={handleEndWorkout}
-          bg="#22c55e"
-          py="$2"
-          px="$4"
-          borderRadius="$lg"
-          style={{ opacity: isFinishPressed ? 0.7 : 1 }}
-        >
-          <Text color="$textLight50" fontWeight="$bold">Finish</Text>
-        </Pressable>
+        <Box width={110} alignItems="flex-end">
+          <Pressable
+            onPressIn={() => setIsFinishPressed(true)}
+            onPressOut={() => setIsFinishPressed(false)}
+            onPress={handleEndWorkout}
+            bg="#22c55e"
+            py="$2"
+            px="$3"
+            borderRadius="$lg"
+            alignItems="center"
+            style={{ opacity: isFinishPressed ? 0.7 : 1 }}
+          >
+            <Text color="$textLight50" fontWeight="$bold" fontSize="$sm">Finish</Text>
+          </Pressable>
+        </Box>
       </HStack>
     </Box>
   );
@@ -1050,7 +1118,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     
     const setKey = `${exerciseId}-${set.id || setIndex}`;
     const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
-    const prevSets = prevSetsByExercise[exerciseId] || [];
+    const sessionExerciseId = exerciseIdToSessionExerciseId[exerciseId];
+    const prevSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
     const prevForIndex = prevSets[setIndex];
     const previousText = prevForIndex && prevForIndex.weightKg != null && prevForIndex.reps != null
       ? `${formatWeightFromKg(prevForIndex.weightKg, unit, 1)} ${weightLabel} x ${prevForIndex.reps}`
