@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing, LayoutAnimation, Platform, UIManager, Vibration } from 'react-native';
+import { StyleSheet, ScrollView, View, TextInput as RNTextInput, Dimensions, Animated, Easing, LayoutAnimation, Platform, UIManager, Vibration, findNodeHandle, Keyboard } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import BottomSheet, { BottomSheetView, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -224,6 +224,11 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   // Refs
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const setsScrollViewRef = useRef<ScrollView>(null);
+  const setsScrollYRef = useRef(0);
+  const focusedInputHandleRef = useRef<number | null>(null);
+  const keyboardHeightRef = useRef(0);
+  const lastKeyboardHeightRef = useRef(0);
   const cancelRef = useRef(null); // Ref for AlertDialog cancel button
   
   // State
@@ -496,6 +501,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const windowDims = Dimensions.get('window');
   const screenW = windowDims.width;
   const setValueColumnWidth = Math.max(58, Math.min(84, Math.round(screenW * 0.19)));
+  const keyboardScrollPadding = insets.bottom + Math.max(320, Math.round(windowDims.height * 0.5));
 
   const animateToIndex = useCallback((idx: number) => {
     setPageIndex(idx);
@@ -1049,6 +1055,75 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     navigate('ExerciseSelectionModalScreen', { requestId, allowMultiple: true, disableIds });
   };
 
+  const scrollFocusedInputIntoView = useCallback((nativeHandle: number, animated = true, keyboardHeightOverride?: number) => {
+    const currentKeyboardHeight = keyboardHeightOverride ?? keyboardHeightRef.current;
+    if (!nativeHandle || currentKeyboardHeight <= 0 || !setsScrollViewRef.current) return;
+
+    UIManager.measureInWindow(nativeHandle, (_x, y, _w, h) => {
+      const keyboardTopY = windowDims.height - currentKeyboardHeight;
+      const desiredGap = 18;
+      const inputBottomY = y + h;
+      const neededScroll = inputBottomY + desiredGap - keyboardTopY;
+
+      if (neededScroll > 0) {
+        const nextY = Math.max(0, setsScrollYRef.current + neededScroll);
+        setsScrollViewRef.current?.scrollTo({ y: nextY, animated });
+      }
+    });
+  }, [windowDims.height]);
+
+  useEffect(() => {
+    const willShowSub = Platform.OS === 'ios'
+      ? Keyboard.addListener('keyboardWillShow', (event) => {
+          const nextHeight = event?.endCoordinates?.height ?? 0;
+          keyboardHeightRef.current = nextHeight;
+          if (nextHeight > 0) lastKeyboardHeightRef.current = nextHeight;
+          const focused = focusedInputHandleRef.current;
+          if (focused) {
+            scrollFocusedInputIntoView(focused, true);
+          }
+        })
+      : null;
+
+    const showSub = Keyboard.addListener('keyboardDidShow', (event) => {
+      const nextHeight = event?.endCoordinates?.height ?? 0;
+      keyboardHeightRef.current = nextHeight;
+      if (nextHeight > 0) lastKeyboardHeightRef.current = nextHeight;
+      const focused = focusedInputHandleRef.current;
+      if (focused && Platform.OS !== 'ios') {
+        scrollFocusedInputIntoView(focused, true);
+      }
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      keyboardHeightRef.current = 0;
+    });
+    return () => {
+      willShowSub?.remove();
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollFocusedInputIntoView]);
+
+  const ensureFocusedInputVisible = useCallback((target: unknown) => {
+    const nativeHandle = typeof target === 'number' ? target : findNodeHandle(target as any);
+    if (!nativeHandle) return;
+    focusedInputHandleRef.current = nativeHandle;
+
+    if (keyboardHeightRef.current > 0) {
+      scrollFocusedInputIntoView(nativeHandle, true);
+      return;
+    }
+
+    // Android does not expose keyboardWillShow in RN; emulate with a predictive pre-scroll.
+    if (Platform.OS === 'android') {
+      const predictedKeyboardHeight =
+        lastKeyboardHeightRef.current > 0
+          ? lastKeyboardHeightRef.current
+          : Math.round(windowDims.height * 0.34);
+      scrollFocusedInputIntoView(nativeHandle, true, predictedKeyboardHeight);
+    }
+  }, [scrollFocusedInputIntoView, windowDims.height]);
+
   const formatHistoryDate = useCallback((iso: string | null | undefined) => {
     if (!iso) return '';
     try {
@@ -1363,6 +1438,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'weightKg')}
               selectTextOnFocus
               onFocus={(e: any) => {
+                ensureFocusedInputVisible(e?.target ?? e?.nativeEvent?.target);
                 try { e?.target?.setSelection && e.target.setSelection(0, (localValue.weightKg ?? '').toString().length); } catch {}
               }}
               keyboardType={Platform.OS === 'ios' ? 'decimal-pad' : 'numeric'}
@@ -1393,6 +1469,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
               onBlur={() => handleSetFieldBlur(exerciseId, setIndex, 'reps')}
               selectTextOnFocus
               onFocus={(e: any) => {
+                ensureFocusedInputVisible(e?.target ?? e?.nativeEvent?.target);
                 try { e?.target?.setSelection && e.target.setSelection(0, (localValue.reps ?? '').toString().length); } catch {}
               }}
               keyboardType="numeric"
@@ -1497,8 +1574,10 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         index={isVisible ? 0 : -1}
         snapPoints={snapPoints}
         topInset={insets.top}
-        keyboardBehavior="extend"
+        keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
+        enableBlurKeyboardOnGesture
         // Match SessionPreviewModal visuals: dark background + white notch
         handleIndicatorStyle={{ backgroundColor: 'white', width: 40, height: 4 }}
         backgroundStyle={{ backgroundColor: '#2A2E38' }}
@@ -1516,6 +1595,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
             >
               <Box flex={1}>
                 <ScrollView
+                  ref={setsScrollViewRef}
                   style={[
                     styles.scrollView,
                     {
@@ -1528,12 +1608,15 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                   ]}
                   contentContainerStyle={[
                     styles.scrollContent,
-                    { paddingBottom: insets.bottom + 40 },
+                    { paddingBottom: keyboardScrollPadding },
                   ]}
                   keyboardShouldPersistTaps="handled"
                   nestedScrollEnabled
                   keyboardDismissMode="on-drag"
                   scrollEventThrottle={16}
+                  onScroll={(event) => {
+                    setsScrollYRef.current = event.nativeEvent.contentOffset.y;
+                  }}
                 >
                   <Box
                     width="100%"
