@@ -96,7 +96,7 @@ try {
 // -----------------------------
 const ActiveWorkoutModalContainer = () => {
   const { endWorkout } = useWorkout();
-  const { activeWorkoutModalVisible, setActiveWorkoutModalVisible } = useOverlay();
+  const { activeWorkoutModalVisible, setActiveWorkoutModalVisible, activeWorkoutStarting, setActiveWorkoutStarting } = useOverlay();
   const { effectiveUserId } = useAppAuth();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [isClosingFromSave, setIsClosingFromSave] = useState(false);
@@ -113,9 +113,10 @@ const ActiveWorkoutModalContainer = () => {
     if (hasActive && sid !== prevSid) {
       // New session started -> open modal immediately
       setActiveWorkoutModalVisible(true);
+      setActiveWorkoutStarting(false);
     }
     prevSessionIdRef.current = sid;
-  }, [session?.id, setActiveWorkoutModalVisible]);
+  }, [session?.id, setActiveWorkoutModalVisible, setActiveWorkoutStarting]);
 
   const handleEndWorkoutAndClose = async () => {
     if (!sessionId) return;
@@ -127,12 +128,14 @@ const ActiveWorkoutModalContainer = () => {
 
   const handleModalClose = () => {
     setActiveWorkoutModalVisible(false);
+    setActiveWorkoutStarting(false);
   };
 
   return (
     <ActiveWorkoutModal
       isVisible={activeWorkoutModalVisible}
       activeSessionId={sessionId}
+      isBootstrapping={activeWorkoutStarting}
       onClose={handleModalClose}
       onSave={handleEndWorkoutAndClose}
     />

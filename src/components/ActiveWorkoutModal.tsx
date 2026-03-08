@@ -12,6 +12,7 @@ import { useLiveSessionSnapshot } from '../db/live/workouts';
 import { useUnit } from '../contexts/UnitContext';
 import { formatWeightFromKg, nearlyEqual, toStorageKg, unitLabel } from '../utils/units';
 import SaveSessionScreen from './SaveSessionScreen';
+import ShimmerPlaceholder from './ShimmerPlaceholder';
 import { useWorkoutHistory } from '../db/queries';
 import { useAppAuth } from '../contexts/AppAuthContext';
 import { useOverlay } from '../contexts/OverlayContext';
@@ -179,6 +180,7 @@ type RenderExercise = { id: string; name: string; sets: RenderSet[] };
 interface ActiveWorkoutModalProps {
   isVisible: boolean;
   activeSessionId?: string | null;
+  isBootstrapping?: boolean;
   onClose: () => void;
   onSave?: () => Promise<void>; // Optional custom handler
 }
@@ -186,6 +188,7 @@ interface ActiveWorkoutModalProps {
 const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   isVisible,
   activeSessionId: activeSessionIdProp,
+  isBootstrapping = false,
   onClose,
   onSave,
 }) => {
@@ -1591,6 +1594,8 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     };
   }, [exerciseIdToSessionExerciseId, prevSetsByExercise, selectedPrevBaselineByExerciseId, unit, localInputValues]);
 
+  const showStartupSkeleton = isBootstrapping && (currentExercises.length === 0);
+
   return (
     <GestureHandlerRootView style={styles.rootContainer} pointerEvents="box-none">
       <BottomSheet
@@ -1600,6 +1605,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
         enableContentPanningGesture={true}
         index={isVisible ? 0 : -1}
         snapPoints={snapPoints}
+        enableDynamicSizing={false}
         topInset={insets.top}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
@@ -1650,176 +1656,195 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
                     pb={30}
                     // This box wraps all scrollable content including bottom buttons
                   >
-                    {/* Exercise list with sets */}
-                    <VStack space="sm" width="100%">
-                      {currentExercises.map((exercise) => {
-                        const volumeDiff = getExerciseVolumeDiff(exercise);
-                        return (
-                        <Box key={exercise.id}>
-                          <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
-                            <HStack space="sm" alignItems="center">
-                              <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
-                                {exercise.name}
-                              </Text>
-                              <Pressable
-                                onPress={() => {
-                                  setActionExerciseId(exercise.id);
-                                  // Expand the action sheet
-                                  actionMenuRef.current?.expand();
-                                }}
-                                accessibilityRole="button"
-                              >
-                                {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
-                                <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
-                              </Pressable>
-                            </HStack>
-
-                            {/* Always-expanded sets section */}
-                            <VStack mt="$2" space="xs" width="100%">
-                              {/* Column headers */}
-                              <HStack alignItems="center" space="xs" mb="$0" width="100%" px="$1">
-                                <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">
-                                  Set
-                                </Text>
-                                <HStack flex={1} alignItems="center" justifyContent="center" space="xs">
-                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
-                                    Prev
+                    {showStartupSkeleton ? (
+                      <VStack space="md" width="100%" px="$2" pt="$2">
+                        <VStack space="sm" bg="#141821" p="$3" borderRadius="$lg">
+                          <ShimmerPlaceholder width={180} height={20} borderRadius={6} />
+                          <ShimmerPlaceholder width="100%" height={34} borderRadius={8} />
+                          <ShimmerPlaceholder width="100%" height={34} borderRadius={8} />
+                          <ShimmerPlaceholder width="100%" height={34} borderRadius={8} />
+                        </VStack>
+                        <VStack space="sm" bg="#141821" p="$3" borderRadius="$lg">
+                          <ShimmerPlaceholder width={160} height={20} borderRadius={6} />
+                          <ShimmerPlaceholder width="100%" height={34} borderRadius={8} />
+                          <ShimmerPlaceholder width="100%" height={34} borderRadius={8} />
+                        </VStack>
+                        <ShimmerPlaceholder width="100%" height={42} borderRadius={10} />
+                      </VStack>
+                    ) : (
+                      <>
+                        {/* Exercise list with sets */}
+                        <VStack space="sm" width="100%">
+                          {currentExercises.map((exercise) => {
+                            const volumeDiff = getExerciseVolumeDiff(exercise);
+                            return (
+                            <Box key={exercise.id}>
+                              <Box bg={"transparent"} p="$3" borderRadius="$lg" width="100%">
+                                <HStack space="sm" alignItems="center">
+                                  <Text color="$primary400" fontSize="$lg" fontWeight="$semibold" flex={1} numberOfLines={1}>
+                                    {exercise.name}
                                   </Text>
-                                  {!!volumeDiff && (
-                                    <Text
-                                      fontSize="$xs"
-                                      fontWeight="$semibold"
-                                      color={volumeDiff.isPositive ? '#22c55e' : '#ef4444'}
-                                      textAlign="center"
-                                    >
-                                      {volumeDiff.text}
-                                    </Text>
-                                  )}
+                                  <Pressable
+                                    onPress={() => {
+                                      setActionExerciseId(exercise.id);
+                                      // Expand the action sheet
+                                      actionMenuRef.current?.expand();
+                                    }}
+                                    accessibilityRole="button"
+                                  >
+                                    {/* @ts-ignore gluestack Icon typing doesn't include `name`, but runtime supports vector icons */}
+                                    <Icon as={Entypo as any} name="dots-three-horizontal" color="$white" />
+                                  </Pressable>
                                 </HStack>
-                                <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
-                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
-                                    {weightLabel}
-                                  </Text>
-                                </Box>
-                                <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
-                                  <Text color="$textLight50" textAlign="center" fontSize="$sm">
-                                    Reps
-                                  </Text>
-                                </Box>
-                                <View style={{ width: 28, alignItems: 'center' }}>
-                                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                                </View>
-                              </HStack>
 
-                              {(() => {
-                                const baseSets = exercise.sets || [];
-                                const optimistic = optimisticSets[exercise.id] || [];
-                                const baseIds = new Set(baseSets.map((s) => s.id));
-                                // Convert optimistic placeholders to RenderSet shape
-                                const optAsRender: RenderSet[] = optimistic
-                                  // If this placeholder has been hydrated and base already includes real id, skip rendering it
-                                  .filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)))
-                                  .map((o) => ({
-                                    // Keep a unique temp id to avoid duplicate keys with base rows
-                                    id: o.id,
-                                    weightKg: 0,
-                                    reps: 0,
-                                    isCompleted: false,
-                                  }));
-                                const all = [...baseSets, ...optAsRender].filter(
-                                  (s) => !optimisticDeletedSetIds.has(s.id)
-                                );
-                                return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
-                              })()}
+                                {/* Always-expanded sets section */}
+                                <VStack mt="$2" space="xs" width="100%">
+                                  {/* Column headers */}
+                                  <HStack alignItems="center" space="xs" mb="$0" width="100%" px="$1">
+                                    <Text color="$textLight50" w="$10" textAlign="center" fontSize="$sm">
+                                      Set
+                                    </Text>
+                                    <HStack flex={1} alignItems="center" justifyContent="center" space="xs">
+                                      <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                        Prev
+                                      </Text>
+                                      {!!volumeDiff && (
+                                        <Text
+                                          fontSize="$xs"
+                                          fontWeight="$semibold"
+                                          color={volumeDiff.isPositive ? '#22c55e' : '#ef4444'}
+                                          textAlign="center"
+                                        >
+                                          {volumeDiff.text}
+                                        </Text>
+                                      )}
+                                    </HStack>
+                                    <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
+                                      <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                        {weightLabel}
+                                      </Text>
+                                    </Box>
+                                    <Box width={setValueColumnWidth} alignItems="center" justifyContent="center">
+                                      <Text color="$textLight50" textAlign="center" fontSize="$sm">
+                                        Reps
+                                      </Text>
+                                    </Box>
+                                    <View style={{ width: 28, alignItems: 'center' }}>
+                                      <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                                    </View>
+                                  </HStack>
 
-                              <Pressable
-                                onPressIn={() => setPressedAddSetFor(exercise.id)}
-                                onPressOut={() => setPressedAddSetFor(null)}
-                                onPress={() => handleAddNewSet(exercise.id)}
-                                disabled={addingSetFor === exercise.id}
-                                bg="#1E222C"
-                                py="$1"
-                                px="$3"
-                                borderRadius="$md"
-                                style={{ width: '100%', opacity: pressedAddSetFor === exercise.id ? 0.7 : 1 }}
-                              >
-                                <Text color="$textLight200" textAlign="center">
-                                  + Add Set
-                                </Text>
-                              </Pressable>
-                            </VStack>
-                          </Box>
+                                  {(() => {
+                                    const baseSets = exercise.sets || [];
+                                    const optimistic = optimisticSets[exercise.id] || [];
+                                    const baseIds = new Set(baseSets.map((s) => s.id));
+                                    // Convert optimistic placeholders to RenderSet shape
+                                    const optAsRender: RenderSet[] = optimistic
+                                      // If this placeholder has been hydrated and base already includes real id, skip rendering it
+                                      .filter((o) => !(o.hydratedId && baseIds.has(o.hydratedId)))
+                                      .map((o) => ({
+                                        // Keep a unique temp id to avoid duplicate keys with base rows
+                                        id: o.id,
+                                        weightKg: 0,
+                                        reps: 0,
+                                        isCompleted: false,
+                                      }));
+                                    const all = [...baseSets, ...optAsRender].filter(
+                                      (s) => !optimisticDeletedSetIds.has(s.id)
+                                    );
+                                    return all.map((set, idx) => renderSetRow(set, exercise.id, idx, 0));
+                                  })()}
+
+                                  <Pressable
+                                    onPressIn={() => setPressedAddSetFor(exercise.id)}
+                                    onPressOut={() => setPressedAddSetFor(null)}
+                                    onPress={() => handleAddNewSet(exercise.id)}
+                                    disabled={addingSetFor === exercise.id}
+                                    bg="#1E222C"
+                                    py="$1"
+                                    px="$3"
+                                    borderRadius="$md"
+                                    style={{ width: '100%', opacity: pressedAddSetFor === exercise.id ? 0.7 : 1 }}
+                                  >
+                                    <Text color="$textLight200" textAlign="center">
+                                      + Add Set
+                                    </Text>
+                                  </Pressable>
+                                </VStack>
+                              </Box>
+                            </Box>
+                          )})}
+                        </VStack>
+
+                        <Box
+                          mt="$1"
+                          mb="$1"
+                          px="$2"
+                        >
+                          <Pressable
+                            onPressIn={() => setIsAddExercisesPressed(true)}
+                            onPressOut={() => setIsAddExercisesPressed(false)}
+                            onPress={handleAddExercisePress}
+                            bg="#1A2E5A"
+                            style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', opacity: isAddExercisesPressed ? 0.8 : 1 }}
+                            py="$1"
+                            px="$6"
+                            borderRadius="$lg"
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            <HStack alignItems="center" space="sm">
+                              <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
+                              <Text color="#3B82F6" fontSize="$md" fontWeight="$bold">
+                                Add Exercises
+                              </Text>
+                            </HStack>
+                          </Pressable>
                         </Box>
-                      )})}
-                    </VStack>
 
-                    <Box
-                      mt="$1"
-                      mb="$1"
-                      px="$2"
-                    >
-                      <Pressable
-                        onPressIn={() => setIsAddExercisesPressed(true)}
-                        onPressOut={() => setIsAddExercisesPressed(false)}
-                        onPress={handleAddExercisePress}
-                        bg="#1A2E5A"
-                        style={{ backgroundColor: 'rgba(59, 130, 246, 0.18)', opacity: isAddExercisesPressed ? 0.8 : 1 }}
-                        py="$1"
-                        px="$6"
-                        borderRadius="$lg"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <HStack alignItems="center" space="sm">
-                          <Ionicons name="add-circle-outline" size={22} color="#3B82F6" />
-                          <Text color="#3B82F6" fontSize="$md" fontWeight="$bold">
-                            Add Exercises
-                          </Text>
-                        </HStack>
-                      </Pressable>
-                    </Box>
-
-                    <Box
-                      mb="$5"
-                      px="$2"
-                    >
-                      <Pressable
-                        onPressIn={() => setIsCancelWorkoutPressed(true)}
-                        onPressOut={() => setIsCancelWorkoutPressed(false)}
-                        bg="#6d3434ff"
-                        py="$1"
-                        px="$6"
-                        borderRadius="$lg"
-                        alignItems="center"
-                        justifyContent="center"
-                        style={{ opacity: isCancelWorkoutPressed ? 0.7 : 1 }}
-                        onPress={async () => {
-                          // Cancel workout: close modal and delete workout
-                          if (sessionId) {
-                            try {
-                              await deleteWorkout(sessionId);
-                              bottomSheetRef.current?.close();
-                              toast.show({
-                                placement: 'top',
-                                render: ({ id }) => (
-                                  <Toast nativeID={id} action="info" variant="accent">
-                                    <VStack space="xs">
-                                      <ToastTitle>Workout Discarded</ToastTitle>
-                                    </VStack>
-                                  </Toast>
-                                ),
-                              });
-                            } catch (e) {
-                              console.error('Failed to discard workout', e);
-                            }
-                          }
-                        }}
-                      >
-                        <Text color="$red400" fontSize="$md" fontWeight="$bold" textAlign="center">
-                          Cancel Workout
-                        </Text>
-                      </Pressable>
-                    </Box>
+                        <Box
+                          mb="$5"
+                          px="$2"
+                        >
+                          <Pressable
+                            onPressIn={() => setIsCancelWorkoutPressed(true)}
+                            onPressOut={() => setIsCancelWorkoutPressed(false)}
+                            bg="#6d3434ff"
+                            py="$1"
+                            px="$6"
+                            borderRadius="$lg"
+                            alignItems="center"
+                            justifyContent="center"
+                            style={{ opacity: isCancelWorkoutPressed ? 0.7 : 1 }}
+                            onPress={async () => {
+                              // Cancel workout: close modal and delete workout
+                              if (sessionId) {
+                                try {
+                                  await deleteWorkout(sessionId);
+                                  bottomSheetRef.current?.close();
+                                  toast.show({
+                                    placement: 'top',
+                                    render: ({ id }) => (
+                                      <Toast nativeID={id} action="info" variant="accent">
+                                        <VStack space="xs">
+                                          <ToastTitle>Workout Discarded</ToastTitle>
+                                        </VStack>
+                                      </Toast>
+                                    ),
+                                  });
+                                } catch (e) {
+                                  console.error('Failed to discard workout', e);
+                                }
+                              }
+                            }}
+                          >
+                            <Text color="$red400" fontSize="$md" fontWeight="$bold" textAlign="center">
+                              Cancel Workout
+                            </Text>
+                          </Pressable>
+                        </Box>
+                      </>
+                    )}
                   </Box>
                 </ScrollView>
               </Box>

@@ -30,6 +30,8 @@ interface OverlayContextValue {
   // Active workout modal controls
   activeWorkoutModalVisible: boolean;
   setActiveWorkoutModalVisible: (visible: boolean) => void;
+  activeWorkoutStarting: boolean;
+  setActiveWorkoutStarting: (value: boolean) => void;
   activeSessionBannerTitle: { sessionId: string | null; title: string | null };
   setActiveSessionBannerTitle: (sessionId: string | null, title: string | null) => void;
   // Global signal: bump to indicate workout history changed (e.g., finished workout)
@@ -47,6 +49,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [workoutDataVersion, setWorkoutDataVersion] = useState<number>(0);
   const [liveDebugEnabled, setLiveDebugEnabled] = useState<boolean>(false);
   const [activeWorkoutModalVisible, setActiveWorkoutModalVisible] = useState<boolean>(false);
+  const [activeWorkoutStarting, setActiveWorkoutStarting] = useState<boolean>(false);
   const [activeSessionBannerTitle, setActiveSessionBannerTitleState] = useState<{ sessionId: string | null; title: string | null }>({
     sessionId: null,
     title: null,
@@ -81,7 +84,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   return (
-    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled, activeWorkoutModalVisible, setActiveWorkoutModalVisible, activeSessionBannerTitle, setActiveSessionBannerTitle }}>
+    <OverlayContext.Provider value={{ showSessionSummary, hideSessionSummary, sessionSummary, showWorkoutSummary, hideWorkoutSummary, workoutSummary, workoutDataVersion, bumpWorkoutDataVersion, liveDebugEnabled, setLiveDebugEnabled, activeWorkoutModalVisible, setActiveWorkoutModalVisible, activeWorkoutStarting, setActiveWorkoutStarting, activeSessionBannerTitle, setActiveSessionBannerTitle }}>
       {children}
     </OverlayContext.Provider>
   );

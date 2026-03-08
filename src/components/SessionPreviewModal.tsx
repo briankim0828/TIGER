@@ -11,6 +11,7 @@ import { navigate } from '../navigation/rootNavigation';
 import { registerSelectionCallback, ExerciseLite } from '../navigation/selectionRegistry';
 import { useWorkout } from '../contexts/WorkoutContext';
 import { useAppAuth } from '../contexts/AppAuthContext';
+import { useOverlay } from '../contexts/OverlayContext';
 
 type ExerciseRow = { id: string; name: string; bodyPart: string | null };
 
@@ -41,6 +42,7 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
   const db = useDatabase();
   const { startWorkout } = useWorkout();
   const { effectiveUserId } = useAppAuth();
+  const { setActiveWorkoutModalVisible, setActiveWorkoutStarting } = useOverlay();
   // Previously logged props when component mounted or props changed; removed to reduce noise
   useEffect(() => {
     // no-op
@@ -165,9 +167,14 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
           }
         }
       }
-      // Create session first, THEN close the sheet so the async work completes
-      // before the component unmounts. Use endExistingThenStart to avoid resuming
-      // a stale session that may have different/no exercises.
+      // Open active modal immediately with a bootstrapping skeleton while
+      // startWorkout transaction completes.
+      setActiveWorkoutStarting(true);
+      setActiveWorkoutModalVisible(true);
+      bottomSheetRef.current?.close();
+
+      // Use endExistingThenStart to avoid resuming a stale session that may have
+      // different/no exercises.
       await startWorkout(userId, splitIdOrNull, {
         policy: 'endExistingThenStart',
         fromSplitExerciseIds: ids,
@@ -175,11 +182,10 @@ const SessionPreviewModal: React.FC<SessionPreviewModalProps> = ({
       });
     } catch (e) {
       console.error('SessionPreviewModal - failed to start workout', e);
+      setActiveWorkoutStarting(false);
+      setActiveWorkoutModalVisible(false);
     }
-    // Close the sheet after startWorkout succeeds (or fails) so the live-query
-    // system has already received the bumpTables notification.
-    bottomSheetRef.current?.close();
-  }, [activeSplit, currentExercises, startWorkout, selectedDate, effectiveUserId]);
+  }, [activeSplit, currentExercises, startWorkout, selectedDate, effectiveUserId, setActiveWorkoutModalVisible, setActiveWorkoutStarting]);
 
   const handleAddExercise = useCallback(() => {
     // Use selection registry to add to current session preview
