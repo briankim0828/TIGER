@@ -512,14 +512,28 @@ export default function App() {
       if (mounted) setAuthChecking(false);
     }, 8000);
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      setTimeout(() => { if (mounted) setUser(session?.user ?? null); }, 0);
-      if (mounted) setAuthChecking(false);
+      // Only clear user on explicit sign-out; transient null sessions can occur during refresh.
+      if (event === 'SIGNED_OUT') {
+        setTimeout(() => {
+          if (mounted) setUser(null);
+        }, 0);
+        if (mounted) setAuthChecking(false);
+        return;
+      }
+
       if (session?.user) {
+        setTimeout(() => {
+          if (mounted) setUser(session.user);
+        }, 0);
+        if (mounted) setAuthChecking(false);
         setAuthMode('authenticated');
         void setStoredAuthMode('authenticated');
+        return;
       }
+
+      if (mounted) setAuthChecking(false);
     });
 
     return () => {

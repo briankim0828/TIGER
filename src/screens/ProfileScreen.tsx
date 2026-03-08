@@ -33,7 +33,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useWorkoutHistory } from '../db/queries';
 import type { WorkoutPost } from '../db/queries/workoutHistory.drizzle';
 import {
-  getCurrentUser,
   signOutUser,
   getAvatarPublicUrl,
   uploadAvatar,
@@ -67,7 +66,7 @@ const ProfileScreen: React.FC = () => {
   const toast = useToast(); // gluestack-ui toast hook
   const { liveDebugEnabled, setLiveDebugEnabled, workoutDataVersion } = useOverlay();
   const { unit } = useUnit();
-  const { isGuest, exitGuestMode, guestDisplayName, effectiveUserId } = useAppAuth();
+  const { isGuest, exitGuestMode, guestDisplayName, effectiveUserId, user: authUser } = useAppAuth();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -89,34 +88,18 @@ const ProfileScreen: React.FC = () => {
     { id: 4, title: 'Goals', icon: 'flag' },
   ];
 
-  const fetchUserData = async () => {
+  useEffect(() => {
     setLoading(true);
     try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    } catch (error) {
-      console.error('Error fetching user:', error);
-      toast.show({
-        placement: "top",
-        render: ({ id }) => {
-          return (
-            <Toast nativeID={id} action="error" variant="accent">
-              <VStack space="xs">
-                <ToastTitle>Error</ToastTitle>
-                <ToastDescription>Failed to fetch user data.</ToastDescription>
-              </VStack>
-            </Toast>
-          );
-        },
-      });
+      if (isGuest) {
+        setUser(null);
+      } else {
+        setUser(authUser ?? null);
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchUserData();
-  }, []);
+  }, [isGuest, authUser]);
 
   const accountDisplayName = useMemo(() => {
     if (isGuest) return (guestDisplayName || 'Guest').trim() || 'Guest';
@@ -209,21 +192,16 @@ const ProfileScreen: React.FC = () => {
   // Refresh posts whenever Profile gains focus
   useFocusEffect(
     useCallback(() => {
-      let active = true;
-      (async () => {
-        if (isGuest) return;
-        try {
-          const currentUser = await getCurrentUser();
-          if (active) setUser(currentUser);
-        } catch {}
-      })();
+      if (isGuest) {
+        setUser(null);
+      } else {
+        setUser(authUser ?? null);
+      }
 
       refreshPosts();
       fetchUserStats();
-      return () => {
-        active = false;
-      };
-    }, [refreshPosts, fetchUserStats, workoutDataVersion, isGuest])
+      return () => {};
+    }, [refreshPosts, fetchUserStats, workoutDataVersion, isGuest, authUser])
   );
 
   // Also refresh after user is available

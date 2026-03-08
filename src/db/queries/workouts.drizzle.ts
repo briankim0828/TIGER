@@ -52,7 +52,21 @@ export class WorkoutsDataAccess {
     const prevSessions = await this.db
       .select({ id: workoutSessions.id, startedAt: workoutSessions.startedAt })
       .from(workoutSessions)
-      .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.state, 'completed'), (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`))
+      .innerJoin(
+        workoutExercises,
+        and(
+          eq(workoutExercises.sessionId, workoutSessions.id),
+          eq(workoutExercises.exerciseId, exerciseId)
+        )
+      )
+      .where(
+        and(
+          eq(workoutSessions.userId, userId),
+          eq(workoutSessions.state, 'completed'),
+          (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`
+        )
+      )
+      .groupBy(workoutSessions.id, workoutSessions.startedAt)
       .orderBy(desc(workoutSessions.startedAt))
       .limit(1);
     if (prevSessions.length === 0) return [];

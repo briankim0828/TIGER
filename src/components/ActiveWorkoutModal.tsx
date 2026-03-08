@@ -252,6 +252,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   const [elapsedSecAtFinish, setElapsedSecAtFinish] = useState<number | null>(null);
   // Cache of previous session sets per sessionExerciseId (resolved from exerciseId)
   const [prevSetsByExercise, setPrevSetsByExercise] = useState<Record<string, Array<{ weightKg: number | null; reps: number | null }>>>({});
+  const [selectedPrevBaselineByExerciseId, setSelectedPrevBaselineByExerciseId] = useState<
+    Record<string, Array<{ weightKg: number | null; reps: number | null }>>
+  >({});
   const prevLoadSeqRef = useRef(0);
   // Track which exerciseIds we've already pre-populated to avoid duplicate inserts
   const prepopulatedExIdsRef = useRef<Set<string>>(new Set());
@@ -356,6 +359,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
   // Reset previous cache when the active session changes.
   useEffect(() => {
     setPrevSetsByExercise({});
+    setSelectedPrevBaselineByExerciseId({});
   }, [sessionId]);
 
   // When we have exercises, fetch previous sets consistently.
@@ -1241,6 +1245,13 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       }
 
       previousSetsSheetRef.current?.close();
+      setSelectedPrevBaselineByExerciseId((prev) => ({
+        ...prev,
+        [exerciseId]: targetSets.map((s) => ({
+          weightKg: s.weightKg,
+          reps: s.reps,
+        })),
+      }));
       toast.show({
         placement: 'top',
         render: ({ id }) => (
@@ -1366,7 +1377,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
     const setKey = `${exerciseId}-${set.id || setIndex}`;
     const localValue = localInputValues[setKey] || { weightKg: '', reps: '' };
     const sessionExerciseId = exerciseIdToSessionExerciseId[exerciseId];
-    const prevSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
+    const selectedBaseline = selectedPrevBaselineByExerciseId[exerciseId] || [];
+    const defaultPrevSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
+    const prevSets = selectedBaseline.length > 0 ? selectedBaseline : defaultPrevSets;
     const prevForIndex = prevSets[setIndex];
     const previousText = prevForIndex && prevForIndex.weightKg != null && prevForIndex.reps != null
       ? `${formatWeightFromKg(prevForIndex.weightKg, unit, 1)} ${weightLabel} x ${prevForIndex.reps}`
@@ -1535,7 +1548,9 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
 
   const getExerciseVolumeDiff = useCallback((exercise: RenderExercise) => {
     const sessionExerciseId = exerciseIdToSessionExerciseId[exercise.id];
-    const previousSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
+    const selectedBaseline = selectedPrevBaselineByExerciseId[exercise.id] || [];
+    const defaultPrevSets = (sessionExerciseId ? prevSetsByExercise[sessionExerciseId] : undefined) || [];
+    const previousSets = selectedBaseline.length > 0 ? selectedBaseline : defaultPrevSets;
     if (previousSets.length === 0) return null;
 
     const toDisplayWeight = (stored: number | null | undefined) => {
@@ -1576,7 +1591,7 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       text: `${isPositive ? '+' : '-'}${absText}`,
       isPositive,
     };
-  }, [exerciseIdToSessionExerciseId, prevSetsByExercise, unit, localInputValues]);
+  }, [exerciseIdToSessionExerciseId, prevSetsByExercise, selectedPrevBaselineByExerciseId, unit, localInputValues]);
 
   return (
     <GestureHandlerRootView style={styles.rootContainer} pointerEvents="box-none">

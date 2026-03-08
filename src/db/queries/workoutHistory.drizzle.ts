@@ -116,9 +116,17 @@ export class WorkoutHistoryDataAccess {
     beforeISO: string
   ): Promise<Array<{ weightKg: number | null; reps: number | null }>> {
     // 1) Find the most recent completed session before the given timestamp
+    // that actually contains this exercise.
     const sessions = await this.db
       .select({ id: workoutSessions.id, startedAt: workoutSessions.startedAt })
       .from(workoutSessions)
+      .innerJoin(
+        workoutExercises,
+        and(
+          eq(workoutExercises.sessionId, workoutSessions.id),
+          eq(workoutExercises.exerciseId, exerciseId)
+        )
+      )
       .where(
         and(
           eq(workoutSessions.userId, userId),
@@ -127,6 +135,7 @@ export class WorkoutHistoryDataAccess {
           (sql as any)`(${workoutSessions.startedAt}) < ${beforeISO}`
         )
       )
+      .groupBy(workoutSessions.id, workoutSessions.startedAt)
       .orderBy(desc(workoutSessions.startedAt))
       .limit(1);
 
