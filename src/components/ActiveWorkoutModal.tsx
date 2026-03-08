@@ -441,7 +441,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
-      setLastCompletedSetAtMs(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
@@ -460,7 +459,6 @@ const ActiveWorkoutModal: React.FC<ActiveWorkoutModalProps> = ({
       setPageIndex(0);
       setIsFinishPressed(false);
       setElapsedSecAtFinish(null);
-      setLastCompletedSetAtMs(null);
       // Reset animation states
       setNewlyAddedSets(new Set());
       setDeletingSets(new Set());
